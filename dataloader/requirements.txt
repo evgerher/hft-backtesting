@@ -1,1 +1,2 @@
 websocket_client
+pyq

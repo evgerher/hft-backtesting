@@ -1,3 +1,6 @@
+from pyq import q # requires $QHOME to be defined
+import os
+
 class Snapshot:
   def __init__(self, market: str, state: list):
     self.market = market
@@ -16,6 +19,7 @@ class Snapshot:
         del self.data[delete['id']]
 
   def to_dict(self) -> dict:
+    # todo: transform here into insert statement
     return {'market': self.market, 'state': self.data.values()}
 
   def __str__(self):
@@ -23,14 +27,58 @@ class Snapshot:
     N = len(self.data)
     return f'market={self.market}, state_length={N}'
 
+class Index:
+  @staticmethod
+  def kdb_convert(symbol: str, timestamp: str, price: float):
+    pass
+
+  @staticmethod
+  def unwrap_data(data: dict) -> (str, str, float):
+    symbol = data['symbol']
+    timestamp: str = data['timestamp'].replace('-', '.')
+    price = data['price']
+    return Index.kdb_convert(symbol, timestamp, price)
+    '.BETHXBT', '2019.10.21T23:20:00.000Z', 0.02121
+
 
 class KDB_Connector:
+
   def __init__(self):
-    pass
+    self._tables = {}
+
+    q('index_table:([] symbol:`symbol$(); timestamp:`timestamp$(); price: `float$())')
+    # q.call('snapshot_table:([] ')
+
+    self.snapshot_counter = 0
+    self.index_counter    = 0
+
+  def generate_csv_file(self, name):
+    import datetime
+    datetime = datetime.datetime.now()
+    return f'{name}-{datetime.month}.{datetime.day}:{datetime.hour}:{datetime.minute}.csv'
 
   def store(self, snapshot: dict):
-    print('Stored in KBT')
-    pass
+    self.snapshot_counter += 1
+    print(f'{self.counter}: Stored in KBT')
+    assert len(snapshot['state']) == 50
+    # q.insert()
+
+    if self.snapshot_counter == 2:
+      self.reload('snapshot_table')
+
+  def store_index(self, symbol: str, timestamp: str, price: float):
+    self.index_counter += 1
+
+    # 'd:([] symbol:`symbol$(); timestamp:`timestamp$(); price: `float$())'
+    # 'upsert[`d; (`.BETHXBT; `timestamp$(2019.10.21T23:20:00.000Z); 0.02121)]'
+    q(f'upsert[`index_table (`{symbol}; `timestamp$({timestamp}); {price})]')
+    if self.index_counter == 2:
+      self.reload('index_table')
+
+  def reload(self, table: str):
+    q(f'save `:{table}.csv')
+    csv_file = self.generate_csv_file(table)
+    os.rename(f'{table}.csv', csv_file)
 
 
 class KDB_callbacker:
@@ -44,12 +92,15 @@ class KDB_callbacker:
   def _preprocess_update(self, tick: dict) -> list:
     pass
 
-  def _get_action_market(self, msg: dict) -> (str, str):
+  def _get_table_action_market(self, msg: dict) -> (str, str, str):
     pass
 
   def callback(self, msg: dict):
-    action, market = self._get_action_market(msg)
-    if action is None:
+    table, action, market = self._get_table_action_market(msg)
+    if table in 'trade': # Currently implemented for indexes
+      kdb_data = Index.unwrap_data(msg)
+      self.connector.store_index(kdb_data)
+    elif action is None:
       return
     elif action in 'partial':
       state = self._preprocess_partial(msg)
@@ -77,11 +128,12 @@ class KDB_Bitmex(KDB_callbacker):
       data.append(x)
     return data
 
-  def _get_action_market(self, msg: dict) -> (str, str):
+  def _get_table_action_market(self, msg: dict) -> (str, str, str):
+    table = msg.get('table', None)
     action = msg.get('action', None)
     if action is None:
       return None, None
-    return (action, msg['data'][0]['symbol'])
+    return (table, action, msg['data'][0]['symbol'])
 
   # "action": "partial", "keys": ["symbol", "id", "side"], "types": {"symbol": "symbol", "id": "long", "side": "symbol",
   #                                                                  "size": "long", "price": "float"}, "foreignKeys": {
