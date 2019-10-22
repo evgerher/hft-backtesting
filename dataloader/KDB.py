@@ -44,8 +44,9 @@ class KDB_Connector:
   def __init__(self):
     self._tables = {}
 
-    self.index_table = q('index_table:([] symbol:`symbol$(); timestamp:`timestamp$(); price: `float$())')
+    # self.index_table = q('index_table:([] symbol:`symbol$(); timestamp:`timestamp$(); price: `float$())')
     # q.call('snapshot_table:([] ')
+    self.h = q.hopen(':localhost:12000')
 
     self.snapshot_counter = 0
     self.index_counter    = 0
@@ -70,9 +71,7 @@ class KDB_Connector:
     # 'upsert[`d; (`.BETHXBT; `timestamp$(2019.10.21T23:20:00.000Z); 0.02121)]'
     msg = f'upsert[`index_table; (`{symbol}; `timestamp$({timestamp}); {price})]'
     print(msg)
-    K.insert('index_table', (symbol, datetime.datetime.strptime(timestamp, "%Y.%m.%dT%H:%M:%S.%fZ"), price))
-
-    # q.insert('index_table', (symbol, datetime.datetime.strptime(timestamp, "%Y.%m.%dT%H:%M:%S.%fZ"), price)) # todo: multithread problem
+    self.h(('insert_index', symbol, datetime.datetime.strptime(timestamp, "%Y.%m.%dT%H:%M:%S.%fZ"), price))
     if self.index_counter == 2:
       self.reload('index_table')
 
@@ -98,22 +97,24 @@ class KDB_callbacker:
 
   def callback(self, msg: dict):
     table, action, market = self._get_table_action_market(msg)
-    if table in 'trade': # Currently implemented for indexes
+    if action is None:
+      return
+
+    elif table in 'trade': # Currently implemented for indexes
       symbol, timestamp, price = Index.unwrap_data(msg)
       self.connector.store_index(symbol, timestamp, price)
-    elif action is None:
       return
-    elif action in 'partial':
-      state = self._preprocess_partial(msg)
-      snapshot = Snapshot(market, state)
-      self.snapshots[market] = snapshot
-    else:
-      update = self._preprocess_update(msg)
-      snapshot = self.snapshots[market]
-      snapshot.apply(update, action)
+    else: # process snapshot action
+      if action in 'partial':
+        state = self._preprocess_partial(msg)
+        snapshot = Snapshot(market, state)
+        self.snapshots[market] = snapshot
+      else:
+        update = self._preprocess_update(msg)
+        snapshot = self.snapshots[market]
+        snapshot.apply(update, action)
 
-    self.connector.store(snapshot.to_dict())
-
+      self.connector.store(snapshot.to_dict())
 
 class KDB_Bitmex(KDB_callbacker):
   def _preprocess_partial(self, partial: dict) -> list:
@@ -133,7 +134,7 @@ class KDB_Bitmex(KDB_callbacker):
     table = msg.get('table', None)
     action = msg.get('action', None)
     if action is None:
-      return None, None
+      return None, None, None
     return (table, action, msg['data'][0]['symbol'])
 
   # "action": "partial", "keys": ["symbol", "id", "side"], "types": {"symbol": "symbol", "id": "long", "side": "symbol",
