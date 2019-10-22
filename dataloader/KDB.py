@@ -1,5 +1,6 @@
 from pyq import q # requires $QHOME to be defined
 import os
+import datetime
 
 class Snapshot:
   def __init__(self, market: str, state: list):
@@ -29,16 +30,13 @@ class Snapshot:
 
 class Index:
   @staticmethod
-  def kdb_convert(symbol: str, timestamp: str, price: float):
-    pass
-
-  @staticmethod
-  def unwrap_data(data: dict) -> (str, str, float):
+  def unwrap_data(d: dict) -> (str, str, float):
+    data = d['data'][-1]
     symbol = data['symbol']
     timestamp: str = data['timestamp'].replace('-', '.')
     price = data['price']
-    return Index.kdb_convert(symbol, timestamp, price)
-    '.BETHXBT', '2019.10.21T23:20:00.000Z', 0.02121
+    return symbol, timestamp, price
+    # '.BETHXBT', '2019.10.21T23:20:00.000Z', 0.02121
 
 
 class KDB_Connector:
@@ -53,9 +51,8 @@ class KDB_Connector:
     self.index_counter    = 0
 
   def generate_csv_file(self, name):
-    import datetime
-    datetime = datetime.datetime.now()
-    return f'{name}-{datetime.month}.{datetime.day}:{datetime.hour}:{datetime.minute}.csv'
+    dt = datetime.datetime.now()
+    return f'{name}-{dt.month}.{dt.day}:{dt.hour}:{dt.minute}.csv'
 
   def store(self, snapshot: dict):
     self.snapshot_counter += 1
@@ -71,7 +68,9 @@ class KDB_Connector:
 
     # 'd:([] symbol:`symbol$(); timestamp:`timestamp$(); price: `float$())'
     # 'upsert[`d; (`.BETHXBT; `timestamp$(2019.10.21T23:20:00.000Z); 0.02121)]'
-    q(f'upsert[`index_table (`{symbol}; `timestamp$({timestamp}); {price})]')
+    msg = f'upsert[`index_table; (`{symbol}; `timestamp$({timestamp}); {price})]'
+    print(msg)
+    q.insert('index_table', (symbol, datetime.datetime.strptime(timestamp, "%Y.%m.%dT%H:%M:%S.%fZ"), price))
     if self.index_counter == 2:
       self.reload('index_table')
 
@@ -98,8 +97,8 @@ class KDB_callbacker:
   def callback(self, msg: dict):
     table, action, market = self._get_table_action_market(msg)
     if table in 'trade': # Currently implemented for indexes
-      kdb_data = Index.unwrap_data(msg)
-      self.connector.store_index(kdb_data)
+      symbol, timestamp, price = Index.unwrap_data(msg)
+      self.connector.store_index(symbol, timestamp, price)
     elif action is None:
       return
     elif action in 'partial':
