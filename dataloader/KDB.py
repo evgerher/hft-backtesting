@@ -1,4 +1,4 @@
-from pyq import q # requires $QHOME to be defined
+from pyq import q, K # requires $QHOME to be defined
 import os
 import datetime
 
@@ -44,7 +44,7 @@ class KDB_Connector:
   def __init__(self):
     self._tables = {}
 
-    q('index_table:([] symbol:`symbol$(); timestamp:`timestamp$(); price: `float$())')
+    self.index_table = q('index_table:([] symbol:`symbol$(); timestamp:`timestamp$(); price: `float$())')
     # q.call('snapshot_table:([] ')
 
     self.snapshot_counter = 0
@@ -70,7 +70,9 @@ class KDB_Connector:
     # 'upsert[`d; (`.BETHXBT; `timestamp$(2019.10.21T23:20:00.000Z); 0.02121)]'
     msg = f'upsert[`index_table; (`{symbol}; `timestamp$({timestamp}); {price})]'
     print(msg)
-    q.insert('index_table', (symbol, datetime.datetime.strptime(timestamp, "%Y.%m.%dT%H:%M:%S.%fZ"), price))
+    K.insert('index_table', (symbol, datetime.datetime.strptime(timestamp, "%Y.%m.%dT%H:%M:%S.%fZ"), price))
+
+    # q.insert('index_table', (symbol, datetime.datetime.strptime(timestamp, "%Y.%m.%dT%H:%M:%S.%fZ"), price)) # todo: multithread problem
     if self.index_counter == 2:
       self.reload('index_table')
 
