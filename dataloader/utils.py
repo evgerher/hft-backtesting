@@ -1,8 +1,9 @@
 import logging
 
-def setup_logger():
+
+def setup_logger(name:str = None):
   # Prints logger info to terminal
-  logger = logging.getLogger()
+  logger = logging.getLogger(name)
   logger.setLevel(logging.DEBUG)  # Change this to DEBUG if you want a lot more info
   ch = logging.StreamHandler()
   # create formatter
