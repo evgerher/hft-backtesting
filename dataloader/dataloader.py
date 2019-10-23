@@ -22,6 +22,9 @@ def save_logs_locally(text: dict):
 
 def main():
   kdb_connector = KDB_Connector()
+  kdb_connector.setDaemon(True)
+  kdb_connector.start()
+
   kdb = KDB_Bitmex(kdb_connector)
   # .BETHXBT
   # trade

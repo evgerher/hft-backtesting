@@ -1,7 +1,6 @@
-from pyq import q # requires $QHOME to be defined
-import os
 import datetime
 import utils
+from KDB_Connector import KDB_Connector
 
 from collections import OrderedDict
 
@@ -70,42 +69,6 @@ class Index:
     # '.BETHXBT', '2019.10.21T23:20:00.000Z', 0.02121
 
 
-class KDB_Connector:
-
-  def __init__(self):
-    self.h = q.hopen(':localhost:12000')
-    self.snapshot_counter = 0
-    self.index_counter    = 0
-
-  def generate_csv_file(self, name):
-    dt = datetime.datetime.now()
-    return f'{name}-{dt.month}.{dt.day}:{dt.hour}:{dt.minute}.csv'
-
-  def store_snapshot(self, market, data, timestamp):
-    # 1 - timestamp; 2 - symbol; 3-102 - snapshot
-    # 3-52: (price size) pairs Sell
-    # 53-102: (price size) pairs Buy
-    self.h(tuple(['insert_snapshot', timestamp, market] + data))
-    print(f'{self.snapshot_counter}: Stored in KBT')
-    self.snapshot_counter += 1
-
-  def store_index(self, symbol: str, timestamp: str, price: float):
-    self.index_counter += 1
-
-    # 'd:([] symbol:`symbol$(); timestamp:`timestamp$(); price: `float$())'
-    # 'upsert[`d; (`.BETHXBT; `timestamp$(2019.10.21T23:20:00.000Z); 0.02121)]'
-    msg = f'upsert[`index_table; (`{symbol}; `timestamp$({timestamp}); {price})]'
-    print(msg)
-    self.h(('insert_index', symbol, datetime.datetime.strptime(timestamp, "%Y-%m-%dT%H:%M:%S.%fZ"), price))
-    if self.index_counter == 2:
-      self.reload('index_table')
-
-  def reload(self, table: str):
-    q(f'save `:{table}.csv')
-    csv_file = self.generate_csv_file(table)
-    os.rename(f'{table}.csv', csv_file)
-
-
 class KDB_callbacker:
   def __init__(self, connector: KDB_Connector):
     self.connector = connector
@@ -127,7 +90,7 @@ class KDB_callbacker:
 
     elif table in 'trade': # Currently implemented for indexes
       symbol, timestamp, price = Index.unwrap_data(msg)
-      self.connector.store_index(symbol, timestamp, price)
+      self.connector.indexes.append((symbol, timestamp, price))
       return
     else: # process snapshot action
       if action in 'partial':
@@ -139,7 +102,7 @@ class KDB_callbacker:
         snapshot = self.snapshots[market]
         snapshot.apply(update, action)
 
-      self.connector.store_snapshot(*snapshot.to_store())
+      self.connector.snapshots.append(snapshot.to_store())
 
 class KDB_Bitmex(KDB_callbacker):
   def _preprocess_partial(self, partial: dict) -> list:
