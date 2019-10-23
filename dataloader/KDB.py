@@ -21,12 +21,12 @@ class Snapshot:
     for s in state:
       if s['side'] in 'Sell':
         self.mapping[s['id']] = sells
-        self.data[sells] = s['price']
+        self.data[sells] = float(s['price'])
         self.data[sells+1] = s['size']
         sells += 2
       else:
         self.mapping[s['id']] = buys
-        self.data[buys] = s['price']
+        self.data[buys] = float(s['price'])
         self.data[buys + 1] = s['size']
         buys += 2
 
@@ -35,20 +35,25 @@ class Snapshot:
   def apply(self, delta: list, action: str):
     if action in 'update':
       for update in delta:
-        self.data[self.mapping[update['id']] + 1] = update['size']
+        try:
+          self.data[self.mapping[update['id']] + 1] = update['size']
+        except Exception as e:
+          print()
+          raise e
     elif action in 'insert': # [{"id": 8799193300, "side": "Sell", "size": 491901}, {"id": 8799193450, "side": "Sell", "size": 1505581}]
       for insert in delta:
         _id = insert['id']
-        idx = self.free.pop()
+        idx = self.free.pop(0)
         self.mapping[_id] = idx
-        self.data[idx] = insert['price']
+        self.data[idx] = float(insert['price'])
         self.data[idx + 1] = insert['size']
     elif action in 'delete': # [{"id":29699996493,"side":"Sell"},{"id":29699996518,"side":"Buy"}]}
       for delete in delta:
         _id = delete['id']
-        self.data[self.mapping[_id]][1] = 0
-        self.free.append(_id)
-        del self.data[_id]
+        idx = self.mapping[_id]
+        self.data[idx + 1] = 0
+        self.free.append(idx)
+        del self.mapping[_id]
 
   def to_store(self) -> (str, list, datetime.datetime.timestamp):
     return (self.market, self.data, datetime.datetime.now())
@@ -63,7 +68,7 @@ class Index:
   def unwrap_data(d: dict) -> (str, str, float):
     data = d['data'][-1]
     symbol = data['symbol']
-    timestamp: str = data['timestamp']
+    timestamp: str = data['timestamp'].replace('-', '.')[:-1]
     price = data['price']
     return symbol, timestamp, price
     # '.BETHXBT', '2019.10.21T23:20:00.000Z', 0.02121

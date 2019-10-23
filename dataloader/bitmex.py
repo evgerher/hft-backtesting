@@ -2,8 +2,9 @@ import websocket
 import threading
 import json
 import utils
+import logging
 
-logger = utils.setup_logger()
+# logging = utils.setup_logging()
 
 class BitmexWS:
   def __init__(self, topics, message_callback=None):
@@ -17,11 +18,11 @@ class BitmexWS:
     self.ws = ws
 
   def _on_close(self, ws):
-    logger.info("WS app closed")
+    logging.info("WS app closed")
 
   def _on_message(self, ws, msg):
     msg_dict = json.loads(msg)
-    logger.debug(msg)
+    logging.debug(msg)
     self.message_callback(msg_dict)
 
 
