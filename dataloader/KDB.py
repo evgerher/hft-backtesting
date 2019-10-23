@@ -110,7 +110,7 @@ class KDB_callbacker:
 
       self.connector.snapshots.append(snapshot.to_store())
       if self.connector.snapshot_counter % 10000 and self.connector.snapshot_counter == 0:
-        logging.info(snapshot)
+        logging.info(f'{self.connector.total_snapshots} :: {snapshot}')
 
 class KDB_Bitmex(KDB_callbacker):
   def _preprocess_partial(self, partial: dict) -> list:

@@ -22,7 +22,7 @@ class BitmexWS:
 
   def _on_message(self, ws, msg):
     msg_dict = json.loads(msg)
-    logging.debug(msg)
+    # logging.debug(msg)
     self.message_callback(msg_dict)
 
 

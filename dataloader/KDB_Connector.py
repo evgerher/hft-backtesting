@@ -4,8 +4,6 @@ from pyq import q
 import os
 import logging
 
-# logger = utils.setup_logger('KDB.KDB_Connector')
-
 class KDB_Connector:
 
   def _load_init(self, fname='init.q'):
@@ -52,7 +50,7 @@ class KDB_Connector:
 
   def generate_csv_file(self, name):
     dt = datetime.datetime.now()
-    return f'{name}-{dt.month}.{dt.day}:{dt.hour}:{dt.minute}.csv'
+    return f'{name}-{dt.day}.{dt.month}.{dt.year}:{dt.hour}:{dt.minute}:{dt.second}.csv'
 
   def _store_snapshot(self, market, data, timestamp:datetime.datetime.timestamp):
     # 1 - timestamp; 2 - symbol; 3-102 - snapshot
@@ -63,7 +61,7 @@ class KDB_Connector:
 
     q(f'`snapshot_table upsert {msg}')
     # self.h(tuple(['insert_snapshot', timestamp, market] + data))
-    logging.debug(f'{self.snapshot_counter}: Stored in KDB')
+    # logging.debug(f'{self.snapshot_counter}: Stored in KDB')
     self.snapshot_counter += 1
 
   def _store_index(self, symbol: str, timestamp: str, price: float):
@@ -72,13 +70,14 @@ class KDB_Connector:
     # 'd:([] symbol:`symbol$(); timestamp:`timestamp$(); price: `float$())'
     # 'upsert[`d; (`.BETHXBT; `timestamp$(2019.10.21T23:20:00.000Z); 0.02121)]'
     msg = f'`{symbol}; `timestamp${timestamp}; {price}'
-    logging.debug(f'`index_table upsert ({msg})')
+    # logging.debug(f'`index_table upsert ({msg})')
     q(f'`index_table upsert ({msg})')
     # self.h(('insert_index', symbol, datetime.datetime.strptime(timestamp, "%Y-%m-%dT%H:%M:%S.%fZ"), price))
     # if self._index_counter == 2:
     #   self.reload('index_table')
 
   def _reload(self, table: str):
+    logging.info(f"Reloaded table {table}")
     q(f'save `:{table}.csv')
     csv_file = self.generate_csv_file(table)
     os.rename(f'{table}.csv', csv_file)
