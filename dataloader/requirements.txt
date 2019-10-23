@@ -1,2 +1,2 @@
-websocket_client
-pyq
+websocket-client==0.46.0
+pyq==4.3.1
