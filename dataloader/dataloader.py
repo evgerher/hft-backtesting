@@ -1,5 +1,3 @@
-from time import sleep
-
 from KDB import KDB_Bitmex, KDB_Connector
 from bitmex import BitmexWS
 
