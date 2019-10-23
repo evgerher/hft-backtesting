@@ -13,31 +13,51 @@ class Snapshot:
     self.sell = OrderedDict()
     self.buy = OrderedDict()
     self.data = {'Sell': self.sell, 'Buy': self.buy}
+
+    self.mapping = {}
+    self.free = []
+    self.data = [0] * 100
+
+    sells, buys = 0, 50 # even - price, odd - size
     for s in state:
-      self.data[s['side']][s['id']] = [s['price'], s['size']]
-    # self.data = {x['id']: x for x in state}
+      if s['side'] in 'Sell':
+        self.mapping[s['id']] = sells
+        self.data[sells] = s['price']
+        self.data[sells+1] = s['size']
+        sells += 2
+      else:
+        self.mapping[s['id']] = buys
+        self.data[buys] = s['price']
+        self.data[buys + 1] = s['size']
+        buys += 2
+
     # state=[{'id': 8799192250, 'side': 'Sell', 'size': 59553, 'price': 8077.5}, ...], market=XBTUSD
-    # todo: keep only 50
 
   def apply(self, delta: list, action: str):
     if action in 'update':
       for update in delta:
-        self.data[update['side']][update['id']][1] = update['size']
+        self.data[self.mapping[update['id']] + 1] = update['size']
     elif action in 'insert': # [{"id": 8799193300, "side": "Sell", "size": 491901}, {"id": 8799193450, "side": "Sell", "size": 1505581}]
-      for x in delta:
-        self.data[x['side']].update({x['id']: (x['size'], x['price'])})
+      for insert in delta:
+        _id = insert['id']
+        idx = self.free.pop()
+        self.mapping[_id] = idx
+        self.data[idx] = insert['price']
+        self.data[idx + 1] = insert['size']
     elif action in 'delete': # [{"id":29699996493,"side":"Sell"},{"id":29699996518,"side":"Buy"}]}
       for delete in delta:
-        del self.data[delete['side']][delete['id']]
+        _id = delete['id']
+        self.data[self.mapping[_id]][1] = 0
+        self.free.append(_id)
+        del self.data[_id]
 
-  def to_store(self) -> (str, dict, dict, datetime.datetime.timestamp):
-    # todo: transform here into insert statement
-    return (self.market, self.sell, self.buy, datetime.datetime.now())
+  def to_store(self) -> (str, list, datetime.datetime.timestamp):
+    return (self.market, self.data, datetime.datetime.now())
 
   def __str__(self):
-    # todo: differentiate buys and sells
-    N = len(self.data['Sell']) + len(self.data['Buy'])
-    return f'market={self.market}, state_length={N}'
+    bid = max([self.data[x] for x in range(50, 100, 2)])
+    ask = min([self.data[x] for x in range(0, 50, 2)])
+    return f'market={self.market}, highest bid = {bid}, lowest ask = {ask}'
 
 class Index:
   @staticmethod
@@ -53,12 +73,7 @@ class Index:
 class KDB_Connector:
 
   def __init__(self):
-    self._tables = {}
-
-    # self.index_table = q('index_table:([] symbol:`symbol$(); timestamp:`timestamp$(); price: `float$())')
-    # q.call('snapshot_table:([] ')
     self.h = q.hopen(':localhost:12000')
-
     self.snapshot_counter = 0
     self.index_counter    = 0
 
@@ -66,24 +81,13 @@ class KDB_Connector:
     dt = datetime.datetime.now()
     return f'{name}-{dt.month}.{dt.day}:{dt.hour}:{dt.minute}.csv'
 
-  def store(self, market, sell, buy, timestamp):
-    N = len(sell) + len(buy)
-
-    logger.info('market={} :: len={}'.format(market, N))
-    assert N == 50
-
-    self.snapshot_counter += 1
-    print(f'{self.snapshot_counter}: Stored in KBT')
+  def store_snapshot(self, market, data, timestamp):
     # 1 - timestamp; 2 - symbol; 3-102 - snapshot
     # 3-52: (price size) pairs Sell
     # 53-102: (price size) pairs Buy
-    sells = []
-    buys = []
-    self.h(tuple(['insert_snapshot', datetime.datetime.now(), market] + sells + buys))
-    # q.insert()
-
-    if self.snapshot_counter == 2:
-      self.reload('snapshot_table')
+    self.h(tuple(['insert_snapshot', timestamp, market] + data))
+    print(f'{self.snapshot_counter}: Stored in KBT')
+    self.snapshot_counter += 1
 
   def store_index(self, symbol: str, timestamp: str, price: float):
     self.index_counter += 1
@@ -135,7 +139,7 @@ class KDB_callbacker:
         snapshot = self.snapshots[market]
         snapshot.apply(update, action)
 
-      self.connector.store(*snapshot.to_store())
+      self.connector.store_snapshot(*snapshot.to_store())
 
 class KDB_Bitmex(KDB_callbacker):
   def _preprocess_partial(self, partial: dict) -> list:
