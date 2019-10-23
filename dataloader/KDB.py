@@ -1,31 +1,42 @@
-from pyq import q, K # requires $QHOME to be defined
+from pyq import q # requires $QHOME to be defined
 import os
 import datetime
+import utils
+
+from collections import OrderedDict
+
+logger = utils.setup_logger()
 
 class Snapshot:
   def __init__(self, market: str, state: list):
     self.market = market
-    self.data = {x['id']: x for x in state}
+    self.sell = OrderedDict()
+    self.buy = OrderedDict()
+    self.data = {'Sell': self.sell, 'Buy': self.buy}
+    for s in state:
+      self.data[s['side']][s['id']] = [s['price'], s['size']]
+    # self.data = {x['id']: x for x in state}
     # state=[{'id': 8799192250, 'side': 'Sell', 'size': 59553, 'price': 8077.5}, ...], market=XBTUSD
     # todo: keep only 50
 
   def apply(self, delta: list, action: str):
     if action in 'update':
       for update in delta:
-        self.data[update['id']]['size'] = update['size']
+        self.data[update['side']][update['id']][1] = update['size']
     elif action in 'insert': # [{"id": 8799193300, "side": "Sell", "size": 491901}, {"id": 8799193450, "side": "Sell", "size": 1505581}]
-      self.data.update({x['id']: x for x in delta})
+      for x in delta:
+        self.data[x['side']].update({x['id']: (x['size'], x['price'])})
     elif action in 'delete': # [{"id":29699996493,"side":"Sell"},{"id":29699996518,"side":"Buy"}]}
       for delete in delta:
-        del self.data[delete['id']]
+        del self.data[delete['side']][delete['id']]
 
-  def to_dict(self) -> dict:
+  def to_store(self) -> (str, dict, dict, datetime.datetime.timestamp):
     # todo: transform here into insert statement
-    return {'market': self.market, 'state': self.data.values()}
+    return (self.market, self.sell, self.buy, datetime.datetime.now())
 
   def __str__(self):
     # todo: differentiate buys and sells
-    N = len(self.data)
+    N = len(self.data['Sell']) + len(self.data['Buy'])
     return f'market={self.market}, state_length={N}'
 
 class Index:
@@ -33,7 +44,7 @@ class Index:
   def unwrap_data(d: dict) -> (str, str, float):
     data = d['data'][-1]
     symbol = data['symbol']
-    timestamp: str = data['timestamp'].replace('-', '.')
+    timestamp: str = data['timestamp']
     price = data['price']
     return symbol, timestamp, price
     # '.BETHXBT', '2019.10.21T23:20:00.000Z', 0.02121
@@ -55,10 +66,20 @@ class KDB_Connector:
     dt = datetime.datetime.now()
     return f'{name}-{dt.month}.{dt.day}:{dt.hour}:{dt.minute}.csv'
 
-  def store(self, snapshot: dict):
+  def store(self, market, sell, buy, timestamp):
+    N = len(sell) + len(buy)
+
+    logger.info('market={} :: len={}'.format(market, N))
+    assert N == 50
+
     self.snapshot_counter += 1
-    print(f'{self.counter}: Stored in KBT')
-    assert len(snapshot['state']) == 50
+    print(f'{self.snapshot_counter}: Stored in KBT')
+    # 1 - timestamp; 2 - symbol; 3-102 - snapshot
+    # 3-52: (price size) pairs Sell
+    # 53-102: (price size) pairs Buy
+    sells = []
+    buys = []
+    self.h(tuple(['insert_snapshot', datetime.datetime.now(), market] + sells + buys))
     # q.insert()
 
     if self.snapshot_counter == 2:
@@ -71,7 +92,7 @@ class KDB_Connector:
     # 'upsert[`d; (`.BETHXBT; `timestamp$(2019.10.21T23:20:00.000Z); 0.02121)]'
     msg = f'upsert[`index_table; (`{symbol}; `timestamp$({timestamp}); {price})]'
     print(msg)
-    self.h(('insert_index', symbol, datetime.datetime.strptime(timestamp, "%Y.%m.%dT%H:%M:%S.%fZ"), price))
+    self.h(('insert_index', symbol, datetime.datetime.strptime(timestamp, "%Y-%m-%dT%H:%M:%S.%fZ"), price))
     if self.index_counter == 2:
       self.reload('index_table')
 
@@ -114,7 +135,7 @@ class KDB_callbacker:
         snapshot = self.snapshots[market]
         snapshot.apply(update, action)
 
-      self.connector.store(snapshot.to_dict())
+      self.connector.store(*snapshot.to_store())
 
 class KDB_Bitmex(KDB_callbacker):
   def _preprocess_partial(self, partial: dict) -> list:

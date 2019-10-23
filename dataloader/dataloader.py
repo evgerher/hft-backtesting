@@ -25,8 +25,8 @@ def main():
   kdb = KDB_Bitmex(kdb_connector)
   # .BETHXBT
   # trade
-  # bot = BitmexWS(('orderBookL2_25:XBTUSD','orderBookL2_25:ETHUSD',), kdb.callback)
-  bot = BitmexWS(('trade:.BETHXBT',), kdb.callback)
+  bot = BitmexWS(('orderBookL2_25:XBTUSD','orderBookL2_25:ETHUSD',), kdb.callback)
+  # bot = BitmexWS(('trade:.BETHXBT',), kdb.callback)
   bot.connect()
 
   try:
