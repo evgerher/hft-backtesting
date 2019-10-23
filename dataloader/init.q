@@ -1,15 +1,12 @@
 reload_index:{`index_table set ([] symbol:`symbol$(); timestamp:`timestamp$(); price: `float$())}
 reload_snapshot:{`snapshot_table set ([] timestamp:`timestamp$(); symbol:`symbol$(); `float$(); `long$();`float$(); `long$();`float$(); `long$();`float$(); `long$();`float$(); `long$();`float$(); `long$();`float$(); `long$();`float$(); `long$();`float$(); `long$();`float$(); `long$();`float$(); `long$();`float$(); `long$();`float$(); `long$();`float$(); `long$();`float$(); `long$();`float$(); `long$();`float$(); `long$();`float$(); `long$();`float$(); `long$();`float$(); `long$();`float$(); `long$();`float$(); `long$();`float$(); `long$();`float$(); `long$();`float$(); `long$();`float$(); `long$();`float$(); `long$();`float$(); `long$();`float$(); `long$();`float$(); `long$();`float$(); `long$();`float$(); `long$();`float$(); `long$();`float$(); `long$();`float$(); `long$();`float$(); `long$();`float$(); `long$();`float$(); `long$();`float$(); `long$();`float$(); `long$();`float$(); `long$();`float$(); `long$();`float$(); `long$();`float$(); `long$();`float$(); `long$();`float$(); `long$();`float$(); `long$();`float$(); `long$();`float$(); `long$();`float$(); `long$())}
-
 reload_index[]
 reload_snapshot[]
-
 insert_index:{`index_table insert (x; y; z)}
 insert_snapshot:{`snapshot_table insert (stamp; symbol; a0;a1;a2;a3;a4;a5;a6;a7;a8;a9;a10;a11;a12;a13;a14;a15;a16;a17;a18;a19;a20;a21;a22;a23;a24;a25;a26;a27;a28;a29;a30;a31;a32;a33;a34;a35;a36;a37;a38;a39;a40;a41;a42;a43;a44;a45;a46;a47;a48;a49;a50;a51;a52;a53;a54;a55;a56;a57;a58;a59;a60;a61;a62;a63;a64;a65;a66;a67;a68;a69;a70;a71;a72;a73;a74;a75;a76;a77;a78;a79;a80;a81;a82;a83;a84;a85;a86;a87;a88;a89;a90;a91;a92;a93;a94;a95;a96;a97;a98;a99)}
-
 echo_it:{show index_table}
 echo_st:{show snapshot_table}
-
 store_index:{save `:index_table.csv}
 store_snapshot:{save `:snapshot_table.csv}
-
+\p 12003
+`snapshot_table insert (2019.10.24D00:07:20.368859; `XBTUSD; `float$7499;`long$2189139;`float$7498.5;163615;`float$7498;188938;`float$7497.5;98891;`float$7497;75908;`float$7496.5;123498;`float$7496;93609;`float$7495.5;86427;`float$7495;85380;`float$7494.5;62260;`float$7494;311762;`float$7493.5;47099;`float$7493;30569;`float$7492.5;69959;`float$7492;255544;`float$7491.5;39719;`float$7491;226779;`float$7490.5;103599;`float$7490;351902;`float$7489.5;229621;`float$7489;18231;`float$7488.5;36754;`float$7488;144491;`float$7487.5;29231;`float$7487;1032091;`float$7486.5;232738;`float$7486;124399;`float$7485.5;20578;`float$7485;74793;`float$7484.5;5345;`float$7484;83385;`float$7483.5;162986;`float$7483;35592;`float$7482.5;29960;`float$7482;175109;`float$7481.5;1473536;`float$7481;59348;`float$7480.5;146069;`float$7480;130718;`float$7479.5;36636;`float$7479;24538;`float$7478.5;49065;`float$7478;46040;`float$7477.5;17677;`float$7477;89163;`float$7476.5;44198;`float$7476;163803;`float$7475.5;72724;`float$7475;160929;`float$7474.5;83888)

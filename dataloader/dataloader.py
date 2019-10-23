@@ -1,5 +1,3 @@
-from time import sleep
-
 from KDB import KDB_Bitmex, KDB_Connector
 from bitmex import BitmexWS
 
@@ -22,16 +20,20 @@ def save_logs_locally(text: dict):
 
 def main():
   kdb_connector = KDB_Connector()
+  # kdb_connector.setDaemon(True)
+  # kdb_connector.start()
+
   kdb = KDB_Bitmex(kdb_connector)
   # .BETHXBT
   # trade
-  bot = BitmexWS(('orderBookL2_25:XBTUSD','orderBookL2_25:ETHUSD',), kdb.callback)
+  bot = BitmexWS(('orderBookL2_25:XBTUSD','orderBookL2_25:ETHUSD','trade:.BETHXBT'), kdb.callback)
   # bot = BitmexWS(('trade:.BETHXBT',), kdb.callback)
   bot.connect()
 
   try:
     while True:
-      sleep(1)
+      kdb_connector.run()
+      # sleep(1)
   except KeyboardInterrupt:
     bot.close()
   finally:
