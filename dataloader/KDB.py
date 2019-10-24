@@ -109,7 +109,7 @@ class KDB_callbacker:
         snapshot.apply(update, action)
 
       self.connector.snapshots.append(snapshot.to_store())
-      if self.connector.snapshot_counter % 100 and self.connector.snapshot_counter > 0:
+      if self.connector.snapshot_counter % 100 == 0 and self.connector.snapshot_counter != 0:
         logging.info(f'{self.connector.total_snapshots} :: {snapshot}')
 
 class KDB_Bitmex(KDB_callbacker):

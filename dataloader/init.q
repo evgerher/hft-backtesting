@@ -2,8 +2,8 @@ reload_index:{`index_table set ([] symbol:`symbol$(); timestamp:`timestamp$(); p
 reload_snapshot:{`snapshot_table set ([] timestamp:`timestamp$(); symbol:`symbol$(); `float$(); `long$();`float$(); `long$();`float$(); `long$();`float$(); `long$();`float$(); `long$();`float$(); `long$();`float$(); `long$();`float$(); `long$();`float$(); `long$();`float$(); `long$();`float$(); `long$();`float$(); `long$();`float$(); `long$();`float$(); `long$();`float$(); `long$();`float$(); `long$();`float$(); `long$();`float$(); `long$();`float$(); `long$();`float$(); `long$();`float$(); `long$();`float$(); `long$();`float$(); `long$();`float$(); `long$();`float$(); `long$();`float$(); `long$();`float$(); `long$();`float$(); `long$();`float$(); `long$();`float$(); `long$();`float$(); `long$();`float$(); `long$();`float$(); `long$();`float$(); `long$();`float$(); `long$();`float$(); `long$();`float$(); `long$();`float$(); `long$();`float$(); `long$();`float$(); `long$();`float$(); `long$();`float$(); `long$();`float$(); `long$();`float$(); `long$();`float$(); `long$();`float$(); `long$();`float$(); `long$();`float$(); `long$();`float$(); `long$();`float$(); `long$())}
 reload_index[]
 reload_snapshot[]
-`:index_table.csv set index_table
-`:snapshot_table.csv set snapshot_table
+`:index_table_mapping.csv set index_table
+`:snapshot_table_mapping.csv set snapshot_table
 \p 12003
 \g
 insert_index:{`index_table insert (x; y; z)}

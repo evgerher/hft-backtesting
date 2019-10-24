@@ -1,5 +1,6 @@
 from KDB import KDB_Bitmex, KDB_Connector
 from bitmex import BitmexWS
+import signal
 
 import sys
 import getopt
@@ -30,10 +31,15 @@ def main():
   # bot = BitmexWS(('trade:.BETHXBT',), kdb.callback)
   bot.connect()
 
+  def alarm_received(n, stack):
+    kdb_connector.close()
+    bot.close()
+    print('SIGNAL RECEIVED')
+
+  signal.signal(signal.SIGALRM, alarm_received)
+
   try:
-    while True:
-      kdb_connector.run()
-      # sleep(1)
+    kdb_connector.run()
   finally:
     bot.close()
     kdb_connector.close()

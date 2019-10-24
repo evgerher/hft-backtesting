@@ -37,6 +37,7 @@ class KDB_Connector:
         index = self.indexes.pop(0)
         self._store_index(*index)
 
+      logging.info(f'KDB_Connector :: stored {self.total_snapshots + self.snapshot_counter}')
       time.sleep(3.)
 
       if self.snapshot_counter > 200000:
@@ -92,6 +93,8 @@ class KDB_Connector:
     q('.Q.gc[]')
 
   def close(self):
+    logging.info("KDB_Connector FINISHING")
+    self.finished = True
     tables = ['index_table', 'snapshot_table']
     for table in tables:
       q(f'save `:{table}.csv')
