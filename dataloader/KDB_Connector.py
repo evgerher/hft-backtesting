@@ -39,13 +39,15 @@ class KDB_Connector:
 
       time.sleep(3.)
 
-      if self.snapshot_counter > 100000:
-        self._reload('snapshot_table')
+      if self.snapshot_counter > 200000:
+        # self._reload('snapshot_table')
+        # q('.Q.gc[]')
         self.total_snapshots += self.snapshot_counter
         self.snapshot_counter = 0
 
       if self._index_counter > 1000:
-        self._reload('index_table')
+        # self._reload('index_table')
+        # q('.Q.gc[]')
         self._index_counter = 0
 
   def generate_csv_file(self, name):
@@ -86,3 +88,10 @@ class KDB_Connector:
       q('reload_snapshot[]')
     elif table in 'index':
       q('reload_index[]')
+
+    q('.Q.gc[]')
+
+  def close(self):
+    tables = ['index_table', 'snapshot_table']
+    for table in tables:
+      q(f'save `:{table}.csv')

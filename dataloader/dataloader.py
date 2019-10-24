@@ -34,12 +34,13 @@ def main():
     while True:
       kdb_connector.run()
       # sleep(1)
-  except KeyboardInterrupt:
-    bot.close()
   finally:
+    bot.close()
+    kdb_connector.close()
     global update_f
     if update_f is not None:
       update_f.close()
+
 
 if __name__ == '__main__':
   # Get command line parameters
