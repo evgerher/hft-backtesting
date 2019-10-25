@@ -12,10 +12,10 @@ class KDB_Connector:
 
   def _initialize(self):
     # self.h = q.hopen(':localhost:12000')
-    for q_cmd in self._load_init():
-      q(q_cmd)
-      logging.info(f"Initialized {q_cmd}")
-
+    # for q_cmd in self._load_init():
+    #   q(q_cmd)
+    #   logging.info(f"Initialized {q_cmd}")
+    q('\l init.q')
     self.total_snapshots = 0
     self.snapshot_counter = 0
     self._index_counter = 0
@@ -40,7 +40,7 @@ class KDB_Connector:
       logging.info(f'KDB_Connector :: stored {self.total_snapshots + self.snapshot_counter}')
       time.sleep(3.)
 
-      if self.snapshot_counter > 100:
+      if self.snapshot_counter > 50:
         q('.u.end[]')
         # self._reload('snapshot_table')
         # q('.Q.gc[]')
@@ -64,7 +64,7 @@ class KDB_Connector:
     msg = f'({timestamp.strftime("%Y.%m.%dD%H:%M:%S.%f")}; `{market}; {str(tuple(data)).replace(",", ";")[1:-1]})'
 
     # q(f'`snapshot_table upsert {msg}')
-    q(f'append[`snapshot_table;{msg}]')
+    q(f'upd[`snapshot_table;{msg}]')
     # self.h(tuple(['insert_snapshot', timestamp, market] + data))
     # logging.debug(f'{self.snapshot_counter}: Stored in KDB')
     self.snapshot_counter += 1

@@ -1,5 +1,5 @@
 MAXROWS:50
-TMPSAVE:`asd :: .z.d
+TMPSAVE:`:dbss
 FINAL:`db_final
 getTMPSAVE:`db1
 WRITETBLS:`index_table`snapshot_table
@@ -10,36 +10,39 @@ append:{[t;data]
     // append enumerated buffer to disk
     .[` sv TMPSAVE,t,`;();,;.Q.en[`:.]`. t];
     // clear buffer
-    @[`.;t;0#] ] }
+    reload_index[]
+    reload_snapshot[]]
+//    @[`.;WRITETBLS;0#];]
+    }
 upd:append
 / In the end of day merge tables into file
 .u.end:{
-  t:tables`.;
-  t@:where 11h=type each t@\:`sym;
-  / append enumerated buffer to disk
-  {.[` sv TMPSAVE,x,`;();,;.Q.en[`:.]`. x]}each t; / clear buffer
-  /  @[`.;t;0#];
+  t:tables`.;t@:where `g=attr each t@\:`.d;
+  / append enumerated buffer to disk for write tables
+  {.[` sv TMPSAVE,x,`;();,;.Q.en[`:.]`. x]}each WRITETBLS;
+  / clear buffer for write tables
+  / @[`.;WRITETBLS;0#];
   reload_index[]
   reload_snapshot[]
-  / sort on disk by sym and set `p#
-  / {@[`sym xasc` sv TMPSAVE,x,`;`sym;`p#]}each t;
-  {disksort[` sv TMPSAVE,x,`;`sym;`p#]}each t;
-  / move the complete partition to final home,
-  / use mv instead of built-in r if filesystem whines
-  system"r ",(1_string TMPSAVE)," ",-1_1_string .Q.par[`:.;x;`];
-  / reset TMPSAVE for new day
-  TMPSAVE::getTMPSAVE .z.d;
-  / and notify hdb to reload and pick up new partition
-  if[h:@[hopen;`$":",.u.x 1;0];h"\\l .";hclose h]; }
+  / write normal tables down in usual manner
+ {[x;t].Q.dpft[`:.;x;`.d;]each t}[x;]each t except WRITETBLS;
+ / special logic to sort and move tmp tables to hdb
+  .u.endWTbls[x;WRITETBLS];
+  reload_index[]
+  reload_snapshot[]
+  / reapply grouped attribute
+//  @[;`.d;`g#] each t;
+ / and notify hdb to reload and pick up new partition
+  if[h:@[hopen;`$":",.u.x 1;0];h"\\l .";hclose h] }
 
 / end of day: save, clear, sort on disk, move
 .u.endWTbls:{[x;t]
   t@:where 11h=type each t@\:`.d;
   / sort on disk by sym, set `p# and move
-  {disksort[` sv TMPSAVE,x,`;`.d;`p#]}each t;
-  system"r ",(1_string FINAL)," ",-1_1_string .Q.par[`:.;x;`];
+  {disksort[`. sv TMPSAVE,x,`;`.d;`p#]}each t;
+  system"r ",(1_string TMPSAVE)," ",-1_1_string .Q.par[`:.;x;`];
   / reset TMPSAVE for new day
-  FINAL::TMPSAVE .z.d; }
+  TMPSAVE::`yes; }
 / Apply disk sort
 disksort:{[t;c;a]
   if[not`s~attr(t:hsym t)c;
