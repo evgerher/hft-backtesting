@@ -40,7 +40,8 @@ class KDB_Connector:
       logging.info(f'KDB_Connector :: stored {self.total_snapshots + self.snapshot_counter}')
       time.sleep(3.)
 
-      if self.snapshot_counter > 200000:
+      if self.snapshot_counter > 100:
+        q('.u.end[]')
         # self._reload('snapshot_table')
         # q('.Q.gc[]')
         self.total_snapshots += self.snapshot_counter
@@ -62,7 +63,8 @@ class KDB_Connector:
 
     msg = f'({timestamp.strftime("%Y.%m.%dD%H:%M:%S.%f")}; `{market}; {str(tuple(data)).replace(",", ";")[1:-1]})'
 
-    q(f'`snapshot_table upsert {msg}')
+    # q(f'`snapshot_table upsert {msg}')
+    q(f'append[`snapshot_table;{msg}]')
     # self.h(tuple(['insert_snapshot', timestamp, market] + data))
     # logging.debug(f'{self.snapshot_counter}: Stored in KDB')
     self.snapshot_counter += 1

@@ -47,6 +47,7 @@ def main():
     if update_f is not None:
       update_f.close()
 
+    # Stop app with kill -14 <pid>
 
 if __name__ == '__main__':
   # Get command line parameters
