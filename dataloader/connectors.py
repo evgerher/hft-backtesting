@@ -14,14 +14,12 @@ class Connector:
 
 class ClickHouse(Connector):
   def __init__(self):
-    client = Client('localhost')
+    client = Client('localhost', password='' )
     client.execute('CREATE TABLE IF NOT EXISTS snapshots (moment TIMESTAMP, symbol FixedString(10), '
                    'x0 Float32,x1 UInt32,x2 Float32,x3 UInt32,x4 Float32,x5 UInt32,x6 Float32,x7 UInt32,x8 Float32,x9 UInt32,x10 Float32,x11 UInt32,x12 Float32,x13 UInt32,x14 Float32,x15 UInt32,x16 Float32,x17 UInt32,x18 Float32,x19 UInt32,x20 Float32,x21 UInt32,x22 Float32,x23 UInt32,x24 Float32,x25 UInt32,x26 Float32,x27 UInt32,x28 Float32,x29 UInt32,x30 Float32,x31 UInt32,x32 Float32,x33 UInt32,x34 Float32,x35 UInt32,x36 Float32,x37 UInt32,x38 Float32,x39 UInt32,x40 Float32,x41 UInt32,x42 Float32,x43 UInt32,x44 Float32,x45 UInt32,x46 Float32,x47 UInt32,x48 Float32,x49 UInt32,x50 Float32,x51 UInt32,x52 Float32,x53 UInt32,x54 Float32,x55 UInt32,x56 Float32,x57 UInt32,x58 Float32,x59 UInt32,x60 Float32,x61 UInt32,x62 Float32,x63 UInt32,x64 Float32,x65 UInt32,x66 Float32,x67 UInt32,x68 Float32,x69 UInt32,x70 Float32,x71 UInt32,x72 Float32,x73 UInt32,x74 Float32,x75 UInt32,x76 Float32,x77 UInt32,x78 Float32,x79 UInt32,x80 Float32,x81 UInt32,x82 Float32,x83 UInt32,x84 Float32,x85 UInt32,x86 Float32,x87 UInt32,x88 Float32,x89 UInt32,x90 Float32,x91 UInt32,x92 Float32,x93 UInt32,x94 Float32,x95 UInt32,x96 Float32,x97 UInt32,x98 Float32,x99 UInt32) '
-                   'ENGINE = MergeTree() '
-                   'ORDER BY moment')
+                   'ENGINE=File(TabSeparated) ')
     client.execute('CREATE TABLE IF NOT EXISTS indexes (symbol FixedString(15), moment TIMESTAMP, price Float32) '
-                   'ENGINE = MergeTree()'
-                   'ORDER BY moment')
+                   'ENGINE=File(TabSeparated)')
 
     self.client = client
     self.total_snapshots = 0
