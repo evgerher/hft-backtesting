@@ -1,52 +1,46 @@
-from KDB import KDB_Bitmex, KDB_Connector
+import time
+
+from connectors import ClickHouse
+from data import Bitmex_Data, KDB_Connector
 from bitmex import BitmexWS
 import signal
 
 import sys
 import getopt
 
-update_f = None
-
-def open_files():
-  global update_f
-  update_f = open("example/update.json", 'w+')
-
-def save_logs_locally(text: dict):
-  import json
-
-  global update_f
-  if update_f is None:
-    open_files()
-  update_f.write(json.dumps(text) + '\n')
+finished = False
 
 def main():
-  kdb_connector = KDB_Connector()
+  global finished
+  # kdb_connector = KDB_Connector()
+  clickhouse_connector = ClickHouse()
   # kdb_connector.setDaemon(True)
   # kdb_connector.start()
 
-  kdb = KDB_Bitmex(kdb_connector)
+
+  dataprocessor = Bitmex_Data(clickhouse_connector)
   # .BETHXBT
   # trade
-  bot = BitmexWS(('orderBookL2_25:XBTUSD','orderBookL2_25:ETHUSD','trade:.BETHXBT'), kdb.callback)
+  bot = BitmexWS(('orderBookL2_25:XBTUSD','orderBookL2_25:ETHUSD','trade:.BETHXBT'), dataprocessor.callback)
   # bot = BitmexWS(('trade:.BETHXBT',), kdb.callback)
   bot.connect()
 
   def alarm_received(n, stack):
-    kdb_connector.close()
+    # kdb_connector.close()
+    global finished
+    finished = True
     bot.close()
     print('SIGNAL RECEIVED')
 
   signal.signal(signal.SIGALRM, alarm_received)
 
   try:
-    kdb_connector.run()
+    while not finished:
+      time.sleep(1)
   finally:
     bot.close()
-    kdb_connector.close()
-    global update_f
-    if update_f is not None:
-      update_f.close()
-
+    finished = True
+    # kdb_connector.close()
     # Stop app with kill -14 <pid>
 
 if __name__ == '__main__':

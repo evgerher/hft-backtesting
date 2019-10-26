@@ -1,6 +1,8 @@
 import datetime
+from typing import List
+
 import utils
-from KDB_Connector import KDB_Connector
+from connectors import KDB_Connector, Connector
 import logging
 
 from collections import OrderedDict
@@ -75,8 +77,8 @@ class Index:
     # '.BETHXBT', '2019.10.21T23:20:00.000Z', 0.02121
 
 
-class KDB_callbacker:
-  def __init__(self, connector: KDB_Connector):
+class Data_Preprocessor:
+  def __init__(self, connector: Connector):
     self.connector = connector
     self.snapshots = {}
 
@@ -96,7 +98,8 @@ class KDB_callbacker:
 
     elif table in 'trade': # Currently implemented for indexes
       symbol, timestamp, price = Index.unwrap_data(msg)
-      self.connector.indexes.append((symbol, timestamp, price))
+      # self.connector.indexes.append((symbol, timestamp, price))
+      self.connector.store_index(symbol, timestamp, price)
       return
     else: # process snapshot action
       if action in 'partial':
@@ -108,11 +111,12 @@ class KDB_callbacker:
         snapshot = self.snapshots[market]
         snapshot.apply(update, action)
 
-      self.connector.snapshots.append(snapshot.to_store())
-      if self.connector.snapshot_counter % 100 == 0 and self.connector.snapshot_counter != 0:
-        logging.info(f'{self.connector.total_snapshots} :: {snapshot}')
+      self.connector.store_snapshot(*snapshot.to_store())
+      # self.connector.snapshots.append(snapshot.to_store())
+      # if self.connector.snapshot_counter % 100 == 0 and self.connector.snapshot_counter != 0:
+      #   logging.info(f'{self.connector.total_snapshots} :: {snapshot}')
 
-class KDB_Bitmex(KDB_callbacker):
+class Bitmex_Data(Data_Preprocessor):
   def _preprocess_partial(self, partial: dict) -> list:
     return self.__preprocess_dict(partial)
 
