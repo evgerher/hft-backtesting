@@ -16,6 +16,7 @@ class BitmexWS:
                                 on_message=self._on_message)
     self.message_callback = message_callback
     self.ws = ws
+    logging.info("Initilized BitmexWS")
 
   def _on_close(self, ws):
     logging.info("WS app closed")

@@ -6,9 +6,11 @@ services:
     ports:
       - "8123:8123"
       - "9000:9000"
-    volumes:
-      - $HOME/clickhouse_storage/:/var/lib/clickhouse
-  client:
-    image: yandex/clickhouse-client
-    ports:
-      - "10000:10000"
+#    volumes:
+#      - $HOME/clickhouse_storage/:/var/lib/clickhouse
+#  client:
+#    image: yandex/clickhouse-client
+#    depends_on:
+#      - server
+#    ports:
+#      - "10000:10000"

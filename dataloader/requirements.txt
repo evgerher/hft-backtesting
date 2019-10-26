@@ -1,2 +1,2 @@
 websocket-client==0.46.0
-pyq==4.2.1
+clickhouse_driver==0.1.2

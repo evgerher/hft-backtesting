@@ -8,6 +8,10 @@ import signal
 import sys
 import getopt
 
+import logging
+logging.basicConfig()
+logging.getLogger().setLevel(logging.INFO)
+
 finished = False
 
 def main():
@@ -16,7 +20,7 @@ def main():
   clickhouse_connector = ClickHouse()
   # kdb_connector.setDaemon(True)
   # kdb_connector.start()
-
+  logging.info("Start app")
 
   dataprocessor = Bitmex_Data(clickhouse_connector)
   # .BETHXBT

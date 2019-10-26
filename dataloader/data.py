@@ -81,6 +81,7 @@ class Data_Preprocessor:
   def __init__(self, connector: Connector):
     self.connector = connector
     self.snapshots = {}
+    self.counter = 0
 
   def _preprocess_partial(self, partial: dict) -> list:
     pass
@@ -112,6 +113,9 @@ class Data_Preprocessor:
         snapshot.apply(update, action)
 
       self.connector.store_snapshot(*snapshot.to_store())
+      if self.counter > 100000 == 0:
+        logging.info(f"Inserted {self.counter} more")
+        self.counter = 0
       # self.connector.snapshots.append(snapshot.to_store())
       # if self.connector.snapshot_counter % 100 == 0 and self.connector.snapshot_counter != 0:
       #   logging.info(f'{self.connector.total_snapshots} :: {snapshot}')
