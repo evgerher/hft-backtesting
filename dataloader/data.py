@@ -112,6 +112,8 @@ class Data_Preprocessor:
         snapshot = self.snapshots[market]
         snapshot.apply(update, action)
 
+      self.counter += 1
+
       self.connector.store_snapshot(*snapshot.to_store())
       if self.counter > 100000 == 0:
         logging.info(f"Inserted {self.counter} more")

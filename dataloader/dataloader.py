@@ -42,6 +42,7 @@ def main():
     while not finished:
       time.sleep(1)
   finally:
+    logging.info("Closing client")
     bot.close()
     finished = True
     # kdb_connector.close()
