@@ -15,7 +15,8 @@ class Connector:
 
 class ClickHouse(Connector):
 
-  def create_client(self, pwd=''):
+  def create_client(self):
+    logging.info("Reestablish connection")
     return Client(config.db_host, password=config.db_pwd)
 
   def __init__(self):
@@ -31,22 +32,24 @@ class ClickHouse(Connector):
     self.snapshot_counter = 0
 
   def store_snapshot(self, market, data, timestamp:datetime.datetime.timestamp):
+    logging.info(f"Insert snapshot: {timestamp}")
     self.client.execute('insert into snapshots values', [[timestamp, market] + data])
     self.snapshot_counter += 1
 
-    if self.snapshot_counter % 5000 == 0:
+    if self.snapshot_counter % 2500 == 0:
       self.client.connection.ping()
 
-    if self.snapshot_counter % 100000 == 0:
+    if self.snapshot_counter % 5000 == 0:
       self.client.disconnect()
       self.client = self.create_client()
 
   def store_index(self, symbol: str, timestamp: str, price: float):
+    logging.info(f"Insert index: {timestamp}")
     self.total_snapshots += 1
     self.client.execute('insert into indexes values', [(symbol, datetime.datetime.strptime(timestamp, "%Y.%m.%dT%H:%M:%S.%f"), price)])
     if self.total_snapshots % 200 == 0:
       self.client.disconnect()
-      self.client = self.create_client('')
+      self.client = self.create_client()
       self.client.connection.ping()
 
 class KDB_Connector(Connector):
