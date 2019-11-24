@@ -11,15 +11,20 @@ class BitmexWS:
     # orderBookL2_25:XBTUSD, orderBookL2_25:ETHUSD
     self._topics = ','.join(topics)
 
-    ws = websocket.WebSocketApp(f"wss://www.bitmex.com/realtime?subscribe={self._topics}",
-                                on_close=self._on_close,
-                                on_message=self._on_message)
+    self.ws = self.build_ws()
     self.message_callback = message_callback
-    self.ws = ws
     logging.info("Initilized BitmexWS")
+
+  def build_ws(self):
+    return websocket.WebSocketApp(f"wss://www.bitmex.com/realtime?subscribe={self._topics}",
+                                  on_close=self._on_close,
+                                  on_message=self._on_message)
 
   def _on_close(self, ws):
     logging.info("WS app closed")
+    self.ws = self.build_ws()
+    self.connect()
+
 
   def _on_message(self, ws, msg):
     msg_dict = json.loads(msg)
