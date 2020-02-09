@@ -66,7 +66,24 @@ class SnapshotBuilder:
 
 
 @dataclass
-class Snapshot:
+class Snapshot: # todo: may be sort on construct ?
+  price_indices = np.arange(0, 50, 2)
+  volume_indices = np.arange(1, 50, 2)
+
+  def best_bid_price_index(self) -> int:
+    return np.argmin(self.bids[Snapshot.price_indices])
+
+  def best_bid_volume_index(self) -> int:
+    return self.best_bid_price_index() + 1
+
+  def best_ask_price_index(self) -> int:
+    return np.argmax(self.asks[Snapshot.price_indices])
+
+  def best_ask_volume_index(self) -> int:
+    return self.best_ask_price_index() + 1
+
+
+
   market: str
   timestamp: datetime.datetime.timestamp
   bids: np.array
