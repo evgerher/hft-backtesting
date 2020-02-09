@@ -1,14 +1,14 @@
 import datetime
 from dataclasses import dataclass
-from typing import List, Dict
+from typing import *
 from callbacks.connectors import Connector
 import logging
 from utils import utils
+import numpy as np
 
 logger = utils.setup_logger()
 
-
-class Snapshot:
+class SnapshotBuilder:
   def __init__(self, market: str, state: List[Dict]):
     self.market = market
     self.mapping = {}
@@ -56,10 +56,21 @@ class Snapshot:
   def to_store(self) -> (str, datetime.datetime.timestamp, list):
     return (self.market, datetime.datetime.now(), self.data)
 
+  def to_snapshot(self) -> 'Snapshot':
+    return Snapshot(self.market, datetime.datetime.now(), np.array(self.data[0:50]), np.array(self.data[50:]))
+
   def __str__(self):
     bid = max([self.data[x] for x in range(50, 100, 2)])
     ask = min([self.data[x] for x in range(0, 50, 2)])
     return f'Snapshot :: market={self.market}, highest bid = {bid}, lowest ask = {ask}'
+
+
+@dataclass
+class Snapshot:
+  market: str
+  timestamp: datetime.datetime.timestamp
+  bids: np.array
+  asks: np.array
 
 
 @dataclass
@@ -107,7 +118,7 @@ class Data_Preprocessor:
   def _preprocess_update(self, tick: dict) -> list:
     pass
 
-  def __get_message_meta(self, msg: dict) -> 'MetaMessage':
+  def __get_message_meta(self, msg: Dict[str, str]) -> 'MetaMessage':
     pass
 
   def callback(self, msg: dict):
@@ -124,11 +135,11 @@ class Data_Preprocessor:
     else: # process snapshot action
       if meta.action in 'partial':
         state = self._preprocess_partial(msg)
-        snapshot: Snapshot = Snapshot(meta.symbol, state)
+        snapshot: SnapshotBuilder = SnapshotBuilder(meta.symbol, state)
         self.snapshots[meta.symbol] = snapshot
       else:
         update = self._preprocess_update(msg)
-        snapshot: Snapshot = self.snapshots[meta.symbol]
+        snapshot: SnapshotBuilder = self.snapshots[meta.symbol]
         snapshot.apply(update, meta.action)
 
       self.counter += 1
@@ -146,14 +157,14 @@ class Bitmex_Data(Data_Preprocessor):
   def _preprocess_update(self, update: dict) -> list:
     return self.__preprocess_dict(update)
 
-  def __preprocess_dict(self, d: dict) -> list:
+  def __preprocess_dict(self, tick: dict) -> list:
     data = []
-    for x in d['data']:
+    for x in tick['data']:
       del x['symbol']
       data.append(x)
     return data
 
-  def __get_message_meta(self, msg: dict) -> 'MetaMessage':
+  def __get_message_meta(self, msg: Dict[str, str]) -> 'MetaMessage':
     table = msg.get('table', None)
     action = msg.get('action', None)
     if action is None:
