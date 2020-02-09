@@ -1,8 +1,8 @@
 import time
 
-from connectors import ClickHouse
-from data import Bitmex_Data
-from bitmex import BitmexWS
+from callbacks.connectors import ClickHouse
+from utils.data import Bitmex_Data
+from callbacks.bitmex import BitmexWS
 import signal
 
 import sys

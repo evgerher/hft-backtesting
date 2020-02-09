@@ -2,16 +2,17 @@ import datetime
 import logging
 from clickhouse_driver import Client
 import config
+from utils.data import TradeMessage
 
 
 class Connector:
   def store_snapshot(self, market, data, timestamp:datetime.datetime.timestamp):
     pass
 
-  def store_index(self, symbol: str, timestamp: str, price: float):
+  def store_index(self, trade: TradeMessage):
     pass
 
-  def store_trade(self, symbol: str, timestamp: str, price: float, size: int, action: str, side: str):
+  def store_trade(self, trade: TradeMessage):
     pass
 
 
@@ -37,16 +38,17 @@ class ClickHouse(Connector):
     self.snapshot_counter = 0
     self.trades_counter = 0
 
-  def store_trade(self, symbol: str, timestamp: str, price: float, size: int, action: str, side: str):
-    logging.info(f"Insert trade: symbol={symbol} {size} pieces for {price}, action={action} on side={side} @ {timestamp}")
+  def store_trade(self, trade: TradeMessage):
+    logging.info(f"Insert trade: symbol={trade.symbol} {trade.size} pieces for {trade.price}, "
+                 f"action={trade.action} on side={trade.side} @ {trade.timestamp}")
     self.client.execute('insert into trades values', [
       (
-        symbol,
-        datetime.datetime.strptime(timestamp, "%Y.%m.%dT%H:%M:%S.%f"),
-        price,
-        size,
-        action,
-        side
+        trade.symbol,
+        trade.timestamp,
+        trade.price,
+        trade.size,
+        trade.action,
+        trade.side
       )])
     self.trades_counter += 1
 
@@ -54,7 +56,7 @@ class ClickHouse(Connector):
       self.client.connection.ping()
 
 
-  def store_snapshot(self, market, data, timestamp:datetime.datetime.timestamp):
+  def store_snapshot(self, market, timestamp: datetime.datetime.timestamp, data):
     logging.info(f"Insert snapshot: {timestamp}")
     self.client.execute('insert into snapshots values', [[timestamp, market] + data])
     self.snapshot_counter += 1
@@ -66,10 +68,13 @@ class ClickHouse(Connector):
       self.client.disconnect()
       self.client = self.create_client()
 
-  def store_index(self, symbol: str, timestamp: str, price: float):
-    logging.info(f"Insert index: {timestamp}")
+  def store_index(self, trade: TradeMessage):
+    logging.info(f"Insert index: {trade.timestamp}")
     self.total_snapshots += 1
-    self.client.execute('insert into indexes values', [(symbol, datetime.datetime.strptime(timestamp, "%Y.%m.%dT%H:%M:%S.%f"), price)])
+    self.client.execute('insert into indexes values', [
+      (trade.symbol, trade.timestamp, trade.price)
+    ])
+
     if self.total_snapshots % 200 == 0:
       self.client.disconnect()
       self.client = self.create_client()

@@ -1,4 +1,4 @@
-from dataloader.connectors import Connector
+from callbacks.connectors import Connector
 import time
 import logging
 import datetime

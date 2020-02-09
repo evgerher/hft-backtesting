@@ -1,7 +1,6 @@
 import websocket
 import threading
 import json
-import utils
 import logging
 
 # logging = utils.setup_logging()
@@ -42,7 +41,6 @@ class BitmexWS:
     # topic=orderBookL2_25:XBTUSD
     dict = {'op': 'subscribe', 'args': [topic]}
     self.ws.send(json.dumps(dict))
-
 
   def unsubsribe(self, topic):
     # topic=orderBookL2_25:XBTUSD

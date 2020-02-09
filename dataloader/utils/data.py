@@ -1,13 +1,15 @@
 import datetime
-from connectors import Connector
+from dataclasses import dataclass
+from typing import List, Dict
+from callbacks.connectors import Connector
 import logging
-
 from utils import utils
 
 logger = utils.setup_logger()
 
+
 class Snapshot:
-  def __init__(self, market: str, state: list):
+  def __init__(self, market: str, state: List[Dict]):
     self.market = market
     self.mapping = {}
     self.free = []
@@ -51,32 +53,47 @@ class Snapshot:
         self.free.append(idx)
         del self.mapping[_id]
 
-  def to_store(self) -> (str, list, datetime.datetime.timestamp):
-    return (self.market, self.data, datetime.datetime.now())
+  def to_store(self) -> (str, datetime.datetime.timestamp, list):
+    return (self.market, datetime.datetime.now(), self.data)
 
   def __str__(self):
     bid = max([self.data[x] for x in range(50, 100, 2)])
     ask = min([self.data[x] for x in range(0, 50, 2)])
     return f'Snapshot :: market={self.market}, highest bid = {bid}, lowest ask = {ask}'
 
+
+@dataclass
+class MetaMessage:
+  table: str
+  action: str
+  symbol: str
+
+
+@dataclass
 class TradeMessage:
+  symbol: str
+  timestamp: datetime.datetime.timestamp
+  price: float
+  size: int
+  action: str
+  side: str
+
   # {"table": "trade", "action": "insert", "data": [
   #   {"timestamp": "2020-02-04T22:08:32.518Z", "symbol": "XBTUSD", "side": "Buy", "size": 100, "price": 9135.5,
   #    "tickDirection": "PlusTick", "trdMatchID": "9a286908-520d-ed91-c7a0-f32ed8abfc43", "grossValue": 1094600,
   #    "homeNotional": 0.010946, "foreignNotional": 100}]}
   # symbol: str, timestamp: str, price: float, size: int, action: str, side: str
   @staticmethod
-  def unwrap_data(d: dict) -> (str, str, float, int, str, str):
+  def unwrap_data(d: dict) -> 'TradeMessage':
     data = d['data'][-1]
     symbol = data['symbol']
-    timestamp: str = data['timestamp'].replace('-', '.')[:-1]
+    timestamp = datetime.datetime.strptime(data['timestamp'], "%Y-%m-%dT%H:%M:%S.%f")
     price = data['price']
     size = data['size']
     action = d['action']
     side = data['side']
-    return symbol, timestamp, price, size, action, side
+    return TradeMessage(symbol, timestamp, price, size, action, side)
     # '.BETHXBT', '2019.10.21T23:20:00.000Z', 0.02121, 100, 'insert', 'Buy'
-
 
 class Data_Preprocessor:
   def __init__(self, connector: Connector):
@@ -90,39 +107,37 @@ class Data_Preprocessor:
   def _preprocess_update(self, tick: dict) -> list:
     pass
 
-  def _get_table_action_market(self, msg: dict) -> (str, str, str):
+  def __get_message_meta(self, msg: dict) -> 'MetaMessage':
     pass
 
   def callback(self, msg: dict):
-    table, action, market = self._get_table_action_market(msg)
-    if action is None:
+    meta = self.__get_message_meta(msg)
+    if meta.action is None:
       return
-    elif table in 'trade':
-      symbol, timestamp, price, size, action, side = TradeMessage.unwrap_data(msg)
-      if '.' in symbol:
-        self.connector.store_index(symbol, timestamp, price)
+    elif meta.table in 'trade':
+      trade: TradeMessage = TradeMessage.unwrap_data(msg)
+      if '.' in trade.symbol:
+        self.connector.store_index(trade)
       else:
-        self.connector.store_trade(symbol, timestamp, price, size, action, side)
+        self.connector.store_trade(trade)
       return
     else: # process snapshot action
-      if action in 'partial':
+      if meta.action in 'partial':
         state = self._preprocess_partial(msg)
-        snapshot = Snapshot(market, state)
-        self.snapshots[market] = snapshot
+        snapshot: Snapshot = Snapshot(meta.symbol, state)
+        self.snapshots[meta.symbol] = snapshot
       else:
         update = self._preprocess_update(msg)
-        snapshot = self.snapshots[market]
-        snapshot.apply(update, action)
+        snapshot: Snapshot = self.snapshots[meta.symbol]
+        snapshot.apply(update, meta.action)
 
       self.counter += 1
 
       self.connector.store_snapshot(*snapshot.to_store())
-      if self.counter > 100000 == 0:
-        logging.info(f"Inserted {self.counter} more")
+      if self.counter % 1000 == 0:
+        logging.info(f"Inserted 1.000 more: {self.snapshots}")
         self.counter = 0
-      # self.connector.snapshots.append(snapshot.to_store())
-      # if self.connector.snapshot_counter % 100 == 0 and self.connector.snapshot_counter != 0:
-      #   logging.info(f'{self.connector.total_snapshots} :: {snapshot}')
+
 
 class Bitmex_Data(Data_Preprocessor):
   def _preprocess_partial(self, partial: dict) -> list:
@@ -138,9 +153,9 @@ class Bitmex_Data(Data_Preprocessor):
       data.append(x)
     return data
 
-  def _get_table_action_market(self, msg: dict) -> (str, str, str):
+  def __get_message_meta(self, msg: dict) -> 'MetaMessage':
     table = msg.get('table', None)
     action = msg.get('action', None)
     if action is None:
-      return None, None, None
-    return (table, action, msg['data'][0]['symbol'])
+      return MetaMessage(None, None, None)
+    return MetaMessage(table, action, msg['data'][0]['symbol'])
