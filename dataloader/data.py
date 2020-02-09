@@ -1,21 +1,14 @@
 import datetime
-from typing import List
-
-import utils
-from connectors import KDB_Connector, Connector
+from connectors import Connector
 import logging
 
-from collections import OrderedDict
+from utils import utils
 
 logger = utils.setup_logger()
 
 class Snapshot:
   def __init__(self, market: str, state: list):
     self.market = market
-    self.sell = OrderedDict()
-    self.buy = OrderedDict()
-    self.data = {'Sell': self.sell, 'Buy': self.buy}
-
     self.mapping = {}
     self.free = []
     self.data = [0] * 100
@@ -66,15 +59,23 @@ class Snapshot:
     ask = min([self.data[x] for x in range(0, 50, 2)])
     return f'Snapshot :: market={self.market}, highest bid = {bid}, lowest ask = {ask}'
 
-class Index:
+class TradeMessage:
+  # {"table": "trade", "action": "insert", "data": [
+  #   {"timestamp": "2020-02-04T22:08:32.518Z", "symbol": "XBTUSD", "side": "Buy", "size": 100, "price": 9135.5,
+  #    "tickDirection": "PlusTick", "trdMatchID": "9a286908-520d-ed91-c7a0-f32ed8abfc43", "grossValue": 1094600,
+  #    "homeNotional": 0.010946, "foreignNotional": 100}]}
+  # symbol: str, timestamp: str, price: float, size: int, action: str, side: str
   @staticmethod
-  def unwrap_data(d: dict) -> (str, str, float):
+  def unwrap_data(d: dict) -> (str, str, float, int, str, str):
     data = d['data'][-1]
     symbol = data['symbol']
     timestamp: str = data['timestamp'].replace('-', '.')[:-1]
     price = data['price']
-    return symbol, timestamp, price
-    # '.BETHXBT', '2019.10.21T23:20:00.000Z', 0.02121
+    size = data['size']
+    action = d['action']
+    side = data['side']
+    return symbol, timestamp, price, size, action, side
+    # '.BETHXBT', '2019.10.21T23:20:00.000Z', 0.02121, 100, 'insert', 'Buy'
 
 
 class Data_Preprocessor:
@@ -96,11 +97,12 @@ class Data_Preprocessor:
     table, action, market = self._get_table_action_market(msg)
     if action is None:
       return
-
-    elif table in 'trade': # Currently implemented for indexes
-      symbol, timestamp, price = Index.unwrap_data(msg)
-      # self.connector.indexes.append((symbol, timestamp, price))
-      self.connector.store_index(symbol, timestamp, price)
+    elif table in 'trade':
+      symbol, timestamp, price, size, action, side = TradeMessage.unwrap_data(msg)
+      if '.' in symbol:
+        self.connector.store_index(symbol, timestamp, price)
+      else:
+        self.connector.store_trade(symbol, timestamp, price, size, action, side)
       return
     else: # process snapshot action
       if action in 'partial':

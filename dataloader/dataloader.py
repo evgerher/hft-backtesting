@@ -1,7 +1,7 @@
 import time
 
 from connectors import ClickHouse
-from data import Bitmex_Data, KDB_Connector
+from data import Bitmex_Data
 from bitmex import BitmexWS
 import signal
 
@@ -17,15 +17,23 @@ finished = False
 def main():
   global finished
   # kdb_connector = KDB_Connector()
-  clickhouse_connector = ClickHouse()
   # kdb_connector.setDaemon(True)
   # kdb_connector.start()
+
+  clickhouse_connector = ClickHouse()
   logging.info("Start app")
 
   dataprocessor = Bitmex_Data(clickhouse_connector)
   # .BETHXBT
   # trade
-  bot = BitmexWS(('orderBookL2_25:XBTUSD','orderBookL2_25:ETHUSD','trade:.BETHXBT'), dataprocessor.callback)
+  bot = BitmexWS(
+    (
+      'orderBookL2_25:XBTUSD',
+      'orderBookL2_25:ETHUSD',
+      'trade:.BETHXBT',
+      'trade:XBTUSD',
+      'trade:ETHUSD'
+    ), dataprocessor.callback)
   # bot = BitmexWS(('trade:.BETHXBT',), kdb.callback)
   bot.connect()
 

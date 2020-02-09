@@ -6,6 +6,7 @@ import logging
 
 # logging = utils.setup_logging()
 
+
 class BitmexWS:
   def __init__(self, topics, message_callback=None):
     # orderBookL2_25:XBTUSD, orderBookL2_25:ETHUSD
@@ -25,12 +26,10 @@ class BitmexWS:
     self.ws = self.build_ws()
     self.connect()
 
-
   def _on_message(self, ws, msg):
     msg_dict = json.loads(msg)
     # logging.debug(msg)
     self.message_callback(msg_dict)
-
 
   def connect(self):
     self.thread = threading.Thread(target=self.ws.run_forever, name='WS daemon', daemon=True)

@@ -1,1 +1,1 @@
-docker build . -t thesis/dataloader:0.0.1
+docker build -t thesis/dataloader:0.0.2 .
