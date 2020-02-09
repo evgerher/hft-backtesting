@@ -68,7 +68,6 @@ class ClickHouse(Connector):
     if self.trades_counter % 2500 == 0:
       self.client.connection.ping()
 
-
   def store_snapshot(self, market, timestamp: datetime.datetime.timestamp, data):
     logging.info(f"Insert snapshot: {timestamp}")
     self.client.execute('insert into snapshots values', [[timestamp, market] + data])
