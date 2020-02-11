@@ -1,8 +1,8 @@
 import time
 
-from callbacks.connectors import ClickHouse
-from utils.data import Bitmex_Data
-from callbacks.bitmex import BitmexWS
+from dataloader.callbacks.connectors import ClickHouse
+from dataloader.utils.data import Bitmex_Data
+from dataloader.callbacks.bitmex import BitmexWS
 import signal
 
 import sys
@@ -63,7 +63,7 @@ if __name__ == '__main__':
       opts, args = getopt.getopt(sys.argv[1:], "", ["help"])
     except getopt.GetoptError:
       print(
-        'Usage: dataloader.py [--help]')
+        'Usage: loader.py [--help]')
       sys.exit(2)
     for opt, arg in opts:
       if opt in ("--help"):

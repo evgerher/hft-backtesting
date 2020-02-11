@@ -1,4 +1,4 @@
-from utils.data import Snapshot
+from dataloader.utils.data import Snapshot
 import numpy as np
 
 

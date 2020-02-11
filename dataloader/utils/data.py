@@ -1,9 +1,11 @@
 import datetime
 from dataclasses import dataclass
 from typing import *
-from callbacks.connectors import Connector
+from dataloader.callbacks.connectors import Connector
 import logging
-from utils import utils
+
+from dataloader.callbacks.message import TradeMessage, MetaMessage
+from dataloader.utils import utils
 import numpy as np
 
 logger = utils.setup_logger()
@@ -89,23 +91,6 @@ class Snapshot: # todo: may be sort on construct ?
   bids: np.array
   asks: np.array
 
-
-@dataclass
-class MetaMessage:
-  table: str
-  action: str
-  symbol: str
-
-
-@dataclass
-class TradeMessage:
-  symbol: str
-  timestamp: datetime.datetime.timestamp
-  price: float
-  size: int
-  action: str
-  side: str
-
   # {"table": "trade", "action": "insert", "data": [
   #   {"timestamp": "2020-02-04T22:08:32.518Z", "symbol": "XBTUSD", "side": "Buy", "size": 100, "price": 9135.5,
   #    "tickDirection": "PlusTick", "trdMatchID": "9a286908-520d-ed91-c7a0-f32ed8abfc43", "grossValue": 1094600,
@@ -126,7 +111,7 @@ class TradeMessage:
 class Data_Preprocessor:
   def __init__(self, connector: Connector):
     self.connector = connector
-    self.snapshots = {}
+    self.snapshots: Dict[str, SnapshotBuilder] = {}
     self.counter = 0
 
   def _preprocess_partial(self, partial: dict) -> list:
@@ -135,11 +120,11 @@ class Data_Preprocessor:
   def _preprocess_update(self, tick: dict) -> list:
     pass
 
-  def __get_message_meta(self, msg: Dict[str, str]) -> 'MetaMessage':
+  def _get_message_meta(self, msg: Dict[str, str]) -> 'MetaMessage':
     pass
 
   def callback(self, msg: dict):
-    meta = self.__get_message_meta(msg)
+    meta = self._get_message_meta(msg)
     if meta.action is None:
       return
     elif meta.table in 'trade':
@@ -181,7 +166,7 @@ class Bitmex_Data(Data_Preprocessor):
       data.append(x)
     return data
 
-  def __get_message_meta(self, msg: Dict[str, str]) -> 'MetaMessage':
+  def _get_message_meta(self, msg: Dict[str, str]) -> 'MetaMessage':
     table = msg.get('table', None)
     action = msg.get('action', None)
     if action is None:

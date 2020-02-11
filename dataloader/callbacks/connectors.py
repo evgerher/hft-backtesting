@@ -1,12 +1,12 @@
 import datetime
 import logging
 from clickhouse_driver import Client
-import config
-from utils.data import TradeMessage
+from dataloader import config
+from dataloader.callbacks.message import TradeMessage
 
 
 class Connector:
-  def store_snapshot(self, market, data, timestamp:datetime.datetime.timestamp):
+  def store_snapshot(self, market, timestamp:datetime.datetime.timestamp, data: list):
     pass
 
   def store_index(self, trade: TradeMessage):
@@ -68,8 +68,8 @@ class ClickHouse(Connector):
     if self.trades_counter % 2500 == 0:
       self.client.connection.ping()
 
-  def store_snapshot(self, market, timestamp: datetime.datetime.timestamp, data):
-    logging.info(f"Insert snapshot: {timestamp}")
+  def store_snapshot(self, market, timestamp: datetime.datetime.timestamp, data: list):
+    logging.info(f"Insert snapshot: {timestamp}, market={market}")
     self.client.execute('insert into snapshots values', [[timestamp, market] + data])
     self.snapshot_counter += 1
 
