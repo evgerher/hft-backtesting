@@ -37,14 +37,14 @@ class ClickHouse(Connector):
                    'x81 UInt32,x82 Float32,x83 UInt32,x84 Float32,x85 UInt32,x86 Float32,x87 UInt32,x88 Float32,'
                    'x89 UInt32,x90 Float32,x91 UInt32,x92 Float32,x93 UInt32,x94 Float32,x95 UInt32,x96 Float32,'
                    'x97 UInt32,x98 Float32,x99 UInt32) '
-                   'ENGINE=File(TabSeparated) ')
+                   'ENGINE=File(CSV) ')
     client.execute('CREATE TABLE IF NOT EXISTS indexes (symbol FixedString(15), moment TIMESTAMP, price Float32) '
-                   'ENGINE=File(TabSeparated)')
+                   'ENGINE=File(CSV)')
 
     client.execute(
       'CREATE TABLE IF NOT EXISTS trades (symbol FixedString(15), moment TIMESTAMP , price Float32, size INT, '
       'action FixedString(15), side FixedString(5)) '
-      'ENGINE=File(TabSeparated)')
+      'ENGINE=File(CSV)')
 
     self.client = client
     self.total_snapshots = 0
