@@ -45,13 +45,11 @@ class Metrics:
 
     def __init__(self, levels = 3):
       self.levels = levels
-      self.volume_indices = Snapshot.volume_indices[:self.levels]
-      self.price_indices = Snapshot.price_indices[:self.levels]
 
-    def _evaluate_side(self, items: np.array) -> float:
+    def _evaluate_side(self, prices: np.array, volumes: np.array) -> float:
       # volumes are assumed to be sorted
-      volumes = np.sum(items[self.volume_indices])
-      return items[self.price_indices] * items[self.volume_indices] / volumes
+      volume_sum = np.sum(volumes[:self.levels])
+      return prices[:self.levels] * volumes[self.levels] / volume_sum
 
   class VWAP_volume(_VWAP):
 
@@ -61,16 +59,17 @@ class Metrics:
     def __init__(self, volume: int = 1e6):
       self.volume = volume
 
-    def _evaluate_side(self, items: np.array) -> float:
-      total_volumes = 0
-      pairs: dict = {}
+    def _evaluate_side(self, prices: np.array, volumes: np.array) -> float:
+      total_volumes: int = 0
+      weighted_price: float = 0
       i = 0
+
       while total_volumes < self.volume:
-        _volume_taken = min(self.volume - total_volumes, items[i + 1])
+        _volume_taken = min(self.volume - total_volumes, volumes[i + 1])
         total_volumes += _volume_taken
-        pairs[items[i]] = _volume_taken / self.volume
+        weighted_price += prices[i] * (_volume_taken * 1.0 / self.volume)
         i += 1
-      return sum(list(map(lambda p: p[0] * p[1], pairs.items())))
+      return weighted_price
 
   class Lipton(MetricsEvaluator):
     def bidask_imbalance(self, snapshot: Snapshot):

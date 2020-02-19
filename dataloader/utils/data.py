@@ -44,6 +44,11 @@ class Snapshot: # todo: may be sort on construct ?
     volumes = side[price_idxs + 1]
     return prices, volumes
 
+  def __str__(self):
+    return f'Snapshot :: market={self.market}, ' \
+           f'highest bid price,volume = ({self.bid_prices[0], self.bid_volumes[0]}), ' \
+           f'lowest ask price, volume = ({self.ask_prices[0], self.ask_volumes[0]})'
+
 class SnapshotBuilder:
   def __init__(self, market: str, state: List[Dict]):
     self.market = market

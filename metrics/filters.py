@@ -1,6 +1,5 @@
 from dataloader.utils.data import Snapshot
 from typing import Dict
-import numpy as np
 
 
 class Filters:
@@ -15,15 +14,11 @@ class Filters:
       self.levels: int = levels
       self.snapshots: Dict[str, Snapshot] = {}
 
-      self.price_idx: np.array = np.arange(0, levels + 1, step=2)
-      self.volume_idx: np.array = self.price_idx + 1
-
-
     def _store_levels(self, snapshot: Snapshot):
-      self.stored_bid_levels_price = snapshot.bids[self.price_idx]
-      self.stored_ask_levels_price = snapshot.asks[self.price_idx]
-      self.stored_bid_levels_volume = snapshot.bids[self.volume_idx]
-      self.stored_ask_levels_volume = snapshot.asks[self.volume_idx]
+      self.stored_bid_levels_price = snapshot.bid_prices[self.levels]
+      self.stored_ask_levels_price = snapshot.ask_prices[self.levels]
+      self.stored_bid_levels_volume = snapshot.bid_volumes[self.levels]
+      self.stored_ask_levels_volume = snapshot.ask_volumes[self.levels]
 
     def filter(self, snapshot: Snapshot) -> bool: # todo: write tests
       symbol: str = snapshot.market
@@ -34,22 +29,22 @@ class Filters:
         self._store_levels(snapshot)
         return True
       else:
-        bid_levels_price = stored_snapshot.bids[self.price_idx]
+        bid_levels_price = stored_snapshot.bid_prices[self.levels]
 
         if bid_levels_price != self.stored_bid_levels_price:
           self._store_levels(snapshot)
           return True
 
-        ask_levels_price = stored_snapshot.asks[self.price_idx]
+        ask_levels_price = stored_snapshot.ask_prices[self.levels]
         if ask_levels_price != self.stored_ask_levels_price:
           return True
 
-        bid_levels_volume = stored_snapshot.bids[self.volume_idx]
+        bid_levels_volume = stored_snapshot.bid_volumes[self.levels]
         if bid_levels_volume != self.stored_bid_levels_volume:
           self._store_levels(snapshot)
           return True
 
-        ask_levels_volume = stored_snapshot.asks[self.volume_idx]
+        ask_levels_volume = stored_snapshot.ask_volumes[self.levels]
         if ask_levels_volume != self.stored_ask_levels_volume:
           self._store_levels(snapshot)
           return True
