@@ -1,5 +1,6 @@
 from dataclasses import dataclass
-
+from typing import List
+from metrics.metrics import Metrics
 
 @dataclass
 class Order:
@@ -11,8 +12,9 @@ class Simulation:
   delay = 400e-6  # 400 microsec from intranet computer to exchange terminal
   # delay = 1e-3  # 1 msec delay from my laptop
 
-  def place_trade(self, trade: Order):
-    pass
+  def __init__(self, metrics: List[Metrics.Metric], filters: List[Filter]):
+    self.metrics = metrics
+    self.filters = filters
 
 
 class SimulationWithTrades(Simulation):

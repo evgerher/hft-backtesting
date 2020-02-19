@@ -72,6 +72,7 @@ class Snapshot: # todo: may be sort on construct ?
   price_indices = np.arange(0, 50, 2)
   volume_indices = np.arange(1, 50, 2)
 
+  # todo: it is asserted that bids and asks are sorted
   market: str
   timestamp: datetime.datetime.timestamp
   bids: np.array

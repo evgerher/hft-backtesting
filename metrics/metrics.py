@@ -3,30 +3,59 @@ import numpy as np
 
 
 class Metrics:
-  @staticmethod
-  def VWAP_bid(snapshot: Snapshot) -> float:
-    return Metrics._VWAP(snapshot.bids)
 
-  @staticmethod
-  def VWAP_ask(snapshot: Snapshot) -> float:
-    return Metrics._VWAP(snapshot.asks)
+  class Metric:
+    pass
 
-  @staticmethod
-  def _VWAP(items: np.array) -> float:
-    volumes = np.sum(items[Snapshot.volume_indices])
-    return items[Snapshot.price_indices] * items[Snapshot.volume_indices] / volumes
+  class __VWAP(Metric):
+    def _evaluate(self, items: np.array) -> float:
+      pass
 
-  @staticmethod
-  def VWAP_midpoint(vwap_bid: float, vwap_ask: float) -> float:
-    return (vwap_bid + vwap_ask) / 2
+    def VWAP_bid(self, snapshot: Snapshot) -> float:
+      return self._evaluate(snapshot.bids)
 
-  @staticmethod
+    def VWAP_ask(self, snapshot: Snapshot) -> float:
+      return self._evaluate(snapshot.asks)
+
+    def VWAP_midpoint(vwap_bid: float, vwap_ask: float) -> float:
+      return (vwap_bid + vwap_ask) / 2
+
+  class VWAP_depth(__VWAP):
+    def __str__(self):
+      return f'VWAP (Depth): {self.levels}'
+
+    def __init__(self, levels = 3):
+      self.levels = levels
+
+    def _evaluate(self, items: np.array) -> float:
+      # volumes are assumed to be sorted
+      volumes = np.sum(items[Snapshot.volume_indices][:self.levels])
+      return items[Snapshot.price_indices] * items[Snapshot.volume_indices] / volumes
+
+  class VWAP_volume(__VWAP):
+
+    def __str__(self):
+      return f'VWAP (Volume): {self.volume}'
+
+    def __init__(self, volume: int = 1e6):
+      self.volume = volume
+
+    def _evaluate(self, items: np.array) -> float:
+      total_volumes = 0
+      pairs: dict = {}
+      i = 0
+      while total_volumes < self.volume:
+        _volume_taken = min(self.volume - total_volumes, items[i + 1])
+        total_volumes += _volume_taken
+        pairs[items[i]] = _volume_taken / self.volume
+        i += 1
+      return sum(list(map(lambda p: p[0] * p[1], pairs.items())))
+
   def bidask_imbalance(snapshot: Snapshot):
     q_b = snapshot.bids[snapshot.best_bid_volume_index()]
     q_a = snapshot.asks[snapshot.best_ask_volume_index()]
     return (q_b - q_a) / (q_b + q_a)
 
-  @staticmethod
   def lipton_upward_probability(snapshot: Snapshot, p_xy=-0.5): # todo: should I consider depth or only best prices available
     """
     x - bid quote sizes
