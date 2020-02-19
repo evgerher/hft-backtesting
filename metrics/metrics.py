@@ -27,14 +27,14 @@ class Metrics:
         Metric(f'{self.__str__()} midpoint', snapshot.market, midpoint)
       )
 
-    def _evaluate_side(self, items: np.array) -> float:
+    def _evaluate_side(self, prices: np.array, volumes: np.array) -> float:
       pass
 
     def VWAP_bid(self, snapshot: Snapshot) -> float:
-      return self._evaluate_side(snapshot.bids)
+      return self._evaluate_side(snapshot.bid_prices, snapshot.bid_volumes)
 
     def VWAP_ask(self, snapshot: Snapshot) -> float:
-      return self._evaluate_side(snapshot.asks)
+      return self._evaluate_side(snapshot.ask_prices, snapshot.ask_volumes)
 
     def VWAP_midpoint(self, vwap_bid: float, vwap_ask: float) -> float:
       return (vwap_bid + vwap_ask) / 2
@@ -74,8 +74,8 @@ class Metrics:
 
   class Lipton(MetricsEvaluator):
     def bidask_imbalance(self, snapshot: Snapshot):
-      q_b = snapshot.bids[snapshot.best_bid_volume_index()]
-      q_a = snapshot.asks[snapshot.best_ask_volume_index()]
+      q_b = snapshot.bid_volumes[0]
+      q_a = snapshot.ask_volumes[0]
       imbalance = (q_b - q_a) / (q_b + q_a)
       return Metric('bidask-imbalance', snapshot.market, imbalance)
 
@@ -89,8 +89,8 @@ class Metrics:
       """
       # todo: how to evaluate p_xy ?
       # todo: implement p_xy
-      x = snapshot.bids[snapshot.best_bid_volume_index()]
-      y = snapshot.asks[snapshot.best_ask_volume_index()]
+      x = snapshot.bid_volumes[0]
+      y = snapshot.ask_volumes[0]
       sqrt_corr = np.sqrt((1 + p_xy) / (1 - p_xy))
       p = 1. / 2 * (1. - np.arctan(sqrt_corr * (y - x) / (y + x)) / np.arctan(sqrt_corr))
       return Metric('Lipton-unward-probability', snapshot.market, p)

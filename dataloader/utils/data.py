@@ -15,30 +15,41 @@ class Snapshot: # todo: may be sort on construct ?
   # todo: it is asserted that bids and asks are sorted
   market: str
   timestamp: datetime.datetime.timestamp
-  bids: np.array
-  asks: np.array
+  bid_prices: np.array
+  bid_volumes: np.array
+  ask_prices: np.array
+  ask_volumes: np.array
 
   volume_indices = np.arange(1, 50, 2)
   price_indices = np.arange(0, 50, 2)
 
-  def best_bid_price_index(self) -> int: # todo: refactor to return non null size
-    return np.argmin(self.bids[Snapshot.price_indices])[0]
+  @staticmethod
+  def from_sides(timestamp, market, bids: np.array, asks: np.array) -> 'Snapshot':
+    a_p, a_v = Snapshot.sort_side(asks, True)
+    b_p, b_v = Snapshot.sort_side(bids, False)
+    return Snapshot(market, timestamp, b_p, b_v, a_p, a_v)
 
-  def best_bid_volume_index(self) -> int: # todo: refactor to return non null size
-    return self.best_bid_price_index() + 1
+  @staticmethod
+  def sort_side(side: np.array, is_ask=False): # todo: test it
+    """
 
-  def best_ask_price_index(self) -> int: # todo: refactor to return non null size
-    return np.argmax(self.asks[Snapshot.price_indices])[0]
-
-  def best_ask_volume_index(self) -> int: # todo: refactor to return non null size
-    return self.best_ask_price_index() + 1
+    :param side: array of 50 elements: 25 pairs of (price, volume)
+    :param is_ask: flag of ask side, if so -> reverse order
+    :return:
+    """
+    # prices: np.array = side[Snapshot.price_indices]
+    price_idxs = list(Snapshot.price_indices)
+    sorted(price_idxs, key = lambda idx: side[idx], reverse=is_ask)
+    prices = side[price_idxs]
+    volumes = side[price_idxs + 1]
+    return prices, volumes
 
 class SnapshotBuilder:
   def __init__(self, market: str, state: List[Dict]):
     self.market = market
     self.mapping = {}
     self.free = []
-    self.data = [0] * 100
+    self.data: List = [0] * 100
 
     sells, buys = 0, 50 # even - price, odd - size
     for s in state:
@@ -61,19 +72,19 @@ class SnapshotBuilder:
         try:
           self.data[self.mapping[update['id']] + 1] = update['size']
         except Exception as e:
-          print()
+          print(e)
           raise e
     elif action in 'insert': # [{"id": 8799193300, "side": "Sell", "size": 491901}, {"id": 8799193450, "side": "Sell", "size": 1505581}]
       for insert in delta:
         _id = insert['id']
-        idx = self.free.pop(0)
+        idx: int = self.free.pop(0)
         self.mapping[_id] = idx
         self.data[idx] = float(insert['price'])
         self.data[idx + 1] = insert['size']
     elif action in 'delete': # [{"id":29699996493,"side":"Sell"},{"id":29699996518,"side":"Buy"}]}
       for delete in delta:
         _id = delete['id']
-        idx = self.mapping[_id]
+        idx: int = self.mapping[_id]
         self.data[idx + 1] = 0
         self.free.append(idx)
         del self.mapping[_id]
@@ -82,10 +93,10 @@ class SnapshotBuilder:
     return (self.market, datetime.datetime.now(), self.data)
 
   def to_snapshot(self) -> 'Snapshot':
-    # todo: sort bids and asks
     bids = np.array(self.data[0:50])
     asks = np.array(self.data[50:])
-    return Snapshot(self.market, datetime.datetime.now(), bids, asks)
+    # todo: dislike for datetime now()
+    return Snapshot.from_sides(self.market, datetime.datetime.now(), bids, asks)
 
   def __str__(self):
     bid = max([self.data[x] for x in range(50, 100, 2)])
