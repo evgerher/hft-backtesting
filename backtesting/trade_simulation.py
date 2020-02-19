@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 from typing import List
 from metrics.metrics import Metrics
+from metrics.filters import Filters
 
 @dataclass
 class Order:
@@ -12,7 +13,7 @@ class Simulation:
   delay = 400e-6  # 400 microsec from intranet computer to exchange terminal
   # delay = 1e-3  # 1 msec delay from my laptop
 
-  def __init__(self, metrics: List[Metrics.Metric], filters: List[Filter]):
+  def __init__(self, metrics: List[Metrics.Metric], filters: List[Filters.Filter]):
     self.metrics = metrics
     self.filters = filters
 
