@@ -17,6 +17,9 @@ class Simulation:
     self.metrics = metrics
     self.filters = filters
 
+  def trigger(self):
+    pass
+
 
 class SimulationWithTrades(Simulation):
   pass  # todo: consider placed trade and trades arrival

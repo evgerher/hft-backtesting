@@ -7,6 +7,7 @@ import numpy as np
 @dataclass
 class Metric:
   name: str
+  market: str
   value: float
 
 class Metrics:
@@ -21,9 +22,9 @@ class Metrics:
       vwap_bid, vwap_ask = self.VWAP_bid(snapshot), self.VWAP_ask(snapshot)
       midpoint = self.VWAP_midpoint(vwap_bid, vwap_ask)
       return (
-        Metric(f'{self.__str__()} bid', vwap_bid),
-        Metric(f'{self.__str__()} ask', vwap_ask),
-        Metric(f'{self.__str__()} midpoint', midpoint)
+        Metric(f'{self.__str__()} bid', snapshot.market, vwap_bid),
+        Metric(f'{self.__str__()} ask', snapshot.market, vwap_ask),
+        Metric(f'{self.__str__()} midpoint', snapshot.market, midpoint)
       )
 
     def _evaluate_side(self, items: np.array) -> float:
@@ -71,22 +72,25 @@ class Metrics:
         i += 1
       return sum(list(map(lambda p: p[0] * p[1], pairs.items())))
 
-  def bidask_imbalance(snapshot: Snapshot):
-    q_b = snapshot.bids[snapshot.best_bid_volume_index()]
-    q_a = snapshot.asks[snapshot.best_ask_volume_index()]
-    return (q_b - q_a) / (q_b + q_a)
+  class Lipton(MetricsEvaluator):
+    def bidask_imbalance(self, snapshot: Snapshot):
+      q_b = snapshot.bids[snapshot.best_bid_volume_index()]
+      q_a = snapshot.asks[snapshot.best_ask_volume_index()]
+      imbalance = (q_b - q_a) / (q_b + q_a)
+      return Metric('bidask-imbalance', snapshot.market, imbalance)
 
-  def lipton_upward_probability(snapshot: Snapshot, p_xy=-0.5): # todo: should I consider depth or only best prices available
-    """
-    x - bid quote sizes
-    y - ask quote sizes
-    :param snapshot:
-    :param p_xy: correlation between the depletion and replenishment of the bid and ask queues' diffusion processes (typically negative)
-    :return:
-    """
-    # todo: how to evaluate p_xy ?
-    # todo: implement p_xy
-    x = snapshot.bids[snapshot.best_bid_volume_index()]
-    y = snapshot.asks[snapshot.best_ask_volume_index()]
-    sqrt_corr = np.sqrt((1 + p_xy) / (1 - p_xy))
-    return 1. / 2 * (1. - np.arctan(sqrt_corr * (y - x) / (y + x)) / np.arctan(sqrt_corr))
+    def upward_probability(self, snapshot: Snapshot, p_xy=-0.5): # todo: should I consider depth or only best prices available
+      """
+      x - bid quote sizes
+      y - ask quote sizes
+      :param snapshot:
+      :param p_xy: correlation between the depletion and replenishment of the bid and ask queues' diffusion processes (typically negative)
+      :return:
+      """
+      # todo: how to evaluate p_xy ?
+      # todo: implement p_xy
+      x = snapshot.bids[snapshot.best_bid_volume_index()]
+      y = snapshot.asks[snapshot.best_ask_volume_index()]
+      sqrt_corr = np.sqrt((1 + p_xy) / (1 - p_xy))
+      p = 1. / 2 * (1. - np.arctan(sqrt_corr * (y - x) / (y + x)) / np.arctan(sqrt_corr))
+      return Metric('Lipton-unward-probability', snapshot.market, p)
