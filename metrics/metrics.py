@@ -1,38 +1,58 @@
+from dataclasses import dataclass
+from typing import List
+
 from dataloader.utils.data import Snapshot
 import numpy as np
 
+@dataclass
+class Metric:
+  name: str
+  value: float
 
 class Metrics:
 
-  class Metric:
-    pass
+  class MetricsEvaluator:
+    def evaluate(self, Snapshot) -> List['Metric']:
+      pass
 
-  class __VWAP(Metric):
-    def _evaluate(self, items: np.array) -> float:
+  class _VWAP(MetricsEvaluator):
+
+    def evaluate(self, snapshot: Snapshot):
+      vwap_bid, vwap_ask = self.VWAP_bid(snapshot), self.VWAP_ask(snapshot)
+      midpoint = self.VWAP_midpoint(vwap_bid, vwap_ask)
+      return (
+        Metric(f'{self.__str__()} bid', vwap_bid),
+        Metric(f'{self.__str__()} ask', vwap_ask),
+        Metric(f'{self.__str__()} midpoint', midpoint)
+      )
+
+    def _evaluate_side(self, items: np.array) -> float:
       pass
 
     def VWAP_bid(self, snapshot: Snapshot) -> float:
-      return self._evaluate(snapshot.bids)
+      return self._evaluate_side(snapshot.bids)
 
     def VWAP_ask(self, snapshot: Snapshot) -> float:
-      return self._evaluate(snapshot.asks)
+      return self._evaluate_side(snapshot.asks)
 
-    def VWAP_midpoint(vwap_bid: float, vwap_ask: float) -> float:
+    def VWAP_midpoint(self, vwap_bid: float, vwap_ask: float) -> float:
       return (vwap_bid + vwap_ask) / 2
 
-  class VWAP_depth(__VWAP):
+  class VWAP_depth(_VWAP):
     def __str__(self):
       return f'VWAP (Depth): {self.levels}'
 
     def __init__(self, levels = 3):
       self.levels = levels
+      self.volume_indices = Snapshot.volume_indices[:self.levels]
+      self.price_indices = Snapshot.price_indices[:self.levels]
 
-    def _evaluate(self, items: np.array) -> float:
+    def _evaluate_side(self, items: np.array) -> float:
       # volumes are assumed to be sorted
-      volumes = np.sum(items[Snapshot.volume_indices][:self.levels])
-      return items[Snapshot.price_indices] * items[Snapshot.volume_indices] / volumes
+      volumes = np.sum(items[self.volume_indices])
+      return items[self.price_indices] * items[self.volume_indices] / volumes
 
-  class VWAP_volume(__VWAP):
+  class VWAP_volume(_VWAP):
 
     def __str__(self):
       return f'VWAP (Volume): {self.volume}'
@@ -40,7 +60,7 @@ class Metrics:
     def __init__(self, volume: int = 1e6):
       self.volume = volume
 
-    def _evaluate(self, items: np.array) -> float:
+    def _evaluate_side(self, items: np.array) -> float:
       total_volumes = 0
       pairs: dict = {}
       i = 0

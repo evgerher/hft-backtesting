@@ -1,11 +1,11 @@
 from backtesting.readers import Reader
 from backtesting.trade_simulation import Simulation
+from dataloader.utils.data import Snapshot
+from metrics.metrics import Metric
+
+import datetime
 from typing import Dict, List
 from collections import defaultdict
-
-from dataloader.utils.data import Snapshot
-from metrics.metrics import Metrics
-import datetime
 
 
 class Backtest:
@@ -47,16 +47,17 @@ class Backtest:
   def _update_metrics(self, row: Snapshot):
     current_t = row.timestamp
     for metric in self.simulation.metrics:
-      metric_name = (row.market, metric.__str__())
-      value = metric.evaluate(row) # todo: does not work
+      values: List[Metric] = metric.evaluate(row) # todo: does not work
 
-      self.metrics[metric_name].append((current_t, value))
+      for value in values:
+        metric_name = (row.market, value.name)
+        self.metrics[metric_name].append((current_t, value.value))
 
-      while True:
-        if (current_t - self.metrics[metric_name][0]).seconds > self.time_horizon:
-          self.metrics[metric_name].pop(0) # todo: pop it somewhere into output channel
-        else:
-          break
+        while True:
+          if (current_t - self.metrics[metric_name][0]).seconds > self.time_horizon:
+            self.metrics[metric_name].pop(0) # todo: pop it somewhere into output channel
+          else:
+            break
 
   def run(self):
     while self.reader.has_next():
@@ -66,5 +67,6 @@ class Backtest:
         continue
 
       self._update_memory(row)
-      self._update_metrics(row)
+      self._update_metrics(row) # todo: what to do with pair FX features?
       # todo: what if I put a trade?
+      # self.simulation.trigger(row, self.memory, self.metrics)

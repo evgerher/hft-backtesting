@@ -10,6 +10,29 @@ import numpy as np
 
 logger = utils.setup_logger()
 
+@dataclass
+class Snapshot: # todo: may be sort on construct ?
+  # todo: it is asserted that bids and asks are sorted
+  market: str
+  timestamp: datetime.datetime.timestamp
+  bids: np.array
+  asks: np.array
+
+  volume_indices = np.arange(1, 50, 2)
+  price_indices = np.arange(0, 50, 2)
+
+  def best_bid_price_index(self) -> int: # todo: refactor to return non null size
+    return np.argmin(self.bids[Snapshot.price_indices])[0]
+
+  def best_bid_volume_index(self) -> int: # todo: refactor to return non null size
+    return self.best_bid_price_index() + 1
+
+  def best_ask_price_index(self) -> int: # todo: refactor to return non null size
+    return np.argmax(self.asks[Snapshot.price_indices])[0]
+
+  def best_ask_volume_index(self) -> int: # todo: refactor to return non null size
+    return self.best_ask_price_index() + 1
+
 class SnapshotBuilder:
   def __init__(self, market: str, state: List[Dict]):
     self.market = market
@@ -59,36 +82,16 @@ class SnapshotBuilder:
     return (self.market, datetime.datetime.now(), self.data)
 
   def to_snapshot(self) -> 'Snapshot':
-    return Snapshot(self.market, datetime.datetime.now(), np.array(self.data[0:50]), np.array(self.data[50:]))
+    # todo: sort bids and asks
+    bids = np.array(self.data[0:50])
+    asks = np.array(self.data[50:])
+    return Snapshot(self.market, datetime.datetime.now(), bids, asks)
 
   def __str__(self):
     bid = max([self.data[x] for x in range(50, 100, 2)])
     ask = min([self.data[x] for x in range(0, 50, 2)])
     return f'Snapshot :: market={self.market}, highest bid = {bid}, lowest ask = {ask}'
 
-
-@dataclass
-class Snapshot: # todo: may be sort on construct ?
-  price_indices = np.arange(0, 50, 2)
-  volume_indices = np.arange(1, 50, 2)
-
-  # todo: it is asserted that bids and asks are sorted
-  market: str
-  timestamp: datetime.datetime.timestamp
-  bids: np.array
-  asks: np.array
-
-  def best_bid_price_index(self) -> int: # todo: refactor to return non null size
-    return np.argmin(self.bids[Snapshot.price_indices])[0]
-
-  def best_bid_volume_index(self) -> int: # todo: refactor to return non null size
-    return self.best_bid_price_index() + 1
-
-  def best_ask_price_index(self) -> int: # todo: refactor to return non null size
-    return np.argmax(self.asks[Snapshot.price_indices])[0]
-
-  def best_ask_volume_index(self) -> int: # todo: refactor to return non null size
-    return self.best_ask_price_index() + 1
 
 class Data_Preprocessor:
   def __init__(self, connector: Connector):
