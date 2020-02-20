@@ -1,8 +1,8 @@
 import time
 
-from connectors import ClickHouse
-from data import Bitmex_Data, KDB_Connector
-from bitmex import BitmexWS
+from dataloader.callbacks.connectors import ClickHouse
+from dataloader.utils.data import Bitmex_Data
+from dataloader.callbacks.bitmex import BitmexWS
 import signal
 
 import sys
@@ -17,15 +17,23 @@ finished = False
 def main():
   global finished
   # kdb_connector = KDB_Connector()
-  clickhouse_connector = ClickHouse()
   # kdb_connector.setDaemon(True)
   # kdb_connector.start()
+
+  clickhouse_connector = ClickHouse()
   logging.info("Start app")
 
   dataprocessor = Bitmex_Data(clickhouse_connector)
   # .BETHXBT
   # trade
-  bot = BitmexWS(('orderBookL2_25:XBTUSD','orderBookL2_25:ETHUSD','trade:.BETHXBT'), dataprocessor.callback)
+  bot = BitmexWS(
+    (
+      'orderBookL2_25:XBTUSD',
+      'orderBookL2_25:ETHUSD',
+      'trade:.BETHXBT',
+      'trade:XBTUSD',
+      'trade:ETHUSD'
+    ), dataprocessor.callback)
   # bot = BitmexWS(('trade:.BETHXBT',), kdb.callback)
   bot.connect()
 
@@ -55,7 +63,7 @@ if __name__ == '__main__':
       opts, args = getopt.getopt(sys.argv[1:], "", ["help"])
     except getopt.GetoptError:
       print(
-        'Usage: dataloader.py [--help]')
+        'Usage: loader.py [--help]')
       sys.exit(2)
     for opt, arg in opts:
       if opt in ("--help"):
