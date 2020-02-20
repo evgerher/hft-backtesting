@@ -1,6 +1,9 @@
+import datetime
 from dataclasses import dataclass
-from typing import List
-from metrics.metrics import Metric
+from typing import List, Deque, Dict
+
+from dataloader.utils.data import Snapshot
+from metrics.metrics import MetricEvaluator, Metric
 from metrics.filters import Filters
 
 @dataclass
@@ -13,11 +16,21 @@ class Simulation:
   delay = 400e-6  # 400 microsec from intranet computer to exchange terminal
   # delay = 1e-3  # 1 msec delay from my laptop
 
-  def __init__(self, metrics: List[Metric], filters: List[Filters.Filter]):
-    self.metrics = metrics
-    self.filters = filters
+  def __init__(self, metric_evaluators: List[MetricEvaluator], filters: List[Filters.Filter], delay = 400e-6):
+    """
 
-  def trigger(self):
+    :param metric_evaluators:
+    :param filters:
+    :param delay:
+    """
+    self.metric_evaluators = metric_evaluators
+    self.filters = filters
+    self.delay = delay
+
+  def trigger(self, row: Snapshot,
+              memory: Dict[str, Deque[Snapshot]],
+              metrics: Dict[(str, str), Deque[(datetime.datetime.timestamp, Metric)]],
+              trades): # todo: define type later on
     pass
 
 
