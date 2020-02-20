@@ -1,4 +1,4 @@
-from dataloader.utils.data import Snapshot
+from utils.data import Snapshot
 from typing import Dict
 
 

@@ -1,7 +1,7 @@
 import time
 
 from dataloader.callbacks.connectors import ClickHouse
-from dataloader.utils.data import Bitmex_Data
+from utils.data import Bitmex_Data
 from dataloader.callbacks.bitmex import BitmexWS
 import signal
 

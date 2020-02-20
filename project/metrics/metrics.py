@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from typing import List
 
-from dataloader.utils.data import Snapshot
+from utils.data import Snapshot
 import numpy as np
 
 @dataclass

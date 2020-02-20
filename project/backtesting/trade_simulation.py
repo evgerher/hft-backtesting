@@ -2,7 +2,7 @@ import datetime
 from dataclasses import dataclass
 from typing import List, Deque, Dict
 
-from dataloader.utils.data import Snapshot
+from utils.data import Snapshot
 from metrics.metrics import MetricEvaluator, Metric
 from metrics.filters import Filters
 

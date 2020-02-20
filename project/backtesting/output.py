@@ -1,6 +1,6 @@
 import datetime
 
-from dataloader.utils.data import Snapshot
+from utils.data import Snapshot
 from metrics.metrics import Metric
 
 

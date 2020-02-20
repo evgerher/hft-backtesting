@@ -1,7 +1,7 @@
 from backtesting.output import Output
 from backtesting.readers import Reader
 from backtesting.trade_simulation import Simulation
-from dataloader.utils.data import Snapshot
+from utils.data import Snapshot
 from metrics.metrics import Metric
 
 import datetime

@@ -1,4 +1,4 @@
-from dataloader.utils.data import Snapshot
+from utils.data import Snapshot
 import pandas as pd
 
 class Reader:
@@ -50,8 +50,8 @@ class SnapshotReader(Reader): # todo: test
     row: pd.Series = self.df.iloc[self.idx, :]
     timestamp = row[0] # todo: check is it correct type
     market = row[1]
-    bids = row[2:52].values
-    asks = row[52:].values
+    asks = row[2:52].values
+    bids = row[52:].values
 
     self.idx += 1
 
