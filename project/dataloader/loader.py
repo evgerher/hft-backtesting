@@ -13,13 +13,13 @@ logging.getLogger().setLevel(logging.INFO)
 
 finished = False
 
-def main():
+def main(db_host, db_password):
   global finished
   # kdb_connector = KDB_Connector()
   # kdb_connector.setDaemon(True)
   # kdb_connector.start()
 
-  clickhouse_connector = ClickHouse()
+  clickhouse_connector = ClickHouse(db_host=db_host, db_pwd=db_password)
   logging.info("Start app")
 
   dataprocessor = Bitmex_Data(clickhouse_connector)
@@ -50,7 +50,11 @@ if __name__ == '__main__':
   # Get command line parameters
   if len(sys.argv) > 1:
     try:
-      opts, args = getopt.getopt(sys.argv[1:], "", ["help"])
+      opts, args = getopt.getopt(sys.argv[1:], "", ["help", "host=", "password="])
+      # Start load script
+      opts = {x: y for (x, y) in opts}
+      host, pwd = opts['--host'], opts['--password']
+      main(host, pwd)
     except getopt.GetoptError:
       print(
         'Usage: loader.py [--help]')
@@ -63,5 +67,3 @@ if __name__ == '__main__':
           'Must be run with `pyq` interpreter.'
         )
         sys.exit(0)
-  # Start load script
-  main()

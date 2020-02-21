@@ -4,16 +4,18 @@ from dataloader.callbacks.clickhouse import clickhouse_cmds
 from dataloader.callbacks.connectors import Connector
 import logging
 from clickhouse_driver import Client
-from dataloader import config
 from dataloader.callbacks.message import TradeMessage
 
 
 class ClickHouse(Connector):
   def create_client(self):
     logging.info("Reestablish connection")
-    return Client(config.db_host, password=config.db_pwd)
+    return Client(self.db_host, password=self.db_pwd)
 
-  def __init__(self):
+  def __init__(self, db_host=None, db_pwd=None):
+    self.db_host = db_host if db_host is not None else 'localhost'
+    self.db_pwd = db_pwd if db_pwd is not None else ''
+
     client = self.create_client()
     client.execute(clickhouse_cmds.create_snapshots)
     client.execute(clickhouse_cmds.create_indexes)
