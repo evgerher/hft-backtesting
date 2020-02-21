@@ -2,13 +2,10 @@ import datetime
 from dataclasses import dataclass
 from typing import *
 from dataloader.callbacks.connectors import Connector
-import logging
 
 from dataloader.callbacks.message import TradeMessage, MetaMessage
 from utils import logger
 import numpy as np
-
-logger = logger.setup_logger()
 
 @dataclass
 class Snapshot: # todo: may be sort on construct ?
