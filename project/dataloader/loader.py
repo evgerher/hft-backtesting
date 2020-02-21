@@ -1,9 +1,8 @@
 import time
 
-from dataloader.callbacks.connectors import ClickHouse
+from dataloader.callbacks.clickhouse.clickhouse_connector import ClickHouse
 from utils.data import Bitmex_Data
 from dataloader.callbacks.bitmex import BitmexWS
-import signal
 
 import sys
 import getopt
@@ -36,15 +35,6 @@ def main():
     ), dataprocessor.callback)
   # bot = BitmexWS(('trade:.BETHXBT',), kdb.callback)
   bot.connect()
-
-  def alarm_received(n, stack):
-    # kdb_connector.close()
-    global finished
-    finished = True
-    bot.close()
-    print('SIGNAL RECEIVED')
-
-  signal.signal(signal.SIGALRM, alarm_received)
 
   try:
     while not finished:

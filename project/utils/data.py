@@ -95,7 +95,7 @@ class SnapshotBuilder:
         del self.mapping[_id]
 
   def to_store(self) -> (str, datetime.datetime.timestamp, list):
-    return (self.market, datetime.datetime.now(), self.data)
+    return (self.market, datetime.datetime.utcnow(), self.data)
 
   def to_snapshot(self) -> 'Snapshot':
     asks = np.array(self.data[0:50])

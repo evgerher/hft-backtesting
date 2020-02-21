@@ -1,5 +1,6 @@
 from utils.data import Snapshot
 import pandas as pd
+import numpy as np
 
 class Reader:
 
@@ -50,8 +51,8 @@ class SnapshotReader(Reader): # todo: test
     row: pd.Series = self.df.iloc[self.idx, :]
     timestamp = row[0] # todo: check is it correct type
     market = row[1]
-    asks = row[2:52].values
-    bids = row[52:].values
+    asks = row[2:52].value.astype(np.float)
+    bids = row[52:].values.astype(np.float)
 
     self.idx += 1
 
