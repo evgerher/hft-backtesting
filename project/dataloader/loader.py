@@ -1,9 +1,8 @@
 import time
 
-from connectors import ClickHouse
-from data import Bitmex_Data, KDB_Connector
-from bitmex import BitmexWS
-import signal
+from dataloader.callbacks.clickhouse.clickhouse_connector import ClickHouse
+from utils.data import Bitmex_Data
+from dataloader.callbacks.bitmex import BitmexWS
 
 import sys
 import getopt
@@ -14,29 +13,28 @@ logging.getLogger().setLevel(logging.INFO)
 
 finished = False
 
-def main():
+def main(db_host, db_password):
   global finished
   # kdb_connector = KDB_Connector()
-  clickhouse_connector = ClickHouse()
   # kdb_connector.setDaemon(True)
   # kdb_connector.start()
+
+  clickhouse_connector = ClickHouse(db_host=db_host, db_pwd=db_password)
   logging.info("Start app")
 
   dataprocessor = Bitmex_Data(clickhouse_connector)
   # .BETHXBT
   # trade
-  bot = BitmexWS(('orderBookL2_25:XBTUSD','orderBookL2_25:ETHUSD','trade:.BETHXBT'), dataprocessor.callback)
+  bot = BitmexWS(
+    (
+      'orderBookL2_25:XBTUSD',
+      'orderBookL2_25:ETHUSD',
+      'trade:.BETHXBT',
+      'trade:XBTUSD',
+      'trade:ETHUSD'
+    ), dataprocessor.callback)
   # bot = BitmexWS(('trade:.BETHXBT',), kdb.callback)
   bot.connect()
-
-  def alarm_received(n, stack):
-    # kdb_connector.close()
-    global finished
-    finished = True
-    bot.close()
-    print('SIGNAL RECEIVED')
-
-  signal.signal(signal.SIGALRM, alarm_received)
 
   try:
     while not finished:
@@ -52,10 +50,14 @@ if __name__ == '__main__':
   # Get command line parameters
   if len(sys.argv) > 1:
     try:
-      opts, args = getopt.getopt(sys.argv[1:], "", ["help"])
+      opts, args = getopt.getopt(sys.argv[1:], "", ["help", "host=", "password="])
+      # Start load script
+      opts = {x: y for (x, y) in opts}
+      host, pwd = opts['--host'], opts['--password']
+      main(host, pwd)
     except getopt.GetoptError:
       print(
-        'Usage: dataloader.py [--help]')
+        'Usage: loader.py [--help]')
       sys.exit(2)
     for opt, arg in opts:
       if opt in ("--help"):
@@ -65,5 +67,3 @@ if __name__ == '__main__':
           'Must be run with `pyq` interpreter.'
         )
         sys.exit(0)
-  # Start load script
-  main()
