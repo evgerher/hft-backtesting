@@ -1,18 +1,17 @@
 import unittest
 
+from utils import helper
 from utils.data import Snapshot
 import sample_reader
 import numpy as np
+import datetime
 
 
 class SnapshotTest(unittest.TestCase):
   def test_snapshot_is_sorted(self):
-    lines = sample_reader.read_snapshots('resources/snapshots_sample.txt')
-    line = lines[0].split('\t')
-    date = line[0]
-    symbol = line[1].replace('\\0', '')
-    asks = np.array(line[2:52], dtype=np.float)
-    bids = np.array(line[52:], dtype=np.float)
+    lines = sample_reader.read_snapshot_rows()
+    line = lines[0].split(',')
+    date, symbol, bids, asks = helper.snapshot_line_parser(line)
 
     snapshot: Snapshot = Snapshot.from_sides(date, symbol, bids, asks)
     is_sorted = True

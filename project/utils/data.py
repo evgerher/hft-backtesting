@@ -21,7 +21,7 @@ class Snapshot: # todo: may be sort on construct ?
   price_indices = np.arange(0, 50, 2)
 
   @staticmethod
-  def from_sides(timestamp, market, bids: np.array, asks: np.array) -> 'Snapshot':
+  def from_sides(timestamp: datetime.datetime.timestamp, market: str, bids: np.array, asks: np.array) -> 'Snapshot':
     a_p, a_v = Snapshot.sort_side(asks, False)
     b_p, b_v = Snapshot.sort_side(bids, True)
     return Snapshot(market, timestamp, b_p, b_v, a_p, a_v)
