@@ -2,14 +2,13 @@ import time
 
 from dataloader.callbacks.clickhouse.clickhouse_connector import ClickHouse
 from utils.data import Bitmex_Data
+from utils.logger import setup_logger
 from dataloader.callbacks.bitmex import BitmexWS
 
 import sys
 import getopt
 
-import logging
-logging.basicConfig()
-logging.getLogger().setLevel(logging.INFO)
+logger = setup_logger('<dataloader>')
 
 finished = False
 
@@ -20,7 +19,7 @@ def main(db_host, db_password):
   # kdb_connector.start()
 
   clickhouse_connector = ClickHouse(db_host=db_host, db_pwd=db_password)
-  logging.info("Start app")
+  logger.info("Start app")
 
   dataprocessor = Bitmex_Data(clickhouse_connector)
   # .BETHXBT
@@ -40,7 +39,7 @@ def main(db_host, db_password):
     while not finished:
       time.sleep(1)
   finally:
-    logging.info("Closing client")
+    logger.info("Closing client")
     bot.close()
     finished = True
     # kdb_connector.close()

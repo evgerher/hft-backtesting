@@ -2,14 +2,16 @@ import datetime
 
 from dataloader.callbacks.clickhouse import clickhouse_cmds
 from dataloader.callbacks.connectors import Connector
-import logging
 from clickhouse_driver import Client
 from dataloader.callbacks.message import TradeMessage
+from utils.logger import setup_logger
+
+logger = setup_logger("<clickhouse>", "INFO")
 
 
 class ClickHouse(Connector):
   def create_client(self):
-    logging.info("Reestablish connection")
+    logger.info("Reestablish connection")
     return Client(self.db_host, password=self.db_pwd)
 
   def __init__(self, db_host=None, db_pwd=None):
@@ -27,7 +29,7 @@ class ClickHouse(Connector):
     self.trades_counter = 0
 
   def store_trade(self, trade: TradeMessage):
-    logging.info(f"Insert trade: symbol={trade.symbol} {trade.size} pieces for {trade.price}, "
+    logger.info(f"Insert trade: symbol={trade.symbol} {trade.size} pieces for {trade.price}, "
                  f"action={trade.action} on side={trade.side} @ {trade.timestamp}")
     self.client.execute('insert into trades values', [
       (
@@ -45,7 +47,7 @@ class ClickHouse(Connector):
       self.client.connection.ping()
 
   def store_snapshot(self, market, timestamp: datetime.datetime.timestamp, data: list):
-    logging.info(f"Insert snapshot: {timestamp}, market={market}")
+    logger.info(f"Insert snapshot: {timestamp}, market={market}")
     self.client.execute('insert into snapshots values', [[timestamp, timestamp.microsecond  // 1000, market] + data])
     self.snapshot_counter += 1
 
@@ -57,7 +59,7 @@ class ClickHouse(Connector):
       self.client = self.create_client()
 
   def store_index(self, trade: TradeMessage):
-    logging.info(f"Insert index: {trade.timestamp}")
+    logger.info(f"Insert index: {trade.timestamp}")
     self.total_snapshots += 1
     self.client.execute('insert into indexes values', [
       (trade.symbol, trade.timestamp, trade.price)
