@@ -51,6 +51,7 @@ class VWAP_depth(_VWAP):
 
 class VWAP_volume(_VWAP):
 
+  # todo: VWAP_volume PER SYMBOL !!!!!!!!!!!!
   def __str__(self):
     return f'VWAP (Volume): {self.volume}'
 
@@ -62,7 +63,7 @@ class VWAP_volume(_VWAP):
     weighted_price: float = 0
     i = 0
 
-    while total_volumes < self.volume:
+    while total_volumes < self.volume and i + 1 < len(volumes):
       _volume_taken = min(self.volume - total_volumes, volumes[i + 1])
       total_volumes += _volume_taken
       weighted_price += prices[i] * (_volume_taken * 1.0 / self.volume)

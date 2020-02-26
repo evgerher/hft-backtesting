@@ -64,4 +64,4 @@ class SnapshotReader(Reader):
     return Snapshot.from_sides(timestamp, market, bids, asks)
 
   def __str__(self):
-    return f'Snapshot reader on file={self.file}, batch_nrows={self.nrows}'
+    return f'<Snapshot reader on file={self.file}, batch_nrows={self.nrows}>'

@@ -2,16 +2,23 @@ from backtesting.output import Output
 from backtesting.readers import Reader
 from backtesting.trade_simulation import Simulation
 from utils.data import Snapshot
+from utils.logger import setup_logger
 from metrics.metrics import Metric
 
 import datetime
-from typing import Dict, List, Deque
+from typing import Dict, List, Deque, Optional, Tuple
 from collections import defaultdict, deque
+
+
+logger = setup_logger('<backtest>', 'DEBUG')
 
 
 class Backtest:
 
-  def __init__(self, reader: Reader, simulation: Simulation, output: Output = None, time_horizon=360):
+  def __init__(self, reader: Reader,
+               simulation: Simulation,
+               output: Optional[Output] = None,
+               time_horizon=360):
     """
 
     :param reader:
@@ -22,11 +29,15 @@ class Backtest:
     self.simulation = simulation
     self.time_horizon = time_horizon
     self.memory: Dict[str, Deque[Snapshot]] = defaultdict(deque)
-    self.metrics: Dict[(str, str), Deque[(datetime.datetime.timestamp, Metric)]] = defaultdict(deque)  # (market, metric_name) -> (timestamp, Metric)
+    self.metrics: Dict[Tuple[str, str], Deque[Tuple[datetime.datetime.timestamp, Metric]]] = defaultdict(deque)  # (market, metric_name) -> (timestamp, Metric)
     self.trades = None  # Dict[(str, str), (datetime.datetime.timestamp, Trade)] = None  # todo: (market, side) -> (timestamp, trade)
-    self.output = output.consume
+    self.output = output
+    logger.info(f"Initialized {self}")
 
-  def _flush_output(self, timestamp: datetime.datetime.timestamp, object):
+  def __str__(self):
+    return '<Backtest with reader={}>'.format(self.reader)
+
+  def _flush_output(self, timestamp: datetime.datetime.timestamp, object): # todo: mark as Generic
     """
 
     :param timestamp:
@@ -34,9 +45,10 @@ class Backtest:
     :return:
     """
     if self.output is not None:
-      self.output(timestamp, object)
+      self.output.consume(timestamp, object)
 
   def _update_memory(self, row: Snapshot):
+    logger.debug(f'Update memory with snapshot symbol={row.market} @ {row.timestamp}')
     # # fill memory
     market: Deque[Snapshot] = self.memory[row.market]
     market.append(row)
@@ -59,6 +71,7 @@ class Backtest:
     return filtered
 
   def _update_metrics(self, row: Snapshot):
+    logger.debug(f'Update metrics with snapshot symbol={row.market} @ {row.timestamp}')
     for metric_evaluator in self.simulation.metric_evaluators:
       values: List[Metric] = metric_evaluator.evaluate(row)
 
@@ -68,7 +81,7 @@ class Backtest:
         metric_deque.append((row.timestamp, value))
 
         while True:
-          if (row.timestamp - metric_deque[0]).seconds > self.time_horizon:
+          if (row.timestamp - metric_deque[0][0]).seconds > self.time_horizon:
             self._flush_output(*metric_deque.popleft())
           else:
             break
@@ -83,6 +96,7 @@ class Backtest:
         self._flush_output(*metric.popleft())
 
   def run(self):
+    logger.info(f'Backtest initialize run')
     for row in self.reader:
       # todo: how to work with trades?
       if not self._filter(row):
@@ -93,3 +107,4 @@ class Backtest:
       self.simulation.trigger(row, self.memory, self.metrics, self.trades)
 
     self._flush_last()
+    logger.info(f'Backtest finished run')

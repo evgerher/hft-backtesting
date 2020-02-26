@@ -12,7 +12,7 @@ class Filters:
     def filter(self, snapshot: Snapshot):
       pass
 
-  class DepthFilter:
+  class DepthFilter(Filter):
 
     def __init__(self, levels: int):
       self.levels: int = levels
