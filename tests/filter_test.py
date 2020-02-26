@@ -1,7 +1,6 @@
 import unittest
 
 import sample_reader
-import numpy as np
 
 from metrics.filters import Filters
 

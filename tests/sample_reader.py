@@ -1,6 +1,4 @@
 from typing import List
-import numpy as np
-
 from utils import helper
 from utils.data import Snapshot
 

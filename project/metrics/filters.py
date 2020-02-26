@@ -3,7 +3,7 @@ from typing import Dict, List
 from utils.logger import  setup_logger
 import numpy as np
 
-logger = setup_logger('Filters')
+logger = setup_logger('<filter>', 'DEBUG')
 
 
 class Filters:

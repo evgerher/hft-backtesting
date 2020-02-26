@@ -1,9 +1,9 @@
 from utils import helper
 from utils.data import Snapshot
+from utils.logger import setup_logger
 import pandas as pd
-import numpy as np
-import datetime
 
+logger = setup_logger('<reader>', 'DEBUG')
 
 class Reader:
 
@@ -16,12 +16,13 @@ class Reader:
   def __next__(self):
     pass
 
-class SnapshotReader(Reader): # todo: test
+class SnapshotReader(Reader):
 
-  def __init__(self, file, nrows=10000, compression='infer'):
+  def __init__(self, file:str, nrows:int=10000, compression='infer', stop_after:int=None):
     """
+    :param file: to read
     :param nrows: 10000 - number of rows to read per update
-    :param file:
+    :param stop_after: stop iteration over dataset after amount of iterations
     """
     self.idx = 0
     self.file = file
@@ -31,18 +32,22 @@ class SnapshotReader(Reader): # todo: test
     self.df: pd.DataFrame = self.__read_csv()
     self.limit = len(self.df)
     self.total = 0
+    self.stop_after = stop_after
 
   def __read_csv(self):
-    return pd.read_csv(self.file, compression=self.compression, sep=',',
+    return pd.read_csv(self.file, header=None, compression=self.compression, sep=',',
                        quotechar='"', error_bad_lines=False,
-                       skiprows=self.idx + 1, nrows=self.nrows)
+                       skiprows=self.idx, nrows=self.nrows)
 
 
   def __next__(self) -> Snapshot:
 
+    if self.stop_after is not None and self.idx == self.stop_after:
+      raise StopIteration
+
     if self.limit != self.nrows and self.idx == self.limit:
       self.total += self.idx
-      print(f"Totally observed {self.total} rows from file {self.file}")
+      logger.debug(f"Finished file {self.file}, read {self.total} rows")
       raise StopIteration
 
     if self.idx + 1 >= self.nrows:
@@ -57,3 +62,6 @@ class SnapshotReader(Reader): # todo: test
     self.idx += 1
 
     return Snapshot.from_sides(timestamp, market, bids, asks)
+
+  def __str__(self):
+    return f'Snapshot reader on file={self.file}, batch_nrows={self.nrows}'
