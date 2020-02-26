@@ -17,9 +17,6 @@ class Snapshot: # todo: may be sort on construct ?
   ask_prices: np.array
   ask_volumes: np.array
 
-  volume_indices = np.arange(1, 50, 2)
-  price_indices = np.arange(0, 50, 2)
-
   @staticmethod
   def from_sides(timestamp: datetime.datetime.timestamp, market: str, bids: np.array, asks: np.array) -> 'Snapshot':
     a_p, a_v = Snapshot.sort_side(asks, False)
@@ -35,7 +32,7 @@ class Snapshot: # todo: may be sort on construct ?
     :return:
     """
     # prices: np.array = side[Snapshot.price_indices]
-    price_idxs = Snapshot.price_indices
+    price_idxs = np.arange(0, len(side), 2)
     price_idxs = np.array(sorted(price_idxs, key = lambda idx: side[idx], reverse=is_bid))
     prices = side[price_idxs]
     volumes = side[price_idxs + 1]
