@@ -54,7 +54,7 @@ class KDB_Connector(Connector):
         self._index_counter = 0
 
   def generate_csv_file(self, name):
-    dt = datetime.datetime.now()
+    dt = datetime.datetime.utcnow()
     return f'{name}-{dt.day}.{dt.month}.{dt.year}:{dt.hour}:{dt.minute}:{dt.second}.csv'
 
   def _store_snapshot(self, market, data, timestamp:datetime.datetime.timestamp):

@@ -51,12 +51,12 @@ class VWAP_depth(_VWAP):
 
 class VWAP_volume(_VWAP):
 
-  # todo: VWAP_volume PER SYMBOL !!!!!!!!!!!!
   def __str__(self):
-    return f'VWAP (Volume): {self.volume}'
+    return f'<VWAP (Volume): {self.volume} for symbol: {self.symbol}>'
 
-  def __init__(self, volume: int = 1e6):
+  def __init__(self, volume: int = 1e6, symbol: str = None):
     self.volume = volume
+    self.symbol = symbol
 
   def _evaluate_side(self, prices: np.array, volumes: np.array) -> float:
     total_volumes: int = 0

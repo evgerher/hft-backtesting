@@ -8,8 +8,7 @@ from utils import logger
 import numpy as np
 
 @dataclass
-class Snapshot: # todo: may be sort on construct ?
-  # todo: it is asserted that bids and asks are sorted
+class Snapshot:
   market: str
   timestamp: datetime.datetime.timestamp
   bid_prices: np.array
@@ -24,7 +23,7 @@ class Snapshot: # todo: may be sort on construct ?
     return Snapshot(market, timestamp, b_p, b_v, a_p, a_v)
 
   @staticmethod
-  def sort_side(side: np.array, is_bid=False): # todo: test it
+  def sort_side(side: np.array, is_bid=False):
     """
 
     :param side: array of 50 elements: 25 pairs of (price, volume)
@@ -94,8 +93,7 @@ class SnapshotBuilder:
   def to_snapshot(self) -> 'Snapshot':
     asks = np.array(self.data[0:50])
     bids = np.array(self.data[50:])
-    # todo: dislike for datetime now()
-    return Snapshot.from_sides(self.market, datetime.datetime.now(), bids, asks)
+    return Snapshot.from_sides(datetime.datetime.utcnow(), self.market, bids, asks)
 
   def __str__(self):
     bid = max([self.data[x] for x in range(50, 100, 2)])

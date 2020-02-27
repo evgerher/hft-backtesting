@@ -23,7 +23,7 @@ class Filters:
       self.stored_ask_levels_volume: Dict[str, List] = {}
 
     def __str__(self):
-      return f'Depth filter n={self.levels}'
+      return f'<Depth filter for n={self.levels}>'
 
     def _store_levels(self, snapshot: Snapshot):
       self.stored_bid_levels_price[snapshot.market] = snapshot.bid_prices[:self.levels]
@@ -31,7 +31,7 @@ class Filters:
       self.stored_bid_levels_volume[snapshot.market] = snapshot.bid_volumes[:self.levels]
       self.stored_ask_levels_volume[snapshot.market] = snapshot.ask_volumes[:self.levels]
 
-    def filter(self, snapshot: Snapshot) -> bool: # todo: write tests
+    def filter(self, snapshot: Snapshot) -> bool:
       symbol: str = snapshot.market
       stored_snapshot: Snapshot = self.snapshots.get(symbol, None)
       

@@ -30,7 +30,7 @@ def main(db_host, db_password):
       'orderBookL2_25:ETHUSD',
       'trade:.BETHXBT',
       'trade:XBTUSD',
-      'trade:ETHUSD'
+      'trade:ETHUSD',
     ), dataprocessor.callback)
   # bot = BitmexWS(('trade:.BETHXBT',), kdb.callback)
   bot.connect()
@@ -61,8 +61,7 @@ if __name__ == '__main__':
     for opt, arg in opts:
       if opt in ("--help"):
         print(
-          'Dataloader starts to retrieve snapshots of BTCUSD and ETHUSD on startup from BITMEX exchange\n',
-          'Stores snapshots on each delta received into kdb+\n',
-          'Must be run with `pyq` interpreter.'
+          'Dataloader starts to retrieve snapshots of BTCUSD (XBTUSD) and ETHUSD on startup from BITMEX exchange\n',
+          'Stores snapshots on each delta received into clickhouse server',
         )
         sys.exit(0)
