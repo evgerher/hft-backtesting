@@ -1,9 +1,9 @@
 from backtesting.output import Output
 from backtesting.readers import Reader
 from backtesting.trade_simulation import Simulation
-from utils.data import Snapshot
+from utils.data import Snapshot, Trade
 from utils.logger import setup_logger
-from metrics.metrics import Metric
+from metrics.metrics import MetricData, TimeMetric
 
 import datetime
 from typing import Dict, List, Deque, Optional, Tuple
@@ -18,26 +18,58 @@ class Backtest:
   def __init__(self, reader: Reader,
                simulation: Simulation,
                output: Optional[Output] = None,
-               time_horizon=360):
+               time_horizon:int=360):
     """
 
     :param reader:
     :param simulation:
     :param time_horizon: time in seconds for storaging Snapshots ; todo: how to work with trades?
     """
-    self.reader = reader
-    self.simulation = simulation
-    self.time_horizon = time_horizon
+    self.reader : Reader = reader
+    self.simulation: Simulation = simulation
+    self.time_horizon: int = time_horizon
     self.memory: Dict[str, Deque[Snapshot]] = defaultdict(deque)
-    self.metrics: Dict[Tuple[str, str], Deque[Tuple[datetime.datetime.timestamp, Metric]]] = defaultdict(deque)  # (market, metric_name) -> (timestamp, Metric)
-    self.trades = None  # Dict[(str, str), (datetime.datetime.timestamp, Trade)] = None  # todo: (market, side) -> (timestamp, trade)
+    self.metrics: Dict[Tuple[str, str], Deque[Tuple[datetime.datetime, MetricData]]] = defaultdict(deque)  # (symbol, metric_name) -> (timestamp, Metric)
+    self.trades = None  # Dict[(str, str), (datetime.datetime, Trade)] = None  # todo: (symbol, side) -> (timestamp, trade)
     self.output = output
+
+    self.__initialize_time_metrics()
+
     logger.info(f"Initialized {self}")
 
-  def __str__(self):
-    return '<Backtest with reader={}>'.format(self.reader)
+  def run(self):
+    def _filter_snapshot(row: Snapshot) -> bool:
+      filtered = True
+      for filter in self.simulation.filters:
+        if not filter.filter(row):
+          filtered = False
+          break
 
-  def _flush_output(self, timestamp: datetime.datetime.timestamp, object): # todo: mark as Generic
+      return filtered
+
+    logger.info(f'Backtest initialize run')
+    for row in self.reader:
+      if type(row) is Snapshot:
+        # todo: how to work with trades?
+        if not _filter_snapshot(row):
+          continue
+        self._update_memory(row)
+        self._update_metrics(row)  # todo: what to do with pair FX features?
+        # todo: what if I put a trade?
+        actions = self.simulation.trigger(row, self.memory, self.metrics, self.trades)
+        if actions is not None:
+          self._process_actions(actions)
+      elif type(row) is Trade:
+        self._update_trades(row)
+
+    self._flush_last()
+    logger.info(f'Backtest finished run')
+
+  def __initialize_time_metrics(self):
+    for metric in self.simulation.time_metrics:
+      metric.set_starting_moment(self.reader.initial_moment)
+
+  def _flush_output(self, timestamp: datetime.datetime, object): # todo: mark as Generic
     """
 
     :param timestamp:
@@ -48,9 +80,9 @@ class Backtest:
       self.output.consume(timestamp, object)
 
   def _update_memory(self, row: Snapshot):
-    logger.debug(f'Update memory with snapshot symbol={row.market} @ {row.timestamp}')
+    logger.debug(f'Update memory with snapshot symbol={row.symbol} @ {row.timestamp}')
     # # fill memory
-    market: Deque[Snapshot] = self.memory[row.market]
+    market: Deque[Snapshot] = self.memory[row.symbol]
     market.append(row)
 
     # todo: test, not sure it will work (references, blah, blah)
@@ -61,30 +93,22 @@ class Backtest:
       else:
         break
 
-  def _filter(self, row: Snapshot) -> bool:
-    filtered = True
-    for filter in self.simulation.filters:
-      if not filter.filter(row):
-        filtered = False
-        break
-
-    return filtered
 
   def _update_metrics(self, row: Snapshot):
-    logger.debug(f'Update metrics with snapshot symbol={row.market} @ {row.timestamp}')
-    for metric_evaluator in self.simulation.metric_evaluators:
-      values: List[Metric] = metric_evaluator.evaluate(row)
+    logger.debug(f'Update metrics with snapshot symbol={row.symbol} @ {row.timestamp}')
+
+    for instant_metric in self.simulation.instant_metrics:
+      values: List[MetricData] = instant_metric.evaluate(row)
 
       for value in values:
-        metric_name = (row.market, value.name)
-        metric_deque: Deque[(datetime.datetime.timestamp, Metric)] = self.metrics[metric_name]
+        metric_name = (row.symbol, value.name)
+        metric_deque: Deque[(datetime.datetime, MetricData)] = self.metrics[metric_name]
         metric_deque.append((row.timestamp, value))
 
-        while True:
-          if (row.timestamp - metric_deque[0][0]).seconds > self.time_horizon:
-            self._flush_output(*metric_deque.popleft())
-          else:
-            break
+        self.__remove_old(row, metric_deque)
+
+  def _process_actions(self, actions: List):
+    pass
 
   def _flush_last(self):
     """
@@ -95,16 +119,24 @@ class Backtest:
       while len(metric) > 0:
         self._flush_output(*metric.popleft())
 
-  def run(self):
-    logger.info(f'Backtest initialize run')
-    for row in self.reader:
-      # todo: how to work with trades?
-      if not self._filter(row):
-        continue
-      self._update_memory(row)
-      self._update_metrics(row) # todo: what to do with pair FX features?
-      # todo: what if I put a trade?
-      self.simulation.trigger(row, self.memory, self.metrics, self.trades)
+  def _update_trades(self, row: Trade):
 
-    self._flush_last()
-    logger.info(f'Backtest finished run')
+    # todo: currently used only by time metric
+    for time_metric in self.simulation.time_metrics:
+      value: MetricData = time_metric.evaluate(row.label(), row.timestamp)
+
+      metric_name = (row.symbol, value.name)
+      metric_deque: Deque[(datetime.datetime, MetricData)] = self.metrics[metric_name]
+      metric_deque.append((row.timestamp, value))
+
+      self.__remove_old(row, metric_deque)
+
+  def __remove_old(self, row, metric_deque):
+    while True:
+      if (row.timestamp - metric_deque[0][0]).seconds > self.time_horizon:
+        self._flush_output(*metric_deque.popleft())
+      else:
+        break
+
+  def __str__(self):
+    return '<Backtest with reader={}>'.format(self.reader)

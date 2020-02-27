@@ -1,11 +1,11 @@
 import datetime
 
 from utils.data import Snapshot
-from metrics.metrics import Metric
+from metrics.metrics import MetricData
 
 
 class Output:
-  def consume(self, timestamp: datetime.datetime.timestamp, object):
+  def consume(self, timestamp: datetime.datetime, object):
     """
 
     :param timestamp:
@@ -16,7 +16,7 @@ class Output:
     if type(object) == Snapshot:
       self.snapshot_action(timestamp, object)
 
-    if type(object) == Metric:
+    if type(object) == MetricData:
       self.metric_action(timestamp, object)
 
     self.additional_action(timestamp, object)

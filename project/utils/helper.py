@@ -2,13 +2,13 @@ import datetime
 from typing import List
 import numpy as np
 
+from utils.data import Trade
+
+
 def snapshot_line_parser(line: List, length=100):
-  # assert len(line) == 103
+  assert len(line) == length + 3
   millis = int(line[1])
-  if type(line[0]) is str:
-    date = datetime.datetime.strptime(line[0], '%Y-%m-%d %H:%M:%S')
-  elif type(line[1]) is datetime:
-    date = line[1]
+  date = convert_to_datetime(line[0])
   date = date + datetime.timedelta(milliseconds=millis)
   symbol = line[2]
 
@@ -17,3 +17,20 @@ def snapshot_line_parser(line: List, length=100):
   bids = np.array(line[3 + length // 2:], dtype=np.float)
 
   return date, symbol, bids, asks
+
+def trade_line_parser(line: List) -> Trade:
+  symbol = line[0]
+  moment = convert_to_datetime(line[1])
+  millis = int(line[2])
+  moment = moment + datetime.timedelta(milliseconds=millis)
+  price = line[3]
+  volume = line[4]
+  side = line[6]
+
+  return Trade(symbol, moment, side, price, volume)
+
+def convert_to_datetime(moment):
+  if type(moment) is str:
+    return datetime.datetime.strptime(moment, '%Y-%m-%d %H:%M:%S')
+  elif type(moment) is datetime.datetime:
+    return moment
