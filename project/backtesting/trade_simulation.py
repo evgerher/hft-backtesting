@@ -1,8 +1,8 @@
 import datetime
 from dataclasses import dataclass
-from typing import List, Deque, Dict
+from typing import List, Deque, Dict, Tuple
 
-from dataloader.utils.data import Snapshot
+from utils.data import Snapshot
 from metrics.metrics import MetricEvaluator, Metric
 from metrics.filters import Filters
 
@@ -29,7 +29,7 @@ class Simulation:
 
   def trigger(self, row: Snapshot,
               memory: Dict[str, Deque[Snapshot]],
-              metrics: Dict[(str, str), Deque[(datetime.datetime.timestamp, Metric)]],
+              metrics: Dict[Tuple[str, str], Deque[Tuple[datetime.datetime.timestamp, Metric]]],
               trades): # todo: define type later on
     pass
 

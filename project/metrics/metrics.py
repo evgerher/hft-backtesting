@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from typing import List
 
-from dataloader.utils.data import Snapshot
+from utils.data import Snapshot
 import numpy as np
 
 @dataclass
@@ -52,17 +52,18 @@ class VWAP_depth(_VWAP):
 class VWAP_volume(_VWAP):
 
   def __str__(self):
-    return f'VWAP (Volume): {self.volume}'
+    return f'<VWAP (Volume): {self.volume} for symbol: {self.symbol}>'
 
-  def __init__(self, volume: int = 1e6):
+  def __init__(self, volume: int = 1e6, symbol: str = None):
     self.volume = volume
+    self.symbol = symbol
 
   def _evaluate_side(self, prices: np.array, volumes: np.array) -> float:
     total_volumes: int = 0
     weighted_price: float = 0
     i = 0
 
-    while total_volumes < self.volume:
+    while total_volumes < self.volume and i + 1 < len(volumes):
       _volume_taken = min(self.volume - total_volumes, volumes[i + 1])
       total_volumes += _volume_taken
       weighted_price += prices[i] * (_volume_taken * 1.0 / self.volume)

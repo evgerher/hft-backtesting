@@ -2,17 +2,13 @@ import datetime
 from dataclasses import dataclass
 from typing import *
 from dataloader.callbacks.connectors import Connector
-import logging
 
 from dataloader.callbacks.message import TradeMessage, MetaMessage
-from dataloader.utils import utils
+from utils import logger
 import numpy as np
 
-logger = utils.setup_logger()
-
 @dataclass
-class Snapshot: # todo: may be sort on construct ?
-  # todo: it is asserted that bids and asks are sorted
+class Snapshot:
   market: str
   timestamp: datetime.datetime.timestamp
   bid_prices: np.array
@@ -20,17 +16,14 @@ class Snapshot: # todo: may be sort on construct ?
   ask_prices: np.array
   ask_volumes: np.array
 
-  volume_indices = np.arange(1, 50, 2)
-  price_indices = np.arange(0, 50, 2)
-
   @staticmethod
-  def from_sides(timestamp, market, bids: np.array, asks: np.array) -> 'Snapshot':
-    a_p, a_v = Snapshot.sort_side(asks, True)
-    b_p, b_v = Snapshot.sort_side(bids, False)
+  def from_sides(timestamp: datetime.datetime.timestamp, market: str, bids: np.array, asks: np.array) -> 'Snapshot':
+    a_p, a_v = Snapshot.sort_side(asks, False)
+    b_p, b_v = Snapshot.sort_side(bids, True)
     return Snapshot(market, timestamp, b_p, b_v, a_p, a_v)
 
   @staticmethod
-  def sort_side(side: np.array, is_ask=False): # todo: test it
+  def sort_side(side: np.array, is_bid=False):
     """
 
     :param side: array of 50 elements: 25 pairs of (price, volume)
@@ -38,11 +31,11 @@ class Snapshot: # todo: may be sort on construct ?
     :return:
     """
     # prices: np.array = side[Snapshot.price_indices]
-    price_idxs = list(Snapshot.price_indices)
-    sorted(price_idxs, key = lambda idx: side[idx], reverse=is_ask)
+    price_idxs = np.arange(0, len(side), 2)
+    price_idxs = np.array(sorted(price_idxs, key = lambda idx: side[idx], reverse=is_bid))
     prices = side[price_idxs]
     volumes = side[price_idxs + 1]
-    return prices, volumes
+    return prices, volumes.astype(np.int)
 
   def __str__(self):
     return f'Snapshot :: market={self.market}, ' \
@@ -58,12 +51,12 @@ class SnapshotBuilder:
 
     sells, buys = 0, 50 # even - price, odd - size
     for s in state:
-      if s['side'] in 'Sell':
+      if s['side'] in 'Sell':  # asks
         self.mapping[s['id']] = sells
         self.data[sells] = float(s['price'])
         self.data[sells+1] = s['size']
         sells += 2
-      else:
+      else:  # bids
         self.mapping[s['id']] = buys
         self.data[buys] = float(s['price'])
         self.data[buys + 1] = s['size']
@@ -95,13 +88,12 @@ class SnapshotBuilder:
         del self.mapping[_id]
 
   def to_store(self) -> (str, datetime.datetime.timestamp, list):
-    return (self.market, datetime.datetime.now(), self.data)
+    return (self.market, datetime.datetime.utcnow(), self.data)
 
   def to_snapshot(self) -> 'Snapshot':
-    bids = np.array(self.data[0:50])
-    asks = np.array(self.data[50:])
-    # todo: dislike for datetime now()
-    return Snapshot.from_sides(self.market, datetime.datetime.now(), bids, asks)
+    asks = np.array(self.data[0:50])
+    bids = np.array(self.data[50:])
+    return Snapshot.from_sides(datetime.datetime.utcnow(), self.market, bids, asks)
 
   def __str__(self):
     bid = max([self.data[x] for x in range(50, 100, 2)])

@@ -1,9 +1,9 @@
 import websocket
 import threading
 import json
-import logging
+from utils.logger import setup_logger
 
-# logging = utils.setup_logging()
+logger = setup_logger('<bitmex initializer>')
 
 
 class BitmexWS:
@@ -13,7 +13,7 @@ class BitmexWS:
 
     self.ws = self.build_ws()
     self.message_callback = message_callback
-    logging.info("Initilized BitmexWS")
+    logger.info("Initilized BitmexWS")
 
   def build_ws(self):
     return websocket.WebSocketApp(f"wss://www.bitmex.com/realtime?subscribe={self._topics}",
@@ -21,13 +21,13 @@ class BitmexWS:
                                   on_message=self._on_message)
 
   def _on_close(self, ws):
-    logging.info("WS app closed")
+    logger.info("WS app closed")
     self.ws = self.build_ws()
     self.connect()
 
   def _on_message(self, ws, msg):
     msg_dict = json.loads(msg)
-    # logging.debug(msg)
+    # logger.debug(msg)
     self.message_callback(msg_dict)
 
   def connect(self):

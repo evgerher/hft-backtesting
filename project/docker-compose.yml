@@ -14,3 +14,10 @@ services:
 #      - server
 #    ports:
 #      - "10000:10000"
+  dataloader:
+    image: evgerher/thesis-dataloader:0.0.3
+    depends_on:
+      - server
+    environment:
+      HOST: server
+      PASSWORD:
