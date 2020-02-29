@@ -30,7 +30,7 @@ class Backtest:
     self.time_horizon: int = time_horizon
     self.memory: Dict[str, Deque[Snapshot]] = defaultdict(deque)
     self.metrics: Dict[Tuple[str, str], Deque[Tuple[datetime.datetime, MetricData]]] = defaultdict(deque)  # (symbol, metric_name) -> (timestamp, Metric)
-    self.trades = None  # Dict[(str, str), (datetime.datetime, Trade)] = None  # todo: (symbol, side) -> (timestamp, trade)
+    self.trades: Dict[Tuple[str, str], Deque[Trade]] = defaultdict(deque)
     self.output = output
 
     self.__initialize_time_metrics()
@@ -50,7 +50,6 @@ class Backtest:
     logger.info(f'Backtest initialize run')
     for row in self.reader:
       if type(row) is Snapshot:
-        # todo: how to work with trades?
         if not _filter_snapshot(row):
           continue
         self._update_memory(row)
@@ -79,20 +78,31 @@ class Backtest:
     if self.output is not None:
       self.output.consume(timestamp, object)
 
+  # todo: refactor _update_* into one function
   def _update_memory(self, row: Snapshot):
     logger.debug(f'Update memory with snapshot symbol={row.symbol} @ {row.timestamp}')
     # # fill memory
     market: Deque[Snapshot] = self.memory[row.symbol]
     market.append(row)
 
-    # todo: test, not sure it will work (references, blah, blah)
-    while True:
-      if (row.timestamp - market[0].timestamp).seconds > self.time_horizon:
-        object = market.popleft()
-        self._flush_output(object.timestamp, object)
-      else:
-        break
+    self.__remove_old_memory(row.timestamp, market)
 
+  def _update_trades(self, row: Trade):
+
+    logger.debug(f'Update memory with trade symbol={row.symbol}, side={row.side} @ {row.timestamp}')
+    market: Deque[Trade] = self.trades[(row.symbol, row.side)]
+    market.append(row)
+    self.__remove_old_memory(row.timestamp, market)
+
+    for time_metric in self.simulation.time_metrics:
+
+      values: List[MetricData] = time_metric.evaluate(row)
+      for value in values:
+        metric_name = (row.symbol, value.name)
+        metric_deque: Deque[(datetime.datetime, MetricData)] = self.metrics[metric_name]
+        metric_deque.append((row.timestamp, value))
+
+        self.__remove_old_metric(row, metric_deque)
 
   def _update_metrics(self, row: Snapshot):
     logger.debug(f'Update metrics with snapshot symbol={row.symbol} @ {row.timestamp}')
@@ -105,7 +115,7 @@ class Backtest:
         metric_deque: Deque[(datetime.datetime, MetricData)] = self.metrics[metric_name]
         metric_deque.append((row.timestamp, value))
 
-        self.__remove_old(row, metric_deque)
+        self.__remove_old_metric(row, metric_deque)
 
   def _process_actions(self, actions: List):
     pass
@@ -119,19 +129,15 @@ class Backtest:
       while len(metric) > 0:
         self._flush_output(*metric.popleft())
 
-  def _update_trades(self, row: Trade):
+  def __remove_old_memory(self, timestamp: datetime.datetime, metric_deque: Deque[Trade]):
+    while True:
+      if (timestamp - metric_deque[0].timestamp).seconds > self.time_horizon:
+        object = metric_deque.popleft()
+        self._flush_output(object.timestamp, object)
+      else:
+        break
 
-    # todo: currently used only by time metric
-    for time_metric in self.simulation.time_metrics:
-      value: MetricData = time_metric.evaluate(row.label(), row.timestamp)
-
-      metric_name = (row.symbol, value.name)
-      metric_deque: Deque[(datetime.datetime, MetricData)] = self.metrics[metric_name]
-      metric_deque.append((row.timestamp, value))
-
-      self.__remove_old(row, metric_deque)
-
-  def __remove_old(self, row, metric_deque):
+  def __remove_old_metric(self, row, metric_deque):
     while True:
       if (row.timestamp - metric_deque[0][0]).seconds > self.time_horizon:
         self._flush_output(*metric_deque.popleft())

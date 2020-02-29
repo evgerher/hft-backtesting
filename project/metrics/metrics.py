@@ -1,8 +1,8 @@
 from dataclasses import dataclass
-from typing import List, Deque, Dict
+from typing import List, Deque, Dict, Callable, Tuple
 import datetime
 from collections import deque, defaultdict
-from utils.data import Snapshot
+from utils.data import Snapshot, Trade
 import numpy as np
 
 @dataclass
@@ -36,25 +36,32 @@ class CompositeMetric:
     pass
 
 class TimeMetric(Metric):
-  def __init__(self, seconds=60, starting_moment: datetime.datetime = None, name=''):
+  def __init__(self, callable: List[Tuple[str, Callable[[List[Trade]], float]]], seconds=60, starting_moment: datetime.datetime = None):
     self._seconds = seconds
-    self._storage: Dict[str, Deque[datetime.datetime]] = defaultdict(deque)
+    self._storage: Dict[str, Deque[Trade]] = defaultdict(deque)
+    self._callables: List[Tuple[str, Callable[[List[Trade]], float]]] = callable
     self._from: datetime.datetime = starting_moment
     self._skip_from = False
 
-  def evaluate(self, name: str, time: datetime.datetime) -> MetricData:
-    target: Deque[datetime.datetime] = self._storage[name]
-    target.append(time)
+  def evaluate(self, trade: Trade) -> List[MetricData]:
+    target: Deque[Trade] = self._storage[trade.label()]
+    target.append(trade)
 
     if not self._skip_from:
-      if (time - self._from).seconds > self._seconds:
+      if (trade.timestamp - self._from).seconds > self._seconds:
         self._skip_from = True
-      return None
+      metrics = []
+      for _callable in self._callables:
+        metrics.append(MetricData(f'TimeMetric {_callable[0]}', trade.label(), None))
+      return metrics
     else:
-      while (time - target[0]).seconds > self._seconds:
+      while (trade.timestamp - target[0].timestamp).seconds > self._seconds:
         target.popleft()
 
-      return MetricData('TimeMetric', name, len(target))
+      metrics = []
+      for _callable in self._callables:
+        metrics.append(MetricData(f'TimeMetric {_callable[0]}', trade.label(), _callable[1](target)))
+      return metrics
 
   def set_starting_moment(self, moment: datetime.datetime):
     self._from = moment
