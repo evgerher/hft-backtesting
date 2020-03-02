@@ -3,7 +3,7 @@ from typing import Dict, List
 from utils.logger import  setup_logger
 import numpy as np
 
-logger = setup_logger('<filter>', 'DEBUG')
+logger = setup_logger('<filter>', 'INFO')
 
 
 class Filters:
@@ -26,13 +26,13 @@ class Filters:
       return f'<Depth filter for n={self.levels}>'
 
     def _store_levels(self, snapshot: Snapshot):
-      self.stored_bid_levels_price[snapshot.market] = snapshot.bid_prices[:self.levels]
-      self.stored_ask_levels_price[snapshot.market] = snapshot.ask_prices[:self.levels]
-      self.stored_bid_levels_volume[snapshot.market] = snapshot.bid_volumes[:self.levels]
-      self.stored_ask_levels_volume[snapshot.market] = snapshot.ask_volumes[:self.levels]
+      self.stored_bid_levels_price[snapshot.symbol] = snapshot.bid_prices[:self.levels]
+      self.stored_ask_levels_price[snapshot.symbol] = snapshot.ask_prices[:self.levels]
+      self.stored_bid_levels_volume[snapshot.symbol] = snapshot.bid_volumes[:self.levels]
+      self.stored_ask_levels_volume[snapshot.symbol] = snapshot.ask_volumes[:self.levels]
 
     def filter(self, snapshot: Snapshot) -> bool:
-      symbol: str = snapshot.market
+      symbol: str = snapshot.symbol
       stored_snapshot: Snapshot = self.snapshots.get(symbol, None)
       
       if stored_snapshot is None:
@@ -41,28 +41,28 @@ class Filters:
         return True
       else:
         bid_levels_price = snapshot.bid_prices[:self.levels]
-        blp = bid_levels_price != self.stored_bid_levels_price[snapshot.market]
+        blp = bid_levels_price != self.stored_bid_levels_price[snapshot.symbol]
         if (blp).any():
           logger.debug(f'Bid level price altered, on depth={np.where(blp == True)[0]}')
           self._store_levels(snapshot)
           return True
 
         ask_levels_price = snapshot.ask_prices[:self.levels]
-        alp = ask_levels_price != self.stored_ask_levels_price[snapshot.market]
+        alp = ask_levels_price != self.stored_ask_levels_price[snapshot.symbol]
         if (alp).any():
           logger.debug(f'Ask level price altered, on depth={np.where(alp == True)[0]}')
           self._store_levels(snapshot)
           return True
 
         bid_levels_volume = snapshot.bid_volumes[:self.levels]
-        blv = bid_levels_volume != self.stored_bid_levels_volume[snapshot.market]
+        blv = bid_levels_volume != self.stored_bid_levels_volume[snapshot.symbol]
         if (blv).any():
           logger.debug(f'Bid level volume altered, on depth={np.where(blv == True)[0]}')
           self._store_levels(snapshot)
           return True
 
         ask_levels_volume = snapshot.ask_volumes[:self.levels]
-        alv = ask_levels_volume != self.stored_ask_levels_volume[snapshot.market]
+        alv = ask_levels_volume != self.stored_ask_levels_volume[snapshot.symbol]
         if (alv).any():
           logger.debug(f'Ask level volume altered, on depth={np.where(alv == True)[0]}')
           self._store_levels(snapshot)

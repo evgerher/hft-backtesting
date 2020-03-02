@@ -1,11 +1,17 @@
+import datetime
+from typing import Optional
+
 from utils import helper
-from utils.data import Snapshot
+from utils.data import Snapshot, Trade
 from utils.logger import setup_logger
 import pandas as pd
 
 logger = setup_logger('<reader>', 'DEBUG')
 
 class Reader:
+
+  def __init__(self, moment: datetime.datetime):
+    self.initial_moment = moment
 
   class Row:
     pass
@@ -18,50 +24,92 @@ class Reader:
 
 class SnapshotReader(Reader):
 
-  def __init__(self, file:str, nrows:int=10000, compression='infer', stop_after:int=None):
+  def __init__(self, snapshot_file: str, trades_file: Optional[str] = None, nrows: int = 10000, stop_after: int = None, depth:int=25):
     """
-    :param file: to read
+    :param snapshot_file: to read
+    :param trades_file: to read
     :param nrows: 10000 - number of rows to read per update
     :param stop_after: stop iteration over dataset after amount of iterations
     """
-    self.idx = 0
-    self.file = file
-    self.nrows = nrows
-    self.compression = compression
+    self._snapshot_file = snapshot_file
+    self._trades_file = trades_file
 
-    self.df: pd.DataFrame = self.__read_csv()
-    self.limit = len(self.df)
-    self.total = 0
-    self.stop_after = stop_after
+    self.__snapshot_idx, self.__trades_idx = 0, 0
+    self._total_snapshots, self._total_trades = 0, 0
 
-  def __read_csv(self):
-    return pd.read_csv(self.file, header=None, compression=self.compression, sep=',',
+    self._nrows = nrows
+    self._depth =  depth
+    self.__snapshots_df: pd.DataFrame = self.__read_csv(self._snapshot_file)
+    self.__limit_snapshot = len(self.__snapshots_df)
+    self.__snapshot = self.__load_snapshot()
+
+
+    if self._trades_file is not None:
+      self.__trades_df: pd.DataFrame = self.__read_csv(self._trades_file)
+      self.__limit_trades = len(self.__trades_df)
+      self.__trade = self.__load_trade()
+
+
+    self.__stop_after = stop_after
+
+    super().__init__(helper.convert_to_datetime(self.__trades_df.iloc[0, 1]))
+
+  def __read_csv(self, fname, skiprows=0):
+    return pd.read_csv(fname, header=None, sep=',',
                        quotechar='"', error_bad_lines=False,
-                       skiprows=self.idx, nrows=self.nrows)
+                       skiprows=skiprows, nrows=self._nrows)
 
+  def __update_df(self, file, skiprows=0):
+    df = self.__read_csv(file, skiprows)
+    limit = len(df)
+    return df, limit
 
-  def __next__(self) -> Snapshot:
+  def __next__(self):  # snapshot or trade
 
-    if self.stop_after is not None and self.idx == self.stop_after:
+    # end condition
+    if (self.__limit_snapshot != self._nrows and self.__snapshot_idx == self.__limit_snapshot) or \
+        (self.__stop_after is not None and self.__snapshot_idx == self.__stop_after):
+      self._total_snapshots += self.__snapshot_idx
+      logger.debug(f"Finished snapshot_file {self._snapshot_file}, read {self._total_snapshots} rows")
       raise StopIteration
 
-    if self.limit != self.nrows and self.idx == self.limit:
-      self.total += self.idx
-      logger.debug(f"Finished file {self.file}, read {self.total} rows")
-      raise StopIteration
+    # checks on files' reloads
+    if self.__snapshot_idx + 1 >= self._nrows:
+      self._total_snapshots += self.__snapshot_idx
+      self.__snapshots_df, self.__limit_snapshot = self.__update_df(self._snapshot_file, self.__snapshot_idx)
+      self.__snapshot_idx = 0
 
-    if self.idx + 1 >= self.nrows:
-      self.total += self.idx
-      self.df = self.__read_csv()
-      self.idx = 0
-      self.limit = len(self.df)
+    if self.__trades_idx + 1 >= self._nrows:
+      self._total_trades += self.__trades_idx
+      self.__trades_df, self.__limit_trades = self.__update_df(self._trades_file, self.__trades_idx)
+      self.__trades_idx = 0
 
-    row: pd.Series = self.df.iloc[self.idx, :]
+
+    # select whom to return
+
+    if self._trades_file is not None and self.__trade.timestamp < self.__snapshot.timestamp:
+      trade = self.__trade
+      self.__trade = self.__load_trade()
+      return trade
+    else:
+      snapshot = self.__snapshot
+      self.__snapshot = self.__load_snapshot()
+      return snapshot
+
+  def __load_trade(self) -> Trade:
+    row: pd.Series = self.__trades_df.iloc[self.__trades_idx, :]
+    self.__trades_idx += 1
+    return helper.trade_line_parser(row)
+
+  def __load_snapshot(self) -> Snapshot:
+    row: pd.Series = self.__snapshots_df.iloc[self.__snapshot_idx, :]
     timestamp, market, bids, asks = helper.snapshot_line_parser(row)
+    self.__snapshot_idx += 1
 
-    self.idx += 1
+    return Snapshot.from_sides(timestamp, market, bids[:self._depth], asks[:self._depth])
 
-    return Snapshot.from_sides(timestamp, market, bids, asks)
 
   def __str__(self):
-    return f'<Snapshot reader on file={self.file}, batch_nrows={self.nrows}>'
+    return f'<Snapshot reader on snapshot_file={self._snapshot_file}, ' \
+           f'trades_file={self._trades_file}, ' \
+           f'batch_nrows={self._nrows}>'

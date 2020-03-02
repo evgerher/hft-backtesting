@@ -4,23 +4,38 @@ from typing import *
 from dataloader.callbacks.connectors import Connector
 
 from dataloader.callbacks.message import TradeMessage, MetaMessage
-from utils import logger
 import numpy as np
+from utils.logger import setup_logger
+
+logger = setup_logger('<data>', 'INFO')
+
+
+@dataclass
+class Trade:
+  symbol: str
+  timestamp: datetime.datetime
+  side: str
+  price: float
+  volume: int
+
+  def label(self) -> str:
+    return f'{self.symbol} {self.side}'
+
 
 @dataclass
 class Snapshot:
-  market: str
-  timestamp: datetime.datetime.timestamp
+  symbol: str
+  timestamp: datetime.datetime
   bid_prices: np.array
   bid_volumes: np.array
   ask_prices: np.array
   ask_volumes: np.array
 
   @staticmethod
-  def from_sides(timestamp: datetime.datetime.timestamp, market: str, bids: np.array, asks: np.array) -> 'Snapshot':
+  def from_sides(timestamp: datetime.datetime, symbol: str, bids: np.array, asks: np.array) -> 'Snapshot':
     a_p, a_v = Snapshot.sort_side(asks, False)
     b_p, b_v = Snapshot.sort_side(bids, True)
-    return Snapshot(market, timestamp, b_p, b_v, a_p, a_v)
+    return Snapshot(symbol, timestamp, b_p, b_v, a_p, a_v)
 
   @staticmethod
   def sort_side(side: np.array, is_bid=False):
@@ -38,13 +53,13 @@ class Snapshot:
     return prices, volumes.astype(np.int)
 
   def __str__(self):
-    return f'Snapshot :: market={self.market}, ' \
+    return f'<Snapshot :: symbol={self.symbol}, ' \
            f'highest bid price,volume = ({self.bid_prices[0], self.bid_volumes[0]}), ' \
-           f'lowest ask price, volume = ({self.ask_prices[0], self.ask_volumes[0]})'
+           f'lowest ask price, volume = ({self.ask_prices[0], self.ask_volumes[0]})>'
 
 class SnapshotBuilder:
-  def __init__(self, market: str, state: List[Dict]):
-    self.market = market
+  def __init__(self, symbol: str, state: List[Dict]):
+    self.symbol = symbol
     self.mapping = {}
     self.free = []
     self.data: List = [0] * 100
@@ -62,7 +77,7 @@ class SnapshotBuilder:
         self.data[buys + 1] = s['size']
         buys += 2
 
-    # state=[{'id': 8799192250, 'side': 'Sell', 'size': 59553, 'price': 8077.5}, ...], market=XBTUSD
+    # state=[{'id': 8799192250, 'side': 'Sell', 'size': 59553, 'price': 8077.5}, ...], symbol=XBTUSD
 
   def apply(self, delta: list, action: str):
     if action in 'update':
@@ -87,18 +102,18 @@ class SnapshotBuilder:
         self.free.append(idx)
         del self.mapping[_id]
 
-  def to_store(self) -> (str, datetime.datetime.timestamp, list):
-    return (self.market, datetime.datetime.utcnow(), self.data)
+  def to_store(self) -> (str, datetime.datetime, list):
+    return (self.symbol, datetime.datetime.utcnow(), self.data)
 
   def to_snapshot(self) -> 'Snapshot':
     asks = np.array(self.data[0:50])
     bids = np.array(self.data[50:])
-    return Snapshot.from_sides(datetime.datetime.utcnow(), self.market, bids, asks)
+    return Snapshot.from_sides(datetime.datetime.utcnow(), self.symbol, bids, asks)
 
   def __str__(self):
     bid = max([self.data[x] for x in range(50, 100, 2)])
     ask = min([self.data[x] for x in range(0, 50, 2)])
-    return f'Snapshot :: market={self.market}, highest bid = {bid}, lowest ask = {ask}'
+    return f'<Snapshot :: symbol={self.symbol}, highest bid = {bid}, lowest ask = {ask}>'
 
 
 class Data_Preprocessor:
@@ -141,7 +156,7 @@ class Data_Preprocessor:
 
       self.connector.store_snapshot(*snapshot.to_store())
       if self.counter % 1000 == 0:
-        logging.info(f"Inserted 1.000 more: {self.snapshots}")
+        logger.info(f"Inserted 1.000 more: {self.snapshots}")
         self.counter = 0
 
 
@@ -163,5 +178,7 @@ class Bitmex_Data(Data_Preprocessor):
     table = msg.get('table', None)
     action = msg.get('action', None)
     if action is None:
-      return MetaMessage(None, None, None)
+      return MetaMessage(
+
+        None, None, None)
     return MetaMessage(table, action, msg['data'][0]['symbol'])

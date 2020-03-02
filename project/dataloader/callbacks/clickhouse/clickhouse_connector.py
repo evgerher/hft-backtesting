@@ -31,6 +31,9 @@ class ClickHouse(Connector):
   def store_trade(self, trade: TradeMessage):
     logger.info(f"Insert trade: symbol={trade.symbol} {trade.size} pieces for {trade.price}, "
                  f"action={trade.action} on side={trade.side} @ {trade.timestamp}")
+
+
+    # trade.action=partial means current values (when application is starting)
     self.client.execute('insert into trades values', [
       (
         trade.symbol,
@@ -46,8 +49,8 @@ class ClickHouse(Connector):
     if self.trades_counter % 2500 == 0:
       self.client.connection.ping()
 
-  def store_snapshot(self, market, timestamp: datetime.datetime.timestamp, data: list):
-    logger.info(f"Insert snapshot: {timestamp}, market={market}")
+  def store_snapshot(self, market, timestamp: datetime.datetime, data: list):
+    logger.info(f"Insert snapshot: {timestamp}, symbol={symbol}")
     self.client.execute('insert into snapshots values', [[timestamp, timestamp.microsecond  // 1000, market] + data])
     self.snapshot_counter += 1
 
@@ -71,7 +74,7 @@ class ClickHouse(Connector):
       self.client.connection.ping()
 
   def save_csv(self):
-    snaps = self.client.execute('select * from snapshots limit 5000')
+    snaps = self.client.execute('select * from snapshots __limit_snapshot 5000')
     import pandas as pd
     snaps: pd.DataFrame = pd.DataFrame(snaps)
     snaps.to_csv(path_or_buf='snapshots.csv', header=False, index=False)
