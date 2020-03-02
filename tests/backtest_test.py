@@ -58,3 +58,22 @@ class BacktestTest(unittest.TestCase):
     self.assertEqual(len(output.metrics), 2020)
 
 
+  def test_all_metrics(self):
+    reader = readers.SnapshotReader('resources/trade/snapshots.csv.gz', trades_file='resources/trade/trades.csv.gz', stop_after=10000, depth=10)
+    # todo: optimize return metrics (do not waste time on wrapping each -> transform into tuple of values with one header
+    callables = [
+      ('trades volume', lambda trades: sum(map(lambda x: x.volume, trades))),
+      ('trades length', lambda trades: len(trades))
+    ]
+
+    metrics = [VWAP_depth(3),
+               VWAP_volume(volume=int(1e6), symbol='XBTUSD'),
+               VWAP_volume(volume=int(1e5), symbol='ETHUSD')]
+    simulation = Simulation(metrics, [Filters.DepthFilter(3)], time_metrics=[TimeMetric(callables, 60)])
+    output = TestOutput()
+    backtester = backtest.Backtest(reader, simulation, output)
+    backtester.run()
+
+    self.assertEqual(len(output.metrics), 46336)
+
+

@@ -113,7 +113,7 @@ class VWAP_depth(_VWAP):
       i += 1
 
     volume_sum = np.sum(volumes[:i])
-    return prices[:i] * (volumes[:i] / volume_sum)
+    return (prices[:i] * (volumes[:i] / volume_sum)).sum()
 
 class VWAP_volume(_VWAP):
 
