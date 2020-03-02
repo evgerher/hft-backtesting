@@ -48,14 +48,14 @@ class TimeMetric(Metric):
     target.append(trade)
 
     if not self._skip_from:
-      if (trade.timestamp - self._from).seconds > self._seconds:
+      if (trade.timestamp - self._from).seconds >= self._seconds:
         self._skip_from = True
       metrics = []
       for _callable in self._callables:
-        metrics.append(MetricData(f'TimeMetric {_callable[0]}', trade.label(), None))
+        metrics.append(MetricData(f'TimeMetric {_callable[0]}', trade.label(), -1.0))
       return metrics
     else:
-      while (trade.timestamp - target[0].timestamp).seconds > self._seconds:
+      while (trade.timestamp - target[0].timestamp).seconds >= self._seconds:
         target.popleft()
 
       metrics = []
@@ -99,10 +99,21 @@ class VWAP_depth(_VWAP):
   def __init__(self, levels = 3):
     self.levels = levels
 
-  def _evaluate_side(self, prices: np.array, volumes: np.array) -> float:
+  def _evaluate_side(self, prices: np.array, volumes: np.array) -> float: # todo: test
     # volumes are assumed to be sorted
-    volume_sum = np.sum(volumes[:self.levels])
-    return prices[:self.levels] * volumes[self.levels] / volume_sum
+    counter = 0
+    i = 0
+    while i < len(volumes):
+      if volumes[i] != 0:
+        counter += 1
+
+      if counter == self.levels:
+        break
+
+      i += 1
+
+    volume_sum = np.sum(volumes[:i])
+    return prices[:i] * (volumes[:i] / volume_sum)
 
 class VWAP_volume(_VWAP):
 
@@ -113,7 +124,7 @@ class VWAP_volume(_VWAP):
     self.volume = volume
     self.symbol = symbol
 
-  def _evaluate_side(self, prices: np.array, volumes: np.array) -> float:
+  def _evaluate_side(self, prices: np.array, volumes: np.array) -> float: # todo: test
     total_volumes: int = 0
     weighted_price: float = 0
     i = 0

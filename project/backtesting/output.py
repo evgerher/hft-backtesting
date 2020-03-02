@@ -13,19 +13,35 @@ class Output:
     :return:
     """
 
-    if type(object) == Snapshot:
+    if isinstance(object, Snapshot):
       self.snapshot_action(timestamp, object)
 
-    if type(object) == MetricData:
+    if isinstance(object, MetricData):
       self.metric_action(timestamp, object)
 
     self.additional_action(timestamp, object)
 
-  def snapshot_action(self, timestamp, object):
+  def snapshot_action(self, timestamp: datetime.datetime, object):
     pass
 
-  def metric_action(self, timestamp, object):
+  def metric_action(self, timestamp: datetime.datetime, object):
     pass
 
-  def additional_action(self, timestamp, object):
+  def additional_action(self, timestamp: datetime.datetime, object):
     pass
+
+
+class TestOutput(Output):
+  def __init__(self):
+    self.snapshots = []
+    self.metrics = []
+    self.others = []
+
+  def snapshot_action(self, timestamp: datetime.datetime, object):
+    self.snapshots.append((timestamp, object))
+
+  def metric_action(self, timestamp: datetime.datetime, object):
+    self.metrics.append((timestamp, object))
+
+  def additional_action(self, timestamp: datetime.datetime, object):
+    self.others.append((timestamp, object))

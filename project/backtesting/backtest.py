@@ -3,14 +3,14 @@ from backtesting.readers import Reader
 from backtesting.trade_simulation import Simulation
 from utils.data import Snapshot, Trade
 from utils.logger import setup_logger
-from metrics.metrics import MetricData, TimeMetric
+from metrics.metrics import MetricData
 
 import datetime
 from typing import Dict, List, Deque, Optional, Tuple
 from collections import defaultdict, deque
 
 
-logger = setup_logger('<backtest>', 'DEBUG')
+logger = setup_logger('<backtest>', 'INFO')
 
 
 class Backtest:
@@ -60,6 +60,9 @@ class Backtest:
           self._process_actions(actions)
       elif type(row) is Trade:
         self._update_trades(row)
+        actions = self.simulation.trigger(row, self.memory, self.metrics, self.trades)
+        if actions is not None:
+          self._process_actions(actions)
 
     self._flush_last()
     logger.info(f'Backtest finished run')
@@ -129,9 +132,9 @@ class Backtest:
       while len(metric) > 0:
         self._flush_output(*metric.popleft())
 
-  def __remove_old_memory(self, timestamp: datetime.datetime, metric_deque: Deque[Trade]):
+  def __remove_old_memory(self, timestamp: datetime.datetime, metric_deque: Deque):
     while True:
-      if (timestamp - metric_deque[0].timestamp).seconds > self.time_horizon:
+      if (timestamp - metric_deque[0].timestamp).seconds >= self.time_horizon:
         object = metric_deque.popleft()
         self._flush_output(object.timestamp, object)
       else:
@@ -139,7 +142,7 @@ class Backtest:
 
   def __remove_old_metric(self, row, metric_deque):
     while True:
-      if (row.timestamp - metric_deque[0][0]).seconds > self.time_horizon:
+      if (row.timestamp - metric_deque[0][0]).seconds >= self.time_horizon:
         self._flush_output(*metric_deque.popleft())
       else:
         break

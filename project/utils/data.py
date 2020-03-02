@@ -5,6 +5,9 @@ from dataloader.callbacks.connectors import Connector
 
 from dataloader.callbacks.message import TradeMessage, MetaMessage
 import numpy as np
+from utils.logger import setup_logger
+
+logger = setup_logger('<data>', 'INFO')
 
 
 @dataclass
@@ -55,8 +58,8 @@ class Snapshot:
            f'lowest ask price, volume = ({self.ask_prices[0], self.ask_volumes[0]})>'
 
 class SnapshotBuilder:
-  def __init__(self, market: str, state: List[Dict]):
-    self.market = market
+  def __init__(self, symbol: str, state: List[Dict]):
+    self.symbol = symbol
     self.mapping = {}
     self.free = []
     self.data: List = [0] * 100
@@ -100,12 +103,12 @@ class SnapshotBuilder:
         del self.mapping[_id]
 
   def to_store(self) -> (str, datetime.datetime, list):
-    return (self.market, datetime.datetime.utcnow(), self.data)
+    return (self.symbol, datetime.datetime.utcnow(), self.data)
 
   def to_snapshot(self) -> 'Snapshot':
     asks = np.array(self.data[0:50])
     bids = np.array(self.data[50:])
-    return Snapshot.from_sides(datetime.datetime.utcnow(), self.market, bids, asks)
+    return Snapshot.from_sides(datetime.datetime.utcnow(), self.symbol, bids, asks)
 
   def __str__(self):
     bid = max([self.data[x] for x in range(50, 100, 2)])
@@ -153,7 +156,7 @@ class Data_Preprocessor:
 
       self.connector.store_snapshot(*snapshot.to_store())
       if self.counter % 1000 == 0:
-        logging.info(f"Inserted 1.000 more: {self.snapshots}")
+        logger.info(f"Inserted 1.000 more: {self.snapshots}")
         self.counter = 0
 
 
@@ -175,5 +178,7 @@ class Bitmex_Data(Data_Preprocessor):
     table = msg.get('table', None)
     action = msg.get('action', None)
     if action is None:
-      return MetaMessage(None, None, None)
+      return MetaMessage(
+
+        None, None, None)
     return MetaMessage(table, action, msg['data'][0]['symbol'])

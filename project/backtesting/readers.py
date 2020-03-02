@@ -24,7 +24,7 @@ class Reader:
 
 class SnapshotReader(Reader):
 
-  def __init__(self, snapshot_file: str, trades_file: Optional[str] = None, nrows: int = 10000, stop_after: int = None):
+  def __init__(self, snapshot_file: str, trades_file: Optional[str] = None, nrows: int = 10000, stop_after: int = None, depth:int=25):
     """
     :param snapshot_file: to read
     :param trades_file: to read
@@ -38,16 +38,21 @@ class SnapshotReader(Reader):
     self._total_snapshots, self._total_trades = 0, 0
 
     self._nrows = nrows
-
+    self._depth =  depth
     self.__snapshots_df: pd.DataFrame = self.__read_csv(self._snapshot_file)
-    self.__trades_df: pd.DataFrame = self.__read_csv(self._trades_file)
-
     self.__limit_snapshot = len(self.__snapshots_df)
-    self.__limit_trades = len(self.__trades_df)
+    self.__snapshot = self.__load_snapshot()
+
+
+    if self._trades_file is not None:
+      self.__trades_df: pd.DataFrame = self.__read_csv(self._trades_file)
+      self.__limit_trades = len(self.__trades_df)
+      self.__trade = self.__load_trade()
+
 
     self.__stop_after = stop_after
 
-    super().__init__(helper.convert_to_datetime(self.__snapshots_df.iloc[0, 0]))
+    super().__init__(helper.convert_to_datetime(self.__trades_df.iloc[0, 1]))
 
   def __read_csv(self, fname, skiprows=0):
     return pd.read_csv(fname, header=None, sep=',',
@@ -93,7 +98,7 @@ class SnapshotReader(Reader):
 
   def __load_trade(self) -> Trade:
     row: pd.Series = self.__trades_df.iloc[self.__trades_idx, :]
-    self.__snapshot_idx += 1
+    self.__trades_idx += 1
     return helper.trade_line_parser(row)
 
   def __load_snapshot(self) -> Snapshot:
@@ -101,7 +106,7 @@ class SnapshotReader(Reader):
     timestamp, market, bids, asks = helper.snapshot_line_parser(row)
     self.__snapshot_idx += 1
 
-    return Snapshot.from_sides(timestamp, market, bids, asks)
+    return Snapshot.from_sides(timestamp, market, bids[:self._depth], asks[:self._depth])
 
 
   def __str__(self):
