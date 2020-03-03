@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from typing import List, Deque, Dict, Callable, Tuple
 import datetime
 from collections import deque, defaultdict
-from utils.data import Snapshot, Trade
+from utils.data import OrderBook, Trade
 import numpy as np
 
 @dataclass
@@ -71,7 +71,7 @@ class TimeMetric(Metric):
 
 class _VWAP(InstantMetric):
 
-  def evaluate(self, snapshot: Snapshot):
+  def evaluate(self, snapshot: OrderBook):
     vwap_bid, vwap_ask = self.VWAP_bid(snapshot), self.VWAP_ask(snapshot)
     midpoint = self.VWAP_midpoint(vwap_bid, vwap_ask)
     return (
@@ -83,10 +83,10 @@ class _VWAP(InstantMetric):
   def _evaluate_side(self, prices: np.array, volumes: np.array) -> float:
     pass
 
-  def VWAP_bid(self, snapshot: Snapshot) -> float:
+  def VWAP_bid(self, snapshot: OrderBook) -> float:
     return self._evaluate_side(snapshot.bid_prices, snapshot.bid_volumes)
 
-  def VWAP_ask(self, snapshot: Snapshot) -> float:
+  def VWAP_ask(self, snapshot: OrderBook) -> float:
     return self._evaluate_side(snapshot.ask_prices, snapshot.ask_volumes)
 
   def VWAP_midpoint(self, vwap_bid: float, vwap_ask: float) -> float:
@@ -137,13 +137,13 @@ class VWAP_volume(_VWAP):
     return weighted_price
 
 class Lipton(InstantMetric):
-  def bidask_imbalance(self, snapshot: Snapshot):
+  def bidask_imbalance(self, snapshot: OrderBook):
     q_b = snapshot.bid_volumes[0]
     q_a = snapshot.ask_volumes[0]
     imbalance = (q_b - q_a) / (q_b + q_a)
     return MetricData('bidask-imbalance', snapshot.symbol, imbalance)
 
-  def upward_probability(self, snapshot: Snapshot, p_xy=-0.5): # todo: should I consider depth or only best prices available
+  def upward_probability(self, snapshot: OrderBook, p_xy=-0.5): # todo: should I consider depth or only best prices available
     """
     x - bid quote sizes
     y - ask quote sizes

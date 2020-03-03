@@ -1,6 +1,8 @@
 import unittest
+from typing import List
 
 from backtesting.readers import Reader, SnapshotReader
+from utils.data import OrderBook, Trade
 
 
 class ReaderTest(unittest.TestCase):
@@ -29,3 +31,27 @@ class ReaderTest(unittest.TestCase):
       snapshots.append(row)
 
     self.assertEqual(len(snapshots), stop_after)
+
+  def test_paired_snapshot_trade(self):
+    reader: Reader = SnapshotReader('resources/trade/snapshots.csv.gz', trades_file='resources/trade/trades.csv.gz', stop_after=1000)
+
+    snapshots: List[OrderBook] = []
+    trades: List[Trade] = []
+    for row in reader:
+      if row.symbol == 'XBTUSD':
+        if isinstance(row, OrderBook):
+          snapshots.append(row)
+        else:
+          trades.append(row)
+
+    diffs = []
+    matches = []
+    for idx in range(1, len(snapshots)):
+      diffs.append(snapshots[idx].diff(snapshots[idx-1], 7))
+      for trade in trades:
+        if trade.belongs_to(snapshots[idx], snapshots[idx - 1], 7):
+          matches.append((trade, snapshots[idx - 1], snapshots[idx]))
+
+    print('yes')
+
+

@@ -1,6 +1,6 @@
 import datetime
 
-from utils.data import Snapshot
+from utils.data import OrderBook
 from metrics.metrics import MetricData
 
 
@@ -13,7 +13,7 @@ class Output:
     :return:
     """
 
-    if isinstance(object, Snapshot):
+    if isinstance(object, OrderBook):
       self.snapshot_action(timestamp, object)
 
     if isinstance(object, MetricData):

@@ -1,7 +1,7 @@
 from backtesting.output import Output
 from backtesting.readers import Reader
 from backtesting.trade_simulation import Simulation
-from utils.data import Snapshot, Trade
+from utils.data import OrderBook, Trade
 from utils.logger import setup_logger
 from metrics.metrics import MetricData
 
@@ -28,7 +28,7 @@ class Backtest:
     self.reader : Reader = reader
     self.simulation: Simulation = simulation
     self.time_horizon: int = time_horizon
-    self.memory: Dict[str, Deque[Snapshot]] = defaultdict(deque)
+    self.memory: Dict[str, Deque[OrderBook]] = defaultdict(deque)
     self.metrics: Dict[Tuple[str, str], Deque[Tuple[datetime.datetime, MetricData]]] = defaultdict(deque)  # (symbol, metric_name) -> (timestamp, Metric)
     self.trades: Dict[Tuple[str, str], Deque[Trade]] = defaultdict(deque)
     self.output = output
@@ -38,7 +38,7 @@ class Backtest:
     logger.info(f"Initialized {self}")
 
   def run(self):
-    def _filter_snapshot(row: Snapshot) -> bool:
+    def _filter_snapshot(row: OrderBook) -> bool:
       filtered = True
       for filter in self.simulation.filters:
         if not filter.filter(row):
@@ -49,7 +49,7 @@ class Backtest:
 
     logger.info(f'Backtest initialize run')
     for row in self.reader:
-      if type(row) is Snapshot:
+      if type(row) is OrderBook:
         if not _filter_snapshot(row):
           continue
         self._update_memory(row)
@@ -82,10 +82,10 @@ class Backtest:
       self.output.consume(timestamp, object)
 
   # todo: refactor _update_* into one function
-  def _update_memory(self, row: Snapshot):
+  def _update_memory(self, row: OrderBook):
     logger.debug(f'Update memory with snapshot symbol={row.symbol} @ {row.timestamp}')
     # # fill memory
-    market: Deque[Snapshot] = self.memory[row.symbol]
+    market: Deque[OrderBook] = self.memory[row.symbol]
     market.append(row)
 
     self.__remove_old_memory(row.timestamp, market)
@@ -107,7 +107,7 @@ class Backtest:
 
         self.__remove_old_metric(row, metric_deque)
 
-  def _update_metrics(self, row: Snapshot):
+  def _update_metrics(self, row: OrderBook):
     logger.debug(f'Update metrics with snapshot symbol={row.symbol} @ {row.timestamp}')
 
     for instant_metric in self.simulation.instant_metrics:

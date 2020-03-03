@@ -1,4 +1,4 @@
-from utils.data import Snapshot
+from utils.data import OrderBook
 from typing import Dict, List
 from utils.logger import  setup_logger
 import numpy as np
@@ -9,14 +9,14 @@ logger = setup_logger('<filter>', 'INFO')
 class Filters:
 
   class Filter:
-    def filter(self, snapshot: Snapshot):
+    def filter(self, snapshot: OrderBook):
       pass
 
   class DepthFilter(Filter):
 
     def __init__(self, levels: int):
       self.levels: int = levels
-      self.snapshots: Dict[str, Snapshot] = {}
+      self.snapshots: Dict[str, OrderBook] = {}
       self.stored_bid_levels_price : Dict[str, List] = {}
       self.stored_ask_levels_price : Dict[str, List] = {}
       self.stored_bid_levels_volume: Dict[str, List] = {}
@@ -25,15 +25,15 @@ class Filters:
     def __str__(self):
       return f'<Depth filter for n={self.levels}>'
 
-    def _store_levels(self, snapshot: Snapshot):
+    def _store_levels(self, snapshot: OrderBook):
       self.stored_bid_levels_price[snapshot.symbol] = snapshot.bid_prices[:self.levels]
       self.stored_ask_levels_price[snapshot.symbol] = snapshot.ask_prices[:self.levels]
       self.stored_bid_levels_volume[snapshot.symbol] = snapshot.bid_volumes[:self.levels]
       self.stored_ask_levels_volume[snapshot.symbol] = snapshot.ask_volumes[:self.levels]
 
-    def filter(self, snapshot: Snapshot) -> bool:
+    def filter(self, snapshot: OrderBook) -> bool:
       symbol: str = snapshot.symbol
-      stored_snapshot: Snapshot = self.snapshots.get(symbol, None)
+      stored_snapshot: OrderBook = self.snapshots.get(symbol, None)
       
       if stored_snapshot is None:
         self.snapshots[symbol] = snapshot

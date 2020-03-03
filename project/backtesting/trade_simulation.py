@@ -2,7 +2,7 @@ import datetime
 from dataclasses import dataclass
 from typing import List, Deque, Dict, Tuple, Optional
 
-from utils.data import Snapshot
+from utils.data import OrderBook
 from metrics.metrics import InstantMetric, MetricData, TimeMetric
 from metrics.filters import Filters
 
@@ -30,8 +30,8 @@ class Simulation:
     self._delay: int = delay
 
 
-  def trigger(self, row: Snapshot,
-              memory: Dict[str, Deque[Snapshot]],
+  def trigger(self, row: OrderBook,
+              memory: Dict[str, Deque[OrderBook]],
               metrics: Dict[Tuple[str, str], Deque[Tuple[datetime.datetime, MetricData]]],
               trades) -> List: # todo: define type later on
     pass

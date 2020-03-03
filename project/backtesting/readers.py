@@ -2,7 +2,7 @@ import datetime
 from typing import Optional
 
 from utils import helper
-from utils.data import Snapshot, Trade
+from utils.data import OrderBook, Trade
 from utils.logger import setup_logger
 import pandas as pd
 
@@ -101,12 +101,12 @@ class SnapshotReader(Reader):
     self.__trades_idx += 1
     return helper.trade_line_parser(row)
 
-  def __load_snapshot(self) -> Snapshot:
+  def __load_snapshot(self) -> OrderBook:
     row: pd.Series = self.__snapshots_df.iloc[self.__snapshot_idx, :]
     timestamp, market, bids, asks = helper.snapshot_line_parser(row)
     self.__snapshot_idx += 1
 
-    return Snapshot.from_sides(timestamp, market, bids, asks, self._pairs_to_load)
+    return OrderBook.from_sides(timestamp, market, bids, asks, self._pairs_to_load)
 
 
   def __str__(self):

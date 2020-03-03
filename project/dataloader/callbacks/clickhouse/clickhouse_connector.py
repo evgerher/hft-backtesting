@@ -4,7 +4,10 @@ from dataloader.callbacks.clickhouse import clickhouse_cmds
 from dataloader.callbacks.connectors import Connector
 from clickhouse_driver import Client
 from dataloader.callbacks.message import TradeMessage
+from utils.data import OrderBook
 from utils.logger import setup_logger
+import numpy as np
+from typing import List
 
 logger = setup_logger("<clickhouse>", "DEBUG")
 
@@ -19,13 +22,15 @@ class ClickHouse(Connector):
     self.db_pwd = db_pwd if db_pwd is not None else ''
 
     client = self.create_client()
-    client.execute(clickhouse_cmds.create_snapshots)
+    # client.execute(clickhouse_cmds.create_snapshots)
+    client.execute(clickhouse_cmds.create_orderbook10)
     client.execute(clickhouse_cmds.create_indexes)
     client.execute(clickhouse_cmds.create_trades)
 
     self.client = client
     self.total_snapshots = 0
     self.snapshot_counter = 0
+    self.orderbook_counter = 0
     self.trades_counter = 0
 
   def store_trade(self, trade: TradeMessage):
@@ -58,6 +63,26 @@ class ClickHouse(Connector):
       self.client.connection.ping()
 
     if self.snapshot_counter % 5000 == 0:
+      self.client.disconnect()
+      self.client = self.create_client()
+
+  def store_orderbook(self, orderbook: OrderBook):
+    logger.debug(f"Insert orderbook: {orderbook.timestamp}, symbol={orderbook.symbol}")
+
+    ap = orderbook.ask_prices.tolist()
+    av = orderbook.ask_volumes.tolist()
+    bp = orderbook.bid_prices.tolist()
+    bv = orderbook.bid_volumes.tolist()
+    self.client.execute('insert into orderbook values',
+                        [[orderbook.timestamp,
+                          orderbook.timestamp.microsecond  // 1000,
+                          orderbook.symbol] + ap + av + bp + bv])
+    self.orderbook_counter += 1
+
+    if self.orderbook_counter % 2500 == 0:
+      self.client.connection.ping()
+
+    if self.orderbook_counter % 5000 == 0:
       self.client.disconnect()
       self.client = self.create_client()
 

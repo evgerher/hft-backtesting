@@ -3,7 +3,7 @@ import datetime
 import numpy as np
 
 from dataloader.callbacks.connectors import Connector
-from utils.data import Snapshot
+from utils.data import OrderBook
 from utils.logger import setup_logger
 from dataloader.callbacks.message import TradeMessage, MetaMessage
 
@@ -57,10 +57,10 @@ class SnapshotBuilder:
   def to_store(self) -> (str, datetime.datetime, list):
     return (self.symbol, datetime.datetime.utcnow(), self.data)
 
-  def to_snapshot(self) -> 'Snapshot':
+  def to_snapshot(self) -> 'OrderBook':
     asks = np.array(self.data[0:50])
     bids = np.array(self.data[50:])
-    return Snapshot.from_sides(datetime.datetime.utcnow(), self.symbol, bids, asks)
+    return OrderBook.from_sides(datetime.datetime.utcnow(), self.symbol, bids, asks)
 
   def __str__(self):
     bid = max([self.data[x] for x in range(50, 100, 2)])
@@ -85,8 +85,6 @@ class Data_Preprocessor:
 
   def callback(self, msg: dict):
     meta = self._get_message_meta(msg)
-    if meta.table == 'execution' or meta.table == 'position':
-      pass
     if meta.action is None:
       return
     elif meta.table in 'trade':
@@ -94,11 +92,11 @@ class Data_Preprocessor:
       if '.' in trade.symbol:
         self.connector.store_index(trade)
       else:
-        local_time = datetime.datetime.utcnow()
-        diff = local_time - trade.timestamp
-        logger.info(f"Diff = {diff}")
         self.connector.store_trade(trade)
       return
+    elif 'orderBook' in meta.table:
+      orderbook = OrderBook.from_bitmex_orderbook(msg)
+      self.connector.store_orderbook(orderbook)
     else: # process snapshot action
       if meta.action in 'partial':
         state = self._preprocess_partial(msg)

@@ -19,7 +19,7 @@ class Trade:
   def label(self) -> str:
     return f'{self.symbol} {self.side}'
 
-  def belongs_to(self, initial: 'Snapshot', target: 'Snapshot', levels:int=3, seconds_limit=15):
+  def belongs_to(self, initial: 'OrderBook', target: 'OrderBook', levels:int=3, seconds_limit=15):
     result: Tuple[str, str, np.ndarray] = target.diff(initial, levels)
     snapshot_side, pv, diff = result
     snapshot_price = initial.ask_prices[0] if snapshot_side == 'ask' else initial.bid_prices[0]
@@ -41,7 +41,7 @@ class Trade:
 
 
 @dataclass
-class Snapshot:
+class OrderBook:
   symbol: str
   timestamp: datetime.datetime
   bid_prices: np.array
@@ -49,7 +49,7 @@ class Snapshot:
   ask_prices: np.array
   ask_volumes: np.array
 
-  def diff(self, other: 'Snapshot', levels:int=3) -> Tuple[str, str, np.ndarray]:
+  def diff(self, other: 'OrderBook', levels:int=3) -> Tuple[str, str, np.ndarray]:
     bid_levels_price = other.bid_prices[:levels]
     blp = bid_levels_price - self.bid_prices[:levels]
     if (blp != 0).any():
@@ -80,11 +80,33 @@ class Snapshot:
     return other.diff(self)
 
   @staticmethod
-  def from_sides(timestamp: datetime.datetime, symbol: str, bids: np.array, asks: np.array, depth:int=25) -> 'Snapshot':
+  def from_bitmex_orderbook(msg: dict) -> 'OrderBook':
+    # 'data': [
+    # {
+    # 'symbol': 'XBTUSD',
+    # 'bids': [[8707, 242703], [8706.5, 155], [8706, 20266], [8705.5, 112793], [8705, 16297], [8704.5, 9833], [8704, 233926], [8703.5, 403910], [8703, 462338], [8702.5, 66211]],
+    # 'asks': [[8707.5, 1906350], [8708, 17855], [8708.5, 12143], [8709, 43133], [8709.5, 47247], [8710, 100078], [8710.5, 438889], [8711, 39812], [8711.5, 251992], [8712, 159765]],
+    # 'timestamp': '2020-03-03T20:54:04.114Z'
+    # }]}
+    data = msg['data'][0]
+    timestamp = datetime.datetime.strptime(data['timestamp'], '%Y-%m-%dT%H:%M:%S.%fZ')
+    symbol = data['symbol']
+    asks_pv = np.array(data['asks'])
+    bids_pv = np.array(data['bids'])
+
+    ap = asks_pv[:,0]
+    av = asks_pv[:,1].astype(np.int)
+    bp = bids_pv[:,0]
+    bv = bids_pv[:,1].astype(np.int)
+
+    return OrderBook(symbol, timestamp, bp, bv, ap, av)
+
+  @staticmethod
+  def from_sides(timestamp: datetime.datetime, symbol: str, bids: np.array, asks: np.array, depth:int=25) -> 'OrderBook':
     # assert depth % 2 == 0
-    a_p, a_v = Snapshot.sort_side(asks, False)
-    b_p, b_v = Snapshot.sort_side(bids, True)
-    return Snapshot(symbol, timestamp, b_p[:depth], b_v[:depth], a_p[:depth], a_v[:depth])
+    a_p, a_v = OrderBook.sort_side(asks, False)
+    b_p, b_v = OrderBook.sort_side(bids, True)
+    return OrderBook(symbol, timestamp, b_p[:depth], b_v[:depth], a_p[:depth], a_v[:depth])
 
   @staticmethod
   def sort_side(side: np.array, is_bid=False):
