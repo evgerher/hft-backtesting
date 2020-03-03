@@ -4,9 +4,12 @@ from dataloader.callbacks.clickhouse import clickhouse_cmds
 from dataloader.callbacks.connectors import Connector
 from clickhouse_driver import Client
 from dataloader.callbacks.message import TradeMessage
+from utils.data import OrderBook
 from utils.logger import setup_logger
+import numpy as np
+from typing import List
 
-logger = setup_logger("<clickhouse>", "INFO")
+logger = setup_logger("<clickhouse>", "DEBUG")
 
 
 class ClickHouse(Connector):
@@ -19,22 +22,24 @@ class ClickHouse(Connector):
     self.db_pwd = db_pwd if db_pwd is not None else ''
 
     client = self.create_client()
-    client.execute(clickhouse_cmds.create_snapshots)
+    # client.execute(clickhouse_cmds.create_snapshots)
+    client.execute(clickhouse_cmds.create_orderbook10)
     client.execute(clickhouse_cmds.create_indexes)
     client.execute(clickhouse_cmds.create_trades)
 
     self.client = client
     self.total_snapshots = 0
     self.snapshot_counter = 0
+    self.orderbook_counter = 0
     self.trades_counter = 0
 
   def store_trade(self, trade: TradeMessage):
-    logger.info(f"Insert trade: symbol={trade.symbol} {trade.size} pieces for {trade.price}, "
+    logger.debug(f"Insert trade: symbol={trade.symbol} {trade.size} pieces for {trade.price}, "
                  f"action={trade.action} on side={trade.side} @ {trade.timestamp}")
 
 
     # trade.action=partial means current values (when application is starting)
-    self.client.execute('insert into trades values', [
+    self.client.execute('insert into trades_orderbook values', [
       (
         trade.symbol,
         trade.timestamp,
@@ -49,15 +54,35 @@ class ClickHouse(Connector):
     if self.trades_counter % 2500 == 0:
       self.client.connection.ping()
 
-  def store_snapshot(self, market, timestamp: datetime.datetime, data: list):
-    logger.info(f"Insert snapshot: {timestamp}, symbol={symbol}")
-    self.client.execute('insert into snapshots values', [[timestamp, timestamp.microsecond  // 1000, market] + data])
+  def store_snapshot(self, symbol: str, timestamp: datetime.datetime, data: list):
+    logger.debug(f"Insert snapshot: {timestamp}, symbol={symbol}")
+    self.client.execute('insert into snapshots values', [[timestamp, timestamp.microsecond  // 1000, symbol] + data])
     self.snapshot_counter += 1
 
     if self.snapshot_counter % 2500 == 0:
       self.client.connection.ping()
 
     if self.snapshot_counter % 5000 == 0:
+      self.client.disconnect()
+      self.client = self.create_client()
+
+  def store_orderbook(self, orderbook: OrderBook):
+    logger.debug(f"Insert orderbook: {orderbook.timestamp}, symbol={orderbook.symbol}")
+
+    ap = orderbook.ask_prices.tolist()
+    av = orderbook.ask_volumes.tolist()
+    bp = orderbook.bid_prices.tolist()
+    bv = orderbook.bid_volumes.tolist()
+    self.client.execute('insert into orderbook values',
+                        [[orderbook.timestamp,
+                          orderbook.timestamp.microsecond  // 1000,
+                          orderbook.symbol] + ap + av + bp + bv])
+    self.orderbook_counter += 1
+
+    if self.orderbook_counter % 2500 == 0:
+      self.client.connection.ping()
+
+    if self.orderbook_counter % 5000 == 0:
       self.client.disconnect()
       self.client = self.create_client()
 
@@ -74,7 +99,7 @@ class ClickHouse(Connector):
       self.client.connection.ping()
 
   def save_csv(self):
-    snaps = self.client.execute('select * from snapshots __limit_snapshot 5000')
+    snaps = self.client.execute('select * from snapshots limit 5000')
     import pandas as pd
     snaps: pd.DataFrame = pd.DataFrame(snaps)
     snaps.to_csv(path_or_buf='snapshots.csv', header=False, index=False)

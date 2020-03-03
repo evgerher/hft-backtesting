@@ -3,7 +3,7 @@ import pandas
 from typing import List, Union
 import numpy as np
 
-from utils.data import Trade
+from utils.data import Trade, OrderBook
 
 
 def snapshot_line_parser(line: Union[List, pandas.Series], length:int=100):
@@ -19,6 +19,19 @@ def snapshot_line_parser(line: Union[List, pandas.Series], length:int=100):
 
   return date, symbol, bids, asks
 
+
+def orderbook_line_parse(line: pandas.Series) -> OrderBook:
+  millis = int(line[1])
+  date = convert_to_datetime(line[0])
+  date = date + datetime.timedelta(milliseconds=millis)
+  symbol = line[2]
+
+  ap = np.array(line[3:13], dtype=np.float)
+  av = np.array(line[13:23], dtype=np.int)
+  bp = np.array(line[23:33], dtype=np.float)
+  bv = np.array(line[33:43], dtype=np.int)
+
+  return OrderBook(symbol, date, bp, bv, ap, av)
 
 def trade_line_parser(line: Union[List, pandas.Series]) -> Trade:
   symbol = line[0]

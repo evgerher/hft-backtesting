@@ -3,12 +3,11 @@ import threading
 import json
 from utils.logger import setup_logger
 
-logger = setup_logger('<bitmex initializer>')
+logger = setup_logger('<orderbook10 initializer>')
 
 
 class BitmexWS:
   def __init__(self, topics, message_callback=None):
-    # orderBookL2_25:XBTUSD, orderBookL2_25:ETHUSD
     self._topics = ','.join(topics)
 
     self.ws = self.build_ws()
@@ -23,11 +22,10 @@ class BitmexWS:
   def _on_close(self, ws):
     logger.info("WS app closed")
     self.ws = self.build_ws()
-    self.connect()
+    # self.connect()
 
   def _on_message(self, ws, msg):
     msg_dict = json.loads(msg)
-    # logger.debug(msg)
     self.message_callback(msg_dict)
 
   def connect(self):
