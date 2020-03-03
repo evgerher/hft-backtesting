@@ -3,7 +3,7 @@ import threading
 import json
 from utils.logger import setup_logger
 
-logger = setup_logger('<bitmex initializer>')
+logger = setup_logger('<orderbook10 initializer>')
 
 
 class BitmexWS:
@@ -15,7 +15,7 @@ class BitmexWS:
     logger.info("Initilized BitmexWS")
 
   def build_ws(self):
-    return websocket.WebSocketApp(f"wss://www.bitmex.com/realtime?subscribe={self._topics}",
+    return websocket.WebSocketApp(f"wss://www.orderbook10.com/realtime?subscribe={self._topics}",
                                   on_close=self._on_close,
                                   on_message=self._on_message)
 

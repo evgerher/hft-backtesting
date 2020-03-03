@@ -1,7 +1,7 @@
 import unittest
 from typing import List
 
-from backtesting.readers import Reader, SnapshotReader
+from backtesting.readers import Reader, SnapshotReader, OrderbookReader
 from utils.data import OrderBook, Trade
 
 
@@ -54,4 +54,28 @@ class ReaderTest(unittest.TestCase):
 
     print('yes')
 
+  def test_orderbook_reader(self):
+    reader: Reader = OrderbookReader('resources/orderbook10/orderbook.csv', trades_file='resources/orderbook10/trades.csv')
 
+    snapshots: List[OrderBook] = []
+    trades: List[Trade] = []
+    matches = []
+    diffs = []
+
+    last_trade = False
+    for row in reader:
+      if row.symbol == 'XBTUSD':
+        if isinstance(row, OrderBook):
+          if len(snapshots) > 0:
+            diffs.append(row.diff(snapshots[-1], 3))
+          snapshots.append(row)
+          if last_trade and len(snapshots) >= 2:
+            if trades[-1].belongs_to(snapshots[-2], snapshots[-1]):
+              matches.append((trades[-1], snapshots[-2], snapshots[-1]))
+            last_trade = False
+        else:
+          trades.append(row)
+          last_trade = True
+
+
+    print('yes')

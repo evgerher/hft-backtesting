@@ -19,7 +19,7 @@ class Trade:
   def label(self) -> str:
     return f'{self.symbol} {self.side}'
 
-  def belongs_to(self, initial: 'OrderBook', target: 'OrderBook', levels:int=3, seconds_limit=15):
+  def belongs_to(self, initial: 'OrderBook', target: 'OrderBook', levels:int=3, seconds_limit=3):
     result: Tuple[str, str, np.ndarray] = target.diff(initial, levels)
     snapshot_side, pv, diff = result
     snapshot_price = initial.ask_prices[0] if snapshot_side == 'ask' else initial.bid_prices[0]
@@ -74,7 +74,8 @@ class OrderBook:
       logger.debug(f'Ask level volume altered, on depth={np.where(alv != 0)[0]}')
       return ('ask' ,'volume', alv)
 
-    return ('equal', '', np.empty(levels, np.float))
+    logger.debug('Levels are equal')
+    return ('equal', '', np.zeros(levels, np.int))
 
   def __sub__(self, other):
     return other.diff(self)
@@ -124,6 +125,7 @@ class OrderBook:
     return prices, volumes.astype(np.int)
 
   def __str__(self):
-    return f'<Snapshot :: symbol={self.symbol}, ' \
-           f'highest bid price,volume = ({self.bid_prices[0], self.bid_volumes[0]}), ' \
-           f'lowest ask price, volume = ({self.ask_prices[0], self.ask_volumes[0]})>'
+    return f'<snapshot, symbol={self.symbol}, ' \
+           f'timestamp: {self.timestamp} ' \
+           f'best bid,volume=({self.bid_prices[0], self.bid_volumes[0]}), ' \
+           f'lowest ask,volume=({self.ask_prices[0], self.ask_volumes[0]})>'

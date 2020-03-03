@@ -99,7 +99,7 @@ class ClickHouse(Connector):
       self.client.connection.ping()
 
   def save_csv(self):
-    snaps = self.client.execute('select * from snapshots __limit_snapshot 5000')
+    snaps = self.client.execute('select * from snapshots limit 5000')
     import pandas as pd
     snaps: pd.DataFrame = pd.DataFrame(snaps)
     snaps.to_csv(path_or_buf='snapshots.csv', header=False, index=False)

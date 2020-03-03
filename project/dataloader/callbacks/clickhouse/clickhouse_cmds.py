@@ -21,7 +21,7 @@ create_orderbook10 = 'CREATE TABLE IF NOT EXISTS orderbook (moment DateTime, mil
                       bv1 UInt32, bv2 UInt32, bv3 UInt32, bv4 UInt32, bv5 UInt32, bv6 UInt32, bv7 UInt32, bv8 UInt32, bv9 UInt32, bv10 UInt32) \
                       ENGINE=File(CSV) '
 
-create_trades = 'CREATE TABLE IF NOT EXISTS trades (symbol FixedString(15), moment DateTime, millis UInt16, price Float32, size UInt32, \
+create_trades = 'CREATE TABLE IF NOT EXISTS trades_orderbook (symbol FixedString(15), moment DateTime, millis UInt16, price Float32, size UInt32, \
       action FixedString(15), side FixedString(5)) \
       ENGINE=File(CSV)'
 
