@@ -5,7 +5,7 @@ from typing import Tuple
 import numpy as np
 from utils.logger import setup_logger
 
-logger = setup_logger('<data>', 'DEBUG')
+logger = setup_logger('<data>', 'INFO')
 
 
 @dataclass

@@ -39,7 +39,7 @@ class ClickHouse(Connector):
 
 
     # trade.action=partial means current values (when application is starting)
-    self.client.execute('insert into trades values', [
+    self.client.execute('insert into trades_orderbook values', [
       (
         trade.symbol,
         trade.timestamp,

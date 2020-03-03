@@ -15,14 +15,14 @@ class BitmexWS:
     logger.info("Initilized BitmexWS")
 
   def build_ws(self):
-    return websocket.WebSocketApp(f"wss://www.orderbook10.com/realtime?subscribe={self._topics}",
+    return websocket.WebSocketApp(f"wss://www.bitmex.com/realtime?subscribe={self._topics}",
                                   on_close=self._on_close,
                                   on_message=self._on_message)
 
   def _on_close(self, ws):
     logger.info("WS app closed")
     self.ws = self.build_ws()
-    self.connect()
+    # self.connect()
 
   def _on_message(self, ws, msg):
     msg_dict = json.loads(msg)

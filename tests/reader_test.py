@@ -77,5 +77,17 @@ class ReaderTest(unittest.TestCase):
           trades.append(row)
           last_trade = True
 
-
+    trades2 = list(trades)
+    matches2 = []
+    idx=-1
+    for idx in range(1, len(snapshots)):
+      diffs.append(snapshots[idx].diff(snapshots[idx - 1], 3))
+      for trade in trades2:
+        if trade.belongs_to(snapshots[idx], snapshots[idx - 1], 3):
+          matches2.append((trade, snapshots[idx - 1], snapshots[idx]))
+          idx = trades2.index(trade)
+          continue
+      if idx != -1:
+        print(idx)
+        del trades2[idx]
     print('yes')
