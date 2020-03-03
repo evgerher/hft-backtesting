@@ -1,7 +1,7 @@
 import time
 
 from dataloader.callbacks.clickhouse.clickhouse_connector import ClickHouse
-from utils.data import Bitmex_Data
+from dataloader.data_processor import Bitmex_Data
 from utils.logger import setup_logger
 from dataloader.callbacks.bitmex import BitmexWS
 
@@ -26,8 +26,8 @@ def main(db_host, db_password):
   # trade
   bot = BitmexWS(
     (
-      'orderBookL2_25:XBTUSD',
-      'orderBookL2_25:ETHUSD',
+      'orderBook10:XBTUSD',
+      'orderBook10:ETHUSD',
       'trade:.BETHXBT',
       'trade:XBTUSD',
       'trade:ETHUSD',

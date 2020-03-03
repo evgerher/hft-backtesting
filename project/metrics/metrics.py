@@ -158,3 +158,7 @@ class Lipton(InstantMetric):
     sqrt_corr = np.sqrt((1 + p_xy) / (1 - p_xy))
     p = 1. / 2 * (1. - np.arctan(sqrt_corr * (y - x) / (y + x)) / np.arctan(sqrt_corr))
     return MetricData('Lipton-unward-probability', snapshot.symbol, p)
+
+class QuickestDetection(ContinuousMetric):
+  def evaluate(self, items):
+    pass

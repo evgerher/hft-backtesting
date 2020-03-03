@@ -6,7 +6,7 @@ from utils.data import Snapshot, Trade
 from utils.logger import setup_logger
 import pandas as pd
 
-logger = setup_logger('<reader>', 'DEBUG')
+logger = setup_logger('<reader>', 'INFO')
 
 class Reader:
 
@@ -24,7 +24,7 @@ class Reader:
 
 class SnapshotReader(Reader):
 
-  def __init__(self, snapshot_file: str, trades_file: Optional[str] = None, nrows: int = 10000, stop_after: int = None, depth:int=25):
+  def __init__(self, snapshot_file: str, trades_file: Optional[str] = None, nrows: int = 10000, stop_after: int = None, pairs_to_load:int=10):
     """
     :param snapshot_file: to read
     :param trades_file: to read
@@ -38,7 +38,7 @@ class SnapshotReader(Reader):
     self._total_snapshots, self._total_trades = 0, 0
 
     self._nrows = nrows
-    self._depth =  depth
+    self._pairs_to_load =  pairs_to_load
     self.__snapshots_df: pd.DataFrame = self.__read_csv(self._snapshot_file)
     self.__limit_snapshot = len(self.__snapshots_df)
     self.__snapshot = self.__load_snapshot()
@@ -106,7 +106,7 @@ class SnapshotReader(Reader):
     timestamp, market, bids, asks = helper.snapshot_line_parser(row)
     self.__snapshot_idx += 1
 
-    return Snapshot.from_sides(timestamp, market, bids[:self._depth], asks[:self._depth])
+    return Snapshot.from_sides(timestamp, market, bids, asks, self._pairs_to_load)
 
 
   def __str__(self):

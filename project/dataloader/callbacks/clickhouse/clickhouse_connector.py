@@ -6,7 +6,7 @@ from clickhouse_driver import Client
 from dataloader.callbacks.message import TradeMessage
 from utils.logger import setup_logger
 
-logger = setup_logger("<clickhouse>", "INFO")
+logger = setup_logger("<clickhouse>", "DEBUG")
 
 
 class ClickHouse(Connector):
@@ -29,7 +29,7 @@ class ClickHouse(Connector):
     self.trades_counter = 0
 
   def store_trade(self, trade: TradeMessage):
-    logger.info(f"Insert trade: symbol={trade.symbol} {trade.size} pieces for {trade.price}, "
+    logger.debug(f"Insert trade: symbol={trade.symbol} {trade.size} pieces for {trade.price}, "
                  f"action={trade.action} on side={trade.side} @ {trade.timestamp}")
 
 
@@ -49,9 +49,9 @@ class ClickHouse(Connector):
     if self.trades_counter % 2500 == 0:
       self.client.connection.ping()
 
-  def store_snapshot(self, market, timestamp: datetime.datetime, data: list):
-    logger.info(f"Insert snapshot: {timestamp}, symbol={symbol}")
-    self.client.execute('insert into snapshots values', [[timestamp, timestamp.microsecond  // 1000, market] + data])
+  def store_snapshot(self, symbol: str, timestamp: datetime.datetime, data: list):
+    logger.debug(f"Insert snapshot: {timestamp}, symbol={symbol}")
+    self.client.execute('insert into snapshots values', [[timestamp, timestamp.microsecond  // 1000, symbol] + data])
     self.snapshot_counter += 1
 
     if self.snapshot_counter % 2500 == 0:
