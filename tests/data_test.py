@@ -1,7 +1,7 @@
 import unittest
 
 from utils import helper
-from utils.data import Snapshot
+from utils.data import OrderBook
 import sample_reader
 import numpy as np
 import datetime
@@ -13,7 +13,7 @@ class SnapshotTest(unittest.TestCase):
     line = lines[0].split(',')
     date, symbol, bids, asks = helper.snapshot_line_parser(line)
 
-    snapshot: Snapshot = Snapshot.from_sides(date, symbol, bids, asks)
+    snapshot: OrderBook = OrderBook.from_sides(date, symbol, bids, asks)
     is_sorted = True
 
     ask_price = snapshot.ask_prices[0]

@@ -12,7 +12,7 @@ class MetaMessage:
 @dataclass
 class TradeMessage:
   symbol: str
-  timestamp: datetime.datetime.timestamp
+  timestamp: datetime.datetime
   price: float
   size: int
   action: str

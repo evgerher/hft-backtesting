@@ -1,15 +1,14 @@
 import time
 
 from dataloader.callbacks.clickhouse.clickhouse_connector import ClickHouse
-from utils.data import Bitmex_Data
+from dataloader.data_processor import Bitmex_Data
+from utils.logger import setup_logger
 from dataloader.callbacks.bitmex import BitmexWS
 
 import sys
 import getopt
 
-import logging
-logging.basicConfig()
-logging.getLogger().setLevel(logging.INFO)
+logger = setup_logger('<dataloader>')
 
 finished = False
 
@@ -20,18 +19,18 @@ def main(db_host, db_password):
   # kdb_connector.start()
 
   clickhouse_connector = ClickHouse(db_host=db_host, db_pwd=db_password)
-  logging.info("Start app")
+  logger.info("Start app")
 
   dataprocessor = Bitmex_Data(clickhouse_connector)
   # .BETHXBT
   # trade
   bot = BitmexWS(
     (
-      'orderBookL2_25:XBTUSD',
-      'orderBookL2_25:ETHUSD',
+      'orderBook10:XBTUSD',
+      'orderBook10:ETHUSD',
       'trade:.BETHXBT',
       'trade:XBTUSD',
-      'trade:ETHUSD'
+      'trade:ETHUSD',
     ), dataprocessor.callback)
   # bot = BitmexWS(('trade:.BETHXBT',), kdb.callback)
   bot.connect()
@@ -40,7 +39,7 @@ def main(db_host, db_password):
     while not finished:
       time.sleep(1)
   finally:
-    logging.info("Closing client")
+    logger.info("Closing client")
     bot.close()
     finished = True
     # kdb_connector.close()
@@ -62,8 +61,7 @@ if __name__ == '__main__':
     for opt, arg in opts:
       if opt in ("--help"):
         print(
-          'Dataloader starts to retrieve snapshots of BTCUSD and ETHUSD on startup from BITMEX exchange\n',
-          'Stores snapshots on each delta received into kdb+\n',
-          'Must be run with `pyq` interpreter.'
+          'Dataloader starts to retrieve snapshots of BTCUSD (XBTUSD) and ETHUSD on startup from BITMEX exchange\n',
+          'Stores snapshots on each delta received into clickhouse server',
         )
         sys.exit(0)

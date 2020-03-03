@@ -54,19 +54,19 @@ class KDB_Connector(Connector):
         self._index_counter = 0
 
   def generate_csv_file(self, name):
-    dt = datetime.datetime.now()
+    dt = datetime.datetime.utcnow()
     return f'{name}-{dt.day}.{dt.month}.{dt.year}:{dt.hour}:{dt.minute}:{dt.second}.csv'
 
-  def _store_snapshot(self, market, data, timestamp:datetime.datetime.timestamp):
+  def _store_snapshot(self, market, data, timestamp:datetime.datetime):
     # 1 - timestamp; 2 - symbol; 3-102 - snapshot
     # 3-52: (price size) pairs Sell
     # 53-102: (price size) pairs Buy
 
-    msg = f'({timestamp.strftime("%Y.%m.%dD%H:%M:%S.%f")}; `{market}; {str(tuple(data)).replace(",", ";")[1:-1]})'
+    msg = f'({timestamp.strftime("%Y.%m.%dD%H:%M:%S.%f")}; `{symbol}; {str(tuple(data)).replace(",", ";")[1:-1]})'
 
     # q(f'`snapshot_table upsert {msg}')
     q(f'upd[`snapshot_table;{msg}]')
-    # self.h(tuple(['insert_snapshot', timestamp, market] + data))
+    # self.h(tuple(['insert_snapshot', timestamp, symbol] + data))
     # logging.debug(f'{self.snapshot_counter}: Stored in KDB')
     self.snapshot_counter += 1
 
