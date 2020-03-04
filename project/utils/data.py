@@ -16,16 +16,24 @@ class Trade:
   price: float
   volume: int
 
+  def __hash__(self):
+    return hash(self.timestamp)
+
   def label(self) -> str:
     return f'{self.symbol} {self.side}'
 
   def belongs_to(self, initial: 'OrderBook', target: 'OrderBook', levels:int=3, seconds_limit=3):
     result: Tuple[str, str, np.ndarray] = target.diff(initial, levels)
     snapshot_side, pv, diff = result
+
+    if diff[0] == 0:
+      return False
+
     snapshot_price = initial.ask_prices[0] if snapshot_side == 'ask' else initial.bid_prices[0]
-    volume_total = np.sum([diff[0]])
+    volume_total = np.sum(diff)
 
     trade_side = 'bid' if self.side == 'Sell' else 'ask'
+    price_condition = self.price >= snapshot_price if trade_side is 'ask' else self.price <= snapshot_price
 
     # if snapshot_side in 'ask':
     #   pass
@@ -33,11 +41,9 @@ class Trade:
     #   pass
 
     return snapshot_side == trade_side \
-        and volume_total == self.volume \
+        and np.abs(volume_total) == self.volume \
         and snapshot_price == self.price \
         and (self.timestamp - initial.timestamp).seconds < seconds_limit
-
-
 
 
 @dataclass
@@ -129,3 +135,7 @@ class OrderBook:
            f'timestamp: {self.timestamp} ' \
            f'best bid,volume=({self.bid_prices[0], self.bid_volumes[0]}), ' \
            f'lowest ask,volume=({self.ask_prices[0], self.ask_volumes[0]})>'
+
+
+class OrderBookPandas(OrderBook):
+  pass

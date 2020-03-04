@@ -55,39 +55,34 @@ class ReaderTest(unittest.TestCase):
     print('yes')
 
   def test_orderbook_reader(self):
-    reader: Reader = OrderbookReader('resources/orderbook10/orderbook.csv', trades_file='resources/orderbook10/trades.csv')
+    reader: Reader = OrderbookReader('resources/orderbook10/orderbook.csv.gz',
+                                     trades_file='resources/orderbook10/trades.csv.gz',
+                                     stop_after=10000, pairs_to_load=5)
 
-    snapshots: List[OrderBook] = []
     trades: List[Trade] = []
-    matches = []
-    diffs = []
 
+    matches = []
+    snapshot1 = None
+    snapshot2 = None
+    snapshots = []
     last_trade = False
+    suspicious = []
     for row in reader:
       if row.symbol == 'XBTUSD':
         if isinstance(row, OrderBook):
-          if len(snapshots) > 0:
-            diffs.append(row.diff(snapshots[-1], 3))
-          snapshots.append(row)
-          if last_trade and len(snapshots) >= 2:
-            if trades[-1].belongs_to(snapshots[-2], snapshots[-1]):
-              matches.append((trades[-1], snapshots[-2], snapshots[-1]))
+          snapshot1 = snapshot2
+          snapshot2 = row
+          if last_trade and snapshot1 is not None:
+            if trades[-1].belongs_to(snapshot1, snapshot2):
+              matches.append((trades[-1], snapshot1, snapshot2))
+            else:
+              suspicious.append((trades[-1], snapshot1, snapshot2))
             last_trade = False
+          snapshots.append(row)
         else:
           trades.append(row)
           last_trade = True
 
-    trades2 = list(trades)
-    matches2 = []
-    idx=-1
-    for idx in range(1, len(snapshots)):
-      diffs.append(snapshots[idx].diff(snapshots[idx - 1], 3))
-      for trade in trades2:
-        if trade.belongs_to(snapshots[idx], snapshots[idx - 1], 3):
-          matches2.append((trade, snapshots[idx - 1], snapshots[idx]))
-          idx = trades2.index(trade)
-          continue
-      if idx != -1:
-        print(idx)
-        del trades2[idx]
-    print('yes')
+    matched_trades = [x[0] for x in matches]
+    non_matched_trades = sorted(list(set(trades) - set(matched_trades)), key=lambda x: x.timestamp)
+    print('matches={}, trades={}, non_matched_trades={}'.format(len(matches), len(trades), len(non_matched_trades)))
