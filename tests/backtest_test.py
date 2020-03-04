@@ -59,7 +59,7 @@ class BacktestTest(unittest.TestCase):
 
 
   def test_all_metrics(self):
-    reader = readers.SnapshotReader('resources/trade/snapshots.csv.gz', trades_file='resources/trade/trades.csv.gz', stop_after=10000, depth=10)
+    reader = readers.SnapshotReader('resources/trade/snapshots.csv.gz', trades_file='resources/trade/trades.csv.gz', stop_after=10000, pairs_to_load=5)
     # todo: optimize return metrics (do not waste time on wrapping each -> transform into tuple of values with one header
     callables = [
       ('trades volume', lambda trades: sum(map(lambda x: x.volume, trades))),
@@ -76,4 +76,29 @@ class BacktestTest(unittest.TestCase):
 
     self.assertEqual(len(output.metrics), 46336)
 
+  def test_load_orderbooks_and_floats(self):
+    reader = readers.OrderbookReader('resources/orderbook10/orderbook.csv.gz',
+                                     'resources/orderbook10/trades.csv.gz',
+                                     pairs_to_load=5)
 
+    callables = [
+      ('trades volume', lambda trades: sum(map(lambda x: x.volume, trades))),
+      ('trades length', lambda trades: len(trades))
+    ]
+
+    instant_metrics = [
+      VWAP_depth(3),
+      VWAP_volume(volume=int(1e5))
+    ]
+    instant_metric_names = [metric.names() for metric in instant_metrics]
+
+    time_metrics = [TimeMetric(callables, 60), TimeMetric(callables, 30)]
+
+    simulation = Simulation(instant_metrics, time_metrics=time_metrics)
+    output = TestOutput(instant_metric_names=instant_metric_names,
+                        time_metric_names=[metric.metric_names for metric in time_metrics])
+    backtester = backtest.Backtest(reader, simulation, output)
+
+    backtester.run()
+
+    self.assertEqual(True, True)

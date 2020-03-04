@@ -1,4 +1,5 @@
 import datetime
+import pandas
 from dataclasses import dataclass
 from typing import Tuple
 
@@ -15,6 +16,9 @@ class Trade:
   side: str
   price: float
   volume: int
+gi
+  def to_list(self):
+    return [self.symbol, self.timestamp, self.side, self.price, self.volume]
 
   def __hash__(self):
     return hash(self.timestamp)
@@ -137,5 +141,28 @@ class OrderBook:
            f'lowest ask,volume=({self.ask_prices[0], self.ask_volumes[0]})>'
 
 
+from utils import helper
+
 class OrderBookPandas(OrderBook):
-  pass
+
+  def __init__(self, series: pandas.Series, levels:int=5):
+    self.levels = levels
+    self._series = series
+
+  def symbol(self):
+    return self._series[2]
+
+  def timestamp(self):
+    return helper.convert_to_datetime(self._series[0]) + datetime.timedelta(milliseconds=int(self._series[1]))
+
+  def ask_prices(self):
+    return self._series[3:3+self.levels]
+
+  def ask_volumes(self):
+    return self._series[13:13+self.levels]
+
+  def bid_prices(self):
+    return self._series[23:23+self.levels]
+
+  def bid_volumes(self):
+    return self._series[33:33+self.levels]

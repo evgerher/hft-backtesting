@@ -13,12 +13,15 @@ class MetricData:
 
 
 class Metric:
-  def evaluate(self, *args) -> 'MetricData':
-    pass
+  # def evaluate(self, *args) -> 'MetricData':
+  def evaluate(self, *args) -> float:
+      pass
 
 class InstantMetric(Metric):
-  def evaluate(self, *args) -> List['MetricData']:
-    pass
+  def evaluate(self, *args) -> List[float]:
+  # def evaluate(self, *args) -> List['MetricData']:
+
+      pass
 
 class ContinuousMetric:
 
@@ -36,49 +39,58 @@ class CompositeMetric:
     pass
 
 class TimeMetric(Metric):
-  def __init__(self, callable: List[Tuple[str, Callable[[List[Trade]], float]]], seconds=60, starting_moment: datetime.datetime = None):
-    self._seconds = seconds
+  def __init__(self, callables: List[Tuple[str, Callable[[List[Trade]], float]]],
+               seconds=60,
+               starting_moment: datetime.datetime = None):
+    self.metric_names: List[str] = [f'{c[0]}_{seconds}' for c in callables]
+    self.seconds = seconds
     self._storage: Dict[str, Deque[Trade]] = defaultdict(deque)
-    self._callables: List[Tuple[str, Callable[[List[Trade]], float]]] = callable
+    self._callables: List[Callable[[List[Trade]], float]] = [c[1] for c in callables]
     self._from: datetime.datetime = starting_moment
     self._skip_from = False
 
-  def evaluate(self, trade: Trade) -> List[MetricData]:
+  def evaluate(self, trade: Trade) -> List[float]:
     target: Deque[Trade] = self._storage[trade.label()]
     target.append(trade)
 
     if not self._skip_from:
-      if (trade.timestamp - self._from).seconds >= self._seconds:
+      if (trade.timestamp - self._from).seconds >= self.seconds:
         self._skip_from = True
       metrics = []
-      for _callable in self._callables:
-        metrics.append(MetricData(f'TimeMetric {_callable[0]}', trade.label(), -1.0))
-      return metrics
+      # for _callable in self._callables:
+      #   metrics.append(MetricData(f'TimeMetric {_callable[0]}', trade.label(), -1.0))
+      return [-1.0] * len(self._callables)
     else:
-      while (trade.timestamp - target[0].timestamp).seconds >= self._seconds:
+      while (trade.timestamp - target[0].timestamp).seconds >= self.seconds:
         target.popleft()
 
       metrics = []
       for _callable in self._callables:
-        metrics.append(MetricData(f'TimeMetric {_callable[0]}', trade.label(), _callable[1](target)))
+      #   metrics.append(MetricData(f'TimeMetric {_callable[0]}', trade.label(), _callable[1](target)))
+        metrics.append(_callable(target))
+
       return metrics
 
   def set_starting_moment(self, moment: datetime.datetime):
     self._from = moment
 
   def __str__(self):
-    return f'Time metric seconds={self._seconds}'
+    return f'Time metric seconds={self.seconds}'
 
 class _VWAP(InstantMetric):
 
-  def evaluate(self, snapshot: OrderBook):
+  def names(self) -> List[str]:
+    return [f'{self.__str__()} bid', f'{self.__str__()} ask', f'{self.__str__()} midpoint']
+
+  def evaluate(self, snapshot: OrderBook) -> List[float]:
     vwap_bid, vwap_ask = self.VWAP_bid(snapshot), self.VWAP_ask(snapshot)
     midpoint = self.VWAP_midpoint(vwap_bid, vwap_ask)
-    return (
-      MetricData(f'{self.__str__()} bid', snapshot.symbol, vwap_bid),
-      MetricData(f'{self.__str__()} ask', snapshot.symbol, vwap_ask),
-      MetricData(f'{self.__str__()} midpoint', snapshot.symbol, midpoint)
-    )
+    # return (
+    #   MetricData(f'{self.__str__()} bid', snapshot.symbol, vwap_bid),
+    #   MetricData(f'{self.__str__()} ask', snapshot.symbol, vwap_ask),
+    #   MetricData(f'{self.__str__()} midpoint', snapshot.symbol, midpoint)
+    # )
+    return [vwap_bid, vwap_ask, midpoint]
 
   def _evaluate_side(self, prices: np.array, volumes: np.array) -> float:
     pass
@@ -118,7 +130,7 @@ class VWAP_depth(_VWAP):
 class VWAP_volume(_VWAP):
 
   def __str__(self):
-    return f'<VWAP (Volume): {self.volume} for symbol: {self.symbol}>'
+    return f'<VWAP (Volume): {self.volume}>'
 
   def __init__(self, volume: int = 1e6, symbol: str = None):
     self.volume = volume
@@ -126,15 +138,17 @@ class VWAP_volume(_VWAP):
 
   def _evaluate_side(self, prices: np.array, volumes: np.array) -> float: # todo: test
     total_volumes: int = 0
-    weighted_price: float = 0
     i = 0
 
+    weights = []
     while total_volumes < self.volume and i + 1 < len(volumes):
       _volume_taken = min(self.volume - total_volumes, volumes[i + 1])
       total_volumes += _volume_taken
-      weighted_price += prices[i] * (_volume_taken * 1.0 / self.volume)
+      weights.append(_volume_taken * 1.0 / self.volume)
       i += 1
-    return weighted_price
+
+    weights = np.array(weights)
+    return np.sum(prices[:len(weights)] * weights) / np.sum(weights)
 
 class Lipton(InstantMetric):
   def bidask_imbalance(self, snapshot: OrderBook):

@@ -1,8 +1,8 @@
 import datetime
 from dataclasses import dataclass
-from typing import List, Deque, Dict, Tuple, Optional
+from typing import List, Deque, Dict, Tuple, Optional, Union
 
-from utils.data import OrderBook
+from utils.data import OrderBook, Trade
 from metrics.metrics import InstantMetric, MetricData, TimeMetric
 from metrics.filters import Filters
 
@@ -17,7 +17,7 @@ class Simulation:
   # delay = 1e-3  # 1 msec delay from my laptop
 
   def __init__(self, instant_metrics: List[InstantMetric],
-               filters: List[Filters.Filter], time_metrics: Optional[List[TimeMetric]] = None, delay = 400e-6):
+               filters: List[Filters.Filter] = (Filters.DepthFilter(3), ), time_metrics: Optional[List[TimeMetric]] = None, delay = 400e-6):
     """
 
     :param instant_metrics:
@@ -29,11 +29,14 @@ class Simulation:
     self.time_metrics: List[TimeMetric] = time_metrics if time_metrics is not None else []
     self._delay: int = delay
 
-
   def trigger(self, row: OrderBook,
-              memory: Dict[str, Deque[OrderBook]],
-              metrics: Dict[Tuple[str, str], Deque[Tuple[datetime.datetime, MetricData]]],
-              trades) -> List: # todo: define type later on
+              memory: Dict[Tuple[str], Deque[Tuple[datetime.datetime, Union[OrderBook, Trade]]]],
+              # (symbol) -> (timestamp, instant-metric-values)
+              snapshot_instant_metrics: Dict[Tuple[str], Deque[Tuple[datetime.datetime, List[float]]]],
+              # (symbol, action, window-size) -> (timestamp, time-metric-values)
+              trade_time_metrics: Dict[Tuple[str, str, int], Deque[Tuple[datetime.datetime, List[float]]]],
+              # (symbol, action) -> (timestamp, Trade)
+              trades: Dict[Tuple[str, str], Deque[Tuple[datetime.datetime, Trade]]]) -> List: # todo: define type later on
     pass
 
 

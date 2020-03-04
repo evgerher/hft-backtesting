@@ -4,3 +4,4 @@ __pycache__/
 .idea/
 .DS_Store
 dataloader/config.py
+*.ipynb_checkpoints/
