@@ -1,11 +1,16 @@
 import datetime
+from collections import defaultdict
 
-from utils.data import OrderBook
+from utils.data import OrderBook, Trade
 from metrics.metrics import MetricData
 
 
 class Output:
-  def consume(self, timestamp: datetime.datetime, object):
+  def __init__(self, instant_metric_names=None, time_metric_names=None):
+    self.instant_metric_names = instant_metric_names
+    self.time_metric_names = time_metric_names
+
+  def consume(self, labels, timestamp: datetime.datetime, object):
     """
 
     :param timestamp:
@@ -13,13 +18,16 @@ class Output:
     :return:
     """
 
-    if isinstance(object, OrderBook):
+    if 'trade' in labels:
+      self.trade_action(timestamp, object)
+    elif 'snapshot' in labels:
       self.snapshot_action(timestamp, object)
-
-    if isinstance(object, MetricData):
-      self.metric_action(timestamp, object)
-
-    self.additional_action(timestamp, object)
+    elif 'trade-time-metric' in labels:
+      self.time_metric_action(timestamp, labels, object)
+    elif 'snapshot-instant-metric' in labels:
+      self.instant_metric_action(timestamp, labels, object)
+    else:
+      self.additional_action(timestamp, labels, object)
 
   def snapshot_action(self, timestamp: datetime.datetime, object):
     pass
@@ -27,21 +35,39 @@ class Output:
   def metric_action(self, timestamp: datetime.datetime, object):
     pass
 
-  def additional_action(self, timestamp: datetime.datetime, object):
+  def trade_action(self, timestamp: datetime.datetime, object: Trade):
+    pass
+
+  def additional_action(self, timestamp: datetime.datetime, labels, object):
+    pass
+
+  def instant_metric_action(self, timestamp, labels, object):
+    pass
+
+  def time_metric_action(self, timestamp, labels, object):
     pass
 
 
 class TestOutput(Output):
-  def __init__(self):
+  def __init__(self, instant_metric_names, time_metric_names):
+    super().__init__(instant_metric_names, time_metric_names)
     self.snapshots = []
-    self.metrics = []
+    self.instant_metrics = defaultdict(list)
+    self.time_metrics = defaultdict(list)
     self.others = []
+    self.trades = []
 
-  def snapshot_action(self, timestamp: datetime.datetime, object):
+  def time_metric_action(self, timestamp, labels, object):
+    self.time_metrics[tuple(labels)].append((timestamp, object))
+
+  def snapshot_action(self, timestamp: datetime.datetime, object: OrderBook):
     self.snapshots.append((timestamp, object))
 
-  def metric_action(self, timestamp: datetime.datetime, object):
-    self.metrics.append((timestamp, object))
+  def instant_metric_action(self, timestamp, labels, object):
+    self.instant_metrics[tuple(labels)].append((timestamp, object))
 
-  def additional_action(self, timestamp: datetime.datetime, object):
-    self.others.append((timestamp, object))
+  def trade_action(self, timestamp: datetime.datetime, object: Trade):
+    self.trades.append((timestamp, object))
+
+  def additional_action(self, timestamp: datetime.datetime, labels, object):
+    self.others.append((timestamp, labels, object))

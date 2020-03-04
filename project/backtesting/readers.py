@@ -41,15 +41,18 @@ class SnapshotReader(Reader):
     self._pairs_to_load =  pairs_to_load
     self._snapshots_df: pd.DataFrame = self.__read_csv(self._snapshot_file)
     self.__limit_snapshot = len(self._snapshots_df)
-    self.__snapshot = self._load_snapshot()
+    self._snapshot = self._load_snapshot()
 
 
+    self.__finished_trades = self._trades_file is None
     if self._trades_file is not None:
       self.__trades_df: pd.DataFrame = self.__read_csv(self._trades_file)
-      self.__limit_trades = len(self.__trades_df)
-      self.__trade = self.__load_trade()
+      self._limit_trades = len(self.__trades_df)
+      self._trade = self.__load_trade()
 
 
+
+    self._read_first_trades = True
     self.__stop_after = stop_after
 
     super().__init__(helper.convert_to_datetime(self.__trades_df.iloc[0, 1]))
@@ -79,27 +82,40 @@ class SnapshotReader(Reader):
       self._snapshots_df, self.__limit_snapshot = self.__update_df(self._snapshot_file, self._snapshot_idx)
       self._snapshot_idx = 0
 
+    if (self._limit_trades != self._nrows and self._trades_idx == self._limit_trades):
+      self._total_trades += self._trades_idx
+      logger.debug(f"Finished trades_file {self._trades_file}, read {self._total_trades} rows")
+      self.__finished_trades = True
+
     if self._trades_idx + 1 >= self._nrows:
       self._total_trades += self._trades_idx
-      self.__trades_df, self.__limit_trades = self.__update_df(self._trades_file, self._trades_idx)
+      self.__trades_df, self._limit_trades = self.__update_df(self._trades_file, self._trades_idx)
       self._trades_idx = 0
-
 
     # select whom to return
 
-    if self._trades_file is not None and self.__trade.timestamp <= self.__snapshot.timestamp:
-      trade = self.__trade
-      self.__trade = self.__load_trade()
+    if self._read_first_trades or (
+        not self.__finished_trades
+        and self._trade.timestamp == self._snapshot.timestamp
+        and self._trade.symbol == self._snapshot.symbol): # todo: here I loose the last trade in buffer
+      trade = self._trade
+      self._trade = self.__load_trade()
+
+      if self._read_first_trades and self._trade.timestamp >= self._snapshot.timestamp:
+        self._read_first_trades = False
+
       return trade
     else:
-      snapshot = self.__snapshot
-      self.__snapshot = self._load_snapshot()
+      snapshot = self._snapshot
+      self._snapshot = self._load_snapshot()
       return snapshot
 
   def __load_trade(self) -> Trade:
-    row: pd.Series = self.__trades_df.iloc[self._trades_idx, :]
-    self._trades_idx += 1
-    return helper.trade_line_parser(row)
+    if not self.__finished_trades:
+      row: pd.Series = self.__trades_df.iloc[self._trades_idx, :]
+      self._trades_idx += 1
+      return helper.trade_line_parser(row)
+    return self._trade
 
   def _load_snapshot(self) -> OrderBook:
     row: pd.Series = self._snapshots_df.iloc[self._snapshot_idx, :]
@@ -110,7 +126,7 @@ class SnapshotReader(Reader):
 
 
   def __str__(self):
-    return f'<Snapshot reader on snapshot_file={self._snapshot_file}, ' \
+    return f'<snapshot-reader on snapshot_file={self._snapshot_file}, ' \
            f'trades_file={self._trades_file}, ' \
            f'batch_nrows={self._nrows}>'
 
@@ -119,9 +135,9 @@ class OrderbookReader(SnapshotReader):
   def _load_snapshot(self) -> OrderBook:
     row: pd.Series = self._snapshots_df.iloc[self._snapshot_idx, :]
     self._snapshot_idx += 1
-    return helper.orderbook_line_parse(row)
+    return helper.orderbook_line_parse(row, self._pairs_to_load)
 
   def __str__(self):
-    return f'<Orderbook reader on orderbook_file={self._snapshot_file}, ' \
+    return f'<orderbook-reader on orderbook_file={self._snapshot_file}, ' \
            f'trades_file={self._trades_file}, ' \
            f'batch_nrows={self._nrows}>'
