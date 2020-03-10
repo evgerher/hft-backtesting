@@ -1,12 +1,12 @@
 import datetime
-import pandas
+# import pandas
 from typing import List, Union
 import numpy as np
 
 from utils.data import Trade, OrderBook
 
 
-def snapshot_line_parser(line: Union[List, pandas.Series], length:int=100):
+def snapshot_line_parser(line: Union[List], length:int=100):
   assert len(line) == length + 3
   millis = int(line[1])
   date = convert_to_datetime(line[0])
@@ -20,7 +20,7 @@ def snapshot_line_parser(line: Union[List, pandas.Series], length:int=100):
   return date, symbol, bids, asks
 
 
-def orderbook_line_parse(line: pandas.Series, depth:int=10) -> OrderBook:
+def orderbook_line_parse(line, depth:int=10) -> OrderBook:
   millis = int(line[1])
   date = convert_to_datetime(line[0])
   date = date + datetime.timedelta(milliseconds=millis)
@@ -33,7 +33,7 @@ def orderbook_line_parse(line: pandas.Series, depth:int=10) -> OrderBook:
 
   return OrderBook(symbol, date, bp, bv, ap, av)
 
-def trade_line_parser(line: Union[List, pandas.Series]) -> Trade:
+def trade_line_parser(line: Union[List]) -> Trade:
   symbol = line[0]
   moment = convert_to_datetime(line[1])
   millis = int(line[2])

@@ -1,5 +1,4 @@
 import datetime
-import pandas
 from dataclasses import dataclass
 from typing import Tuple, List
 
@@ -147,7 +146,7 @@ from utils import helper
 
 class OrderBookPandas(OrderBook):
 
-  def __init__(self, series: pandas.Series, levels:int=5):
+  def __init__(self, series, levels:int=5):
     self.levels = levels
     self._series = series
 
