@@ -1,13 +1,13 @@
 from backtesting.output import Output
 from backtesting.readers import Reader
-from backtesting.trade_simulation import Strategy
+from backtesting.trade_simulation import Strategy, OrderRequest, OrderStatus
 from utils.data import OrderBook, Trade
 from utils.logger import setup_logger
-from metrics.metrics import MetricData
 
 import datetime
 from typing import Dict, List, Deque, Optional, Tuple, Union
 from collections import defaultdict, deque
+import random
 
 
 logger = setup_logger('<backtest>', 'INFO')
@@ -18,7 +18,9 @@ class Backtest:
   def __init__(self, reader: Reader,
                simulation: Strategy,
                output: Optional[Output] = None,
-               time_horizon:int=120):
+               order_position_policy: str = 'top', # 'random' or 'bottom'
+               time_horizon:int=120,
+               seed=1337):
     """
 
     :param reader:
@@ -41,6 +43,23 @@ class Backtest:
     self.trades: Dict[Tuple[str, str], Deque[Tuple[datetime.datetime, Trade]]] = defaultdict(deque)
     self.output: Output = output
 
+    # (symbol, side, price) -> List[(order_id, position)]
+    self.simulated_trades: Dict[Tuple[str, str, float], List[Tuple[int, float]]] = defaultdict(list)
+    # id -> request
+    self.simulated_trades_id: Dict[int, OrderRequest] = {}
+
+    if order_position_policy == 'top':
+      policy = lambda: 1.0
+    elif order_position_policy == 'bottom':
+      policy = lambda: 0.0
+    elif order_position_policy == 'random':
+      r = random.Random()
+      r.seed(seed)
+      policy = lambda: r.uniform(0.0, 1.0)
+    else:
+      policy = lambda: 1.0
+
+    self._generate_initial_position = policy
     self.__initialize_time_metrics()
 
     logger.info(f"Initialized {self}")
@@ -57,22 +76,39 @@ class Backtest:
 
     logger.info(f'Backtest initialize run')
     for row in self.reader:
+      actions = None
       if type(row) is OrderBook:
         if not _filter_snapshot(row):
           continue
         # self._update_memory(row)
         self._update_metrics(row)
-        actions = self.simulation.trigger(row, self.memory, self.snapshot_instant_metrics, self.trade_time_metrics, self.trades)
-        if actions is not None:
-          self._process_actions(actions)
-      elif type(row) is Trade:
+        actions = self.simulation.trigger_snapshot(row,
+                                                   self.memory, self.snapshot_instant_metrics,
+                                                   self.trade_time_metrics, self.trades)
+      elif type(row) is Trade: # it must be cumulative trade if any
         self._update_trades(row)
-        actions = self.simulation.trigger(row, self.memory, self.snapshot_instant_metrics, self.trade_time_metrics, self.trades)
-        if actions is not None:
-          self._process_actions(actions)
+        statuses = self._evaluate_statuses()
+        actions = self.simulation.trigger_trade(row, statuses,
+                                                self.memory, self.snapshot_instant_metrics,
+                                                self.trade_time_metrics, self.trades)
+
+      if actions is not None:
+        self._process_actions(actions)
 
     # self._flush_last()
     logger.info(f'Backtest finished run')
+
+  def _evaluate_statuses(self) -> List[OrderStatus]:
+    pass
+
+  def _process_actions(self, actions: List[OrderRequest]):
+    for action in actions:
+      if action.command == 'new':
+        self.simulated_trades[action.label()] = (action.id, action.volume, self._generate_initial_position())
+        self.simulated_trades_id[action.id] = action
+      elif action.command == 'delete':
+        order = self.simulated_trades_id.pop(action.id)
+        del self.simulated_trades[order.label()]
 
   def __initialize_time_metrics(self):
     for metric in self.simulation.time_metrics:
@@ -122,7 +158,6 @@ class Backtest:
   def _update_metrics(self, row: OrderBook):
     logger.debug(f'Update metrics with snapshot symbol={row.symbol} @ {row.timestamp}')
 
-    values: List = []
     for instant_metric in self.simulation.instant_metrics:
       values = instant_metric.evaluate(row)
 
@@ -130,11 +165,8 @@ class Backtest:
       metric_deque: Deque[(datetime.datetime, List[float])] = self.snapshot_instant_metrics[metric_name]
       metric_deque.append((row.timestamp, values))
 
-    self._flush_output(['snapshot-instant-metric', *metric_name], row.timestamp, values)
+      self._flush_output(['snapshot-instant-metric', *metric_name], row.timestamp, values)
     self.__remove_old_metric('snapshot-instant-metric', row.timestamp)
-
-  def _process_actions(self, actions: List):
-    pass
 
   def _flush_last(self):
     """

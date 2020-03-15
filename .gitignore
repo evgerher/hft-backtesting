@@ -5,3 +5,6 @@ __pycache__/
 .DS_Store
 dataloader/config.py
 *.ipynb_checkpoints/
+tests/resources/huge_dataset/
+tests/resources/logs.txt
+tests/tmp.py
