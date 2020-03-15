@@ -6,8 +6,9 @@ from utils.logger import setup_logger
 
 import datetime
 from typing import Dict, List, Deque, Optional, Tuple, Union
-from collections import defaultdict, deque
+from collections import defaultdict, deque, OrderedDict
 import random
+import numpy as np
 
 
 logger = setup_logger('<backtest>', 'INFO')
@@ -43,8 +44,8 @@ class Backtest:
     self.trades: Dict[Tuple[str, str], Deque[Tuple[datetime.datetime, Trade]]] = defaultdict(deque)
     self.output: Output = output
 
-    # (symbol, side, price) -> List[(order_id, position)]
-    self.simulated_trades: Dict[Tuple[str, str, float], List[Tuple[int, float]]] = defaultdict(list)
+    # (symbol, side) -> price -> List[(order_id, volume-left, consumption-ratio)]
+    self.simulated_trades: Dict[Tuple[str, str], OrderedDict[float, List[Tuple[int, float, float]]]] = defaultdict(lambda: defaultdict(list))
     # id -> request
     self.simulated_trades_id: Dict[int, OrderRequest] = {}
 
@@ -87,7 +88,7 @@ class Backtest:
                                                    self.trade_time_metrics, self.trades)
       elif type(row) is Trade: # it must be cumulative trade if any
         self._update_trades(row)
-        statuses = self._evaluate_statuses()
+        statuses = self._evaluate_statuses(row)
         actions = self.simulation.trigger_trade(row, statuses,
                                                 self.memory, self.snapshot_instant_metrics,
                                                 self.trade_time_metrics, self.trades)
@@ -98,17 +99,64 @@ class Backtest:
     # self._flush_last()
     logger.info(f'Backtest finished run')
 
-  def _evaluate_statuses(self) -> List[OrderStatus]:
-    pass
+  def _evaluate_statuses(self, trade: Trade) -> List[OrderStatus]:
+    """
+    Trade simulation unit
+    :param trade:
+    :return:
+    """
+    statuses = []
+    orders = self.simulated_trades[(trade.symbol, trade.side)]
+
+    if len(orders) > 0:
+      # order_id, volume - left, consumption - ratio
+      sorted_orders: List[float, Tuple[int, float, float]] = list(sorted(orders.items(), key=lambda x: x[0]))
+      # prices, orders = zip(*orders)
+
+      for price, order_requests in sorted_orders:
+        for idx, (order_id, volume_left, consumption) in enumerate(order_requests):
+          order: OrderRequest = self.simulated_trades[order_id]
+          if (trade.side == 'Buy' and order.side == 'bid' and order.price >= trade.price) or \
+              (trade.side == 'Sell' and order.side == 'ask' and order.price <= trade.price):
+
+            if volume_left != 0:
+              volume_left = max(0, volume_left - trade.volume)
+              orders[order.price][idx] = (order_id, volume_left, consumption)
+            else:
+              consumption += float(trade.volume) / order.volume / 6.0               # HERE ARE 15%
+              if consumption >= 1.0:  # order is executed
+                finished = OrderStatus.finish(order_id, trade.timestamp)
+                statuses.append(finished)
+                del orders[order.price][idx]
+                del self.simulated_trades_id[order.id]
+              else:
+                orders[order.price][idx] = (order_id, volume_left, consumption)
+
+    return statuses
 
   def _process_actions(self, actions: List[OrderRequest]):
     for action in actions:
       if action.command == 'new':
-        self.simulated_trades[action.label()] = (action.id, action.volume, self._generate_initial_position())
+        symbol, side, price = action.label()
+        orderbook = self.memory[symbol]
+        if side == 'bid':
+          prices = orderbook.bid_prices
+          volumes = orderbook.bid_volumes
+        elif side == 'ask':
+          prices = orderbook.ask_prices
+          volumes = orderbook.ask_volumes
+        else:
+          raise KeyError("wrong side")
+
+        idx = np.where(prices == price)[0]
+        level_volume = volumes[idx]
+
+        self.simulated_trades[(symbol, side)][price].append((action.id, self._generate_initial_position() * level_volume, 0.0))
         self.simulated_trades_id[action.id] = action
       elif action.command == 'delete':
         order = self.simulated_trades_id.pop(action.id)
-        del self.simulated_trades[order.label()]
+        symbol, side, price = order.label()
+        self.simulated_trades[(symbol, side)][price].remove(order)
 
   def __initialize_time_metrics(self):
     for metric in self.simulation.time_metrics:
