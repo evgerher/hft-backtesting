@@ -14,16 +14,16 @@ create_snapshots = 'CREATE TABLE IF NOT EXISTS snapshots (moment DateTime, milli
                    x97 UInt32,x98 Float32,x99 UInt32) \
                    ENGINE=File(CSV) '
 
-create_orderbook10 = 'CREATE TABLE IF NOT EXISTS orderbook (moment DateTime, millis UInt16, symbol FixedString(10), \
+create_orderbook10 = 'CREATE TABLE IF NOT EXISTS orderbook_10_03_20 (moment DateTime, millis UInt16, symbol FixedString(10), \
                       a1 Float32, a2 Float32, a3 Float32, a4 Float32, a5 Float32, a6 Float32, a7 Float32, a8 Float32, a9 Float32, a10 Float32, \
                       av1 UInt32, av2 UInt32, av3 UInt32, av4 UInt32, av5 UInt32, av6 UInt32, av7 UInt32, av8 UInt32, av9 UInt32, av10 UInt32, \
                       b1 Float32, b2 Float32, b3 Float32, b4 Float32, b5 Float32, b6 Float32, b7 Float32, b8 Float32, b9 Float32, b10 Float32, \
                       bv1 UInt32, bv2 UInt32, bv3 UInt32, bv4 UInt32, bv5 UInt32, bv6 UInt32, bv7 UInt32, bv8 UInt32, bv9 UInt32, bv10 UInt32) \
                       ENGINE=File(CSV) '
 
-create_trades = 'CREATE TABLE IF NOT EXISTS trades_orderbook (symbol FixedString(15), moment DateTime, millis UInt16, price Float32, size UInt32, \
+create_trades = 'CREATE TABLE IF NOT EXISTS trades_orderbook_10_03_20 (symbol FixedString(15), moment DateTime, millis UInt16, price Float32, size UInt32, \
       action FixedString(15), side FixedString(5)) \
       ENGINE=File(CSV)'
 
-create_indexes = 'CREATE TABLE IF NOT EXISTS indexes (symbol FixedString(15), moment DateTime, price Float32) \
+create_indexes = 'CREATE TABLE IF NOT EXISTS indexes_10_03_20 (symbol FixedString(15), moment DateTime, price Float32) \
                   ENGINE=File(CSV)'

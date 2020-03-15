@@ -22,7 +22,7 @@ class BitmexWS:
   def _on_close(self, ws):
     logger.info("WS app closed")
     self.ws = self.build_ws()
-    # self.connect()
+    self.connect()
 
   def _on_message(self, ws, msg):
     msg_dict = json.loads(msg)

@@ -15,7 +15,7 @@ services:
 #    ports:
 #      - "10000:10000"
   dataloader:
-    image: evgerher/thesis-dataloader:0.1.0
+    image: evgerher/thesis-dataloader:0.1.3
     depends_on:
       - server
     environment:

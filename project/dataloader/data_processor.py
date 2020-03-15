@@ -88,15 +88,17 @@ class Data_Preprocessor:
     if meta.action is None:
       return
     elif meta.table in 'trade':
-      trade: TradeMessage = TradeMessage.unwrap_data(msg)
-      if '.' in trade.symbol:
-        self.connector.store_index(trade)
-      else:
-        self.connector.store_trade(trade)
+      trades: List[TradeMessage] = TradeMessage.unwrap_data(msg)
+      for trade in trades:
+        if '.' in trades[-1].symbol:
+          self.connector.store_index(trade)
+        else:
+          self.connector.store_trade(trade)
       return
     elif 'orderBook' in meta.table:
-      orderbook = OrderBook.from_bitmex_orderbook(msg)
-      self.connector.store_orderbook(orderbook)
+      orderbooks: List[OrderBook] = OrderBook.from_bitmex_orderbook(msg)
+      for orderbook in orderbooks:
+        self.connector.store_orderbook(orderbook)
     else: # process snapshot action
       if meta.action in 'partial':
         state = self._preprocess_partial(msg)

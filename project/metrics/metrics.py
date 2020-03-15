@@ -1,9 +1,10 @@
 from dataclasses import dataclass
-from typing import List, Deque, Dict, Callable, Tuple
+from typing import List, Deque, Dict, Callable, Tuple, Union
 import datetime
 from collections import deque, defaultdict
 from utils.data import OrderBook, Trade
 import numpy as np
+import math
 
 @dataclass
 class MetricData:
@@ -14,14 +15,16 @@ class MetricData:
 
 class Metric:
   # def evaluate(self, *args) -> 'MetricData':
-  def evaluate(self, *args) -> float:
+  def evaluate(self, *args):
       pass
 
 class InstantMetric(Metric):
-  def evaluate(self, *args) -> List[float]:
+  def evaluate(self, *args) -> Union[np.array, float]:
   # def evaluate(self, *args) -> List['MetricData']:
-
       pass
+
+  def label(self) -> str:
+    pass
 
 class ContinuousMetric:
 
@@ -44,13 +47,14 @@ class TimeMetric(Metric):
                starting_moment: datetime.datetime = None):
     self.metric_names: List[str] = [f'{c[0]}_{seconds}' for c in callables]
     self.seconds = seconds
-    self._storage: Dict[str, Deque[Trade]] = defaultdict(deque)
+    # symbol, side -> trade
+    self._storage: Dict[(str, str), Deque[Trade]] = defaultdict(deque)
     self._callables: List[Callable[[List[Trade]], float]] = [c[1] for c in callables]
     self._from: datetime.datetime = starting_moment
     self._skip_from = False
 
   def evaluate(self, trade: Trade) -> List[float]:
-    target: Deque[Trade] = self._storage[trade.label()]
+    target: Deque[Trade] = self._storage[(trade.symbol, trade.side)]
     target.append(trade)
 
     if not self._skip_from:
@@ -82,7 +86,7 @@ class _VWAP(InstantMetric):
   def names(self) -> List[str]:
     return [f'{self.__str__()} bid', f'{self.__str__()} ask', f'{self.__str__()} midpoint']
 
-  def evaluate(self, snapshot: OrderBook) -> List[float]:
+  def evaluate(self, snapshot: OrderBook) -> List[np.array]:
     vwap_bid, vwap_ask = self.VWAP_bid(snapshot), self.VWAP_ask(snapshot)
     midpoint = self.VWAP_midpoint(vwap_bid, vwap_ask)
     # return (
@@ -92,16 +96,16 @@ class _VWAP(InstantMetric):
     # )
     return [vwap_bid, vwap_ask, midpoint]
 
-  def _evaluate_side(self, prices: np.array, volumes: np.array) -> float:
+  def _evaluate_side(self, prices: np.array, volumes: np.array) -> np.array:
     pass
 
-  def VWAP_bid(self, snapshot: OrderBook) -> float:
+  def VWAP_bid(self, snapshot: OrderBook) -> np.array:
     return self._evaluate_side(snapshot.bid_prices, snapshot.bid_volumes)
 
-  def VWAP_ask(self, snapshot: OrderBook) -> float:
+  def VWAP_ask(self, snapshot: OrderBook) -> np.array:
     return self._evaluate_side(snapshot.ask_prices, snapshot.ask_volumes)
 
-  def VWAP_midpoint(self, vwap_bid: float, vwap_ask: float) -> float:
+  def VWAP_midpoint(self, vwap_bid: np.array, vwap_ask: np.array) -> float:
     return (vwap_bid + vwap_ask) / 2
 
 class VWAP_depth(_VWAP):
@@ -111,7 +115,10 @@ class VWAP_depth(_VWAP):
   def __init__(self, levels = 3):
     self.levels = levels
 
-  def _evaluate_side(self, prices: np.array, volumes: np.array) -> float: # todo: test
+  def label(self):
+    return 'vwap-depth'
+
+  def _evaluate_side(self, prices: np.array, volumes: np.array) -> np.array: # todo: test
     # volumes are assumed to be sorted
     counter = 0
     i = 0
@@ -130,25 +137,33 @@ class VWAP_depth(_VWAP):
 class VWAP_volume(_VWAP):
 
   def __str__(self):
-    return f'<VWAP (Volume): {self.volume}>'
+    return f'<VWAP (Volume): {self.volumes}>'
 
-  def __init__(self, volume: int = 1e6, symbol: str = None):
-    self.volume = volume
+  def __init__(self, volumes: List[int], symbol: str = None):
+    self.volumes = sorted(volumes)
     self.symbol = symbol
 
-  def _evaluate_side(self, prices: np.array, volumes: np.array) -> float: # todo: test
-    total_volumes: int = 0
+  def label(self):
+    return f'vwap-volume {self.symbol}'
+
+  def _evaluate_side(self, prices: np.array, volumes: np.array) -> np.array: # todo: test
     i = 0
+    values = np.zeros((len(self.volumes),), dtype=np.float)
+    weights = np.zeros((len(volumes), ), dtype=np.float)
 
-    weights = []
-    while total_volumes < self.volume and i + 1 < len(volumes):
-      _volume_taken = min(self.volume - total_volumes, volumes[i + 1])
-      total_volumes += _volume_taken
-      weights.append(_volume_taken * 1.0 / self.volume)
-      i += 1
+    sum_ = 0.0
+    for idx, volume in enumerate(self.volumes):
+      while sum_ < volume and i + 1 <= len(volumes):
+        left = volume - np.sum(weights[:i])
+        right = volumes[i]
+        volume_taken = min(left, right)
+        weights[i] = volume_taken
+        i += 1
+        sum_ = np.sum(weights)
 
-    weights = np.array(weights)
-    return np.sum(prices[:len(weights)] * weights) / np.sum(weights)
+      values[idx] = np.sum(prices[:i] * (weights[:i] / volume))
+      i -= 1
+    return values
 
 class Lipton(InstantMetric):
   def bidask_imbalance(self, snapshot: OrderBook):
@@ -173,6 +188,70 @@ class Lipton(InstantMetric):
     p = 1. / 2 * (1. - np.arctan(sqrt_corr * (y - x) / (y + x)) / np.arctan(sqrt_corr))
     return MetricData('Lipton-unward-probability', snapshot.symbol, p)
 
-class QuickestDetection(ContinuousMetric):
-  def evaluate(self, items):
-    pass
+class QuickestDetection(InstantMetric):
+  # todo: what if h1 and h2 are functions?
+  def __init__(self, h1, h2, time_horizon=600):
+    self.h1 = h1
+    self.h2 = h2
+    self._max = 0.0
+    self._min = float('inf')
+    self._values: List[float] = []
+    self._dates: List[datetime.datetime] = []
+    self.time_horizon = time_horizon
+    self.__divisor = 4 * math.log(2)
+
+  def _reset_state(self, price):
+    self._max = price
+    self._min = price
+
+  # https://portfolioslab.com/rogers-satchell
+  def roger_satchell_volatility(self):
+    o, c = self._values[0], self._values[-1]
+    h, l = max(self._values), min(self._values)
+
+    # todo: does not take into consideration size of list
+    return math.sqrt(math.log(h / c) * math.log(h / o) + math.log(l / c) * math.log(l * o))
+
+  def volatility_2(self):
+    h, l = max(self._values), min(self._values)
+    return math.sqrt(math.log(h / l) / self.__divisor)
+
+  def _update(self, item: Tuple[float, datetime.datetime]):
+    price = item[0]
+    timestamp = item[1]
+    self._dates.append(timestamp)
+    self._values.append(price)
+
+    if price > self._max:
+      self._max = price
+
+    if price < self._min:
+      self._min = price
+
+    while (timestamp - self._dates[0]).seconds > self.time_horizon:
+      self._dates.pop(0)
+      self._values.pop(0)
+
+  def evaluate(self, item: Tuple[float, datetime.datetime]): # todo: accepts mid-point
+    price     = item[0]
+    self._update(item)
+
+    sigma = self.roger_satchell_volatility()
+
+    # check maximum condition
+    upper_trend = self._max - price < self.h1 * sigma
+    down_trend = price - self._min < self.h2 * sigma
+
+    if upper_trend or down_trend:
+      self._reset_state(price)
+
+    if upper_trend and down_trend:
+      raise ArithmeticError("IT IS NOT POSSIBLE")
+
+    if upper_trend:
+      return 1
+
+    if down_trend:
+      return -1
+
+    return 0

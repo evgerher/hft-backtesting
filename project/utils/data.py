@@ -1,7 +1,6 @@
 import datetime
-import pandas
 from dataclasses import dataclass
-from typing import Tuple
+from typing import Tuple, List
 
 import numpy as np
 from utils.logger import setup_logger
@@ -91,7 +90,7 @@ class OrderBook:
     return other.diff(self)
 
   @staticmethod
-  def from_bitmex_orderbook(msg: dict) -> 'OrderBook':
+  def from_bitmex_orderbook(msg: dict) -> List['OrderBook']:
     # 'data': [
     # {
     # 'symbol': 'XBTUSD',
@@ -99,18 +98,20 @@ class OrderBook:
     # 'asks': [[8707.5, 1906350], [8708, 17855], [8708.5, 12143], [8709, 43133], [8709.5, 47247], [8710, 100078], [8710.5, 438889], [8711, 39812], [8711.5, 251992], [8712, 159765]],
     # 'timestamp': '2020-03-03T20:54:04.114Z'
     # }]}
-    data = msg['data'][0]
-    timestamp = datetime.datetime.strptime(data['timestamp'], '%Y-%m-%dT%H:%M:%S.%fZ')
-    symbol = data['symbol']
-    asks_pv = np.array(data['asks'])
-    bids_pv = np.array(data['bids'])
+    orderbooks = []
+    for data in msg['data']:
+      timestamp = datetime.datetime.strptime(data['timestamp'], '%Y-%m-%dT%H:%M:%S.%fZ')
+      symbol = data['symbol']
+      asks_pv = np.array(data['asks'])
+      bids_pv = np.array(data['bids'])
 
-    ap = asks_pv[:,0]
-    av = asks_pv[:,1].astype(np.int)
-    bp = bids_pv[:,0]
-    bv = bids_pv[:,1].astype(np.int)
+      ap = asks_pv[:,0]
+      av = asks_pv[:,1].astype(np.int)
+      bp = bids_pv[:,0]
+      bv = bids_pv[:,1].astype(np.int)
 
-    return OrderBook(symbol, timestamp, bp, bv, ap, av)
+      orderbooks.append(OrderBook(symbol, timestamp, bp, bv, ap, av))
+    return orderbooks
 
   @staticmethod
   def from_sides(timestamp: datetime.datetime, symbol: str, bids: np.array, asks: np.array, depth:int=25) -> 'OrderBook':
@@ -145,7 +146,7 @@ from utils import helper
 
 class OrderBookPandas(OrderBook):
 
-  def __init__(self, series: pandas.Series, levels:int=5):
+  def __init__(self, series, levels:int=5):
     self.levels = levels
     self._series = series
 
