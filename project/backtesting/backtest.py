@@ -1,6 +1,6 @@
 from backtesting.output import Output
 from backtesting.readers import Reader
-from backtesting.trade_simulation import Simulation
+from backtesting.trade_simulation import Strategy
 from utils.data import OrderBook, Trade
 from utils.logger import setup_logger
 from metrics.metrics import MetricData
@@ -16,7 +16,7 @@ logger = setup_logger('<backtest>', 'INFO')
 class Backtest:
 
   def __init__(self, reader: Reader,
-               simulation: Simulation,
+               simulation: Strategy,
                output: Optional[Output] = None,
                time_horizon:int=120):
     """
@@ -26,7 +26,7 @@ class Backtest:
     :param time_horizon: time in seconds for storaging Snapshots
     """
     self.reader: Reader = reader
-    self.simulation: Simulation = simulation
+    self.simulation: Strategy = simulation
     self.time_horizon: int = time_horizon
 
     self.memory: Dict[Tuple[str], Deque[Tuple[datetime.datetime, OrderBook]]] = defaultdict(deque)
@@ -122,14 +122,13 @@ class Backtest:
   def _update_metrics(self, row: OrderBook):
     logger.debug(f'Update metrics with snapshot symbol={row.symbol} @ {row.timestamp}')
 
-    values: List[MetricData] = []
+    values: List = []
     for instant_metric in self.simulation.instant_metrics:
-      values += instant_metric.evaluate(row)
+      values = instant_metric.evaluate(row)
 
-
-    metric_name = (row.symbol, )
-    metric_deque: Deque[(datetime.datetime, List[float])] = self.snapshot_instant_metrics[metric_name]
-    metric_deque.append((row.timestamp, values))
+      metric_name = (row.symbol, instant_metric.label())
+      metric_deque: Deque[(datetime.datetime, List[float])] = self.snapshot_instant_metrics[metric_name]
+      metric_deque.append((row.timestamp, values))
 
     self._flush_output(['snapshot-instant-metric', *metric_name], row.timestamp, values)
     self.__remove_old_metric('snapshot-instant-metric', row.timestamp)

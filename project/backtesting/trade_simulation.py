@@ -12,7 +12,7 @@ class Order:
   volume: int
   side: str
 
-class Simulation:
+class Strategy:
   delay = 400e-6  # 400 microsec from intranet computer to exchange terminal
   # delay = 1e-3  # 1 msec delay from my laptop
 
@@ -40,8 +40,8 @@ class Simulation:
     pass
 
 
-class SimulationWithTrades(Simulation):
+class StrategyWithTrades(Strategy):
   pass  # todo: consider placed trade and trades arrival
 
-class SimulationWithSnapshot(Simulation):
+class StrategyWithSnapshot(Strategy):
   pass  # todo: consider only snapshots deltas

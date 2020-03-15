@@ -1,7 +1,7 @@
 from typing import List
 from utils import helper
 from utils.data import OrderBook
-
+import pandas as pd
 
 def read_snapshot_rows(src: str = 'resources/snapshots.csv') -> List[str]:
   with open(src, 'r') as f:
@@ -20,3 +20,10 @@ def get_snapshots(limit: int = None, src: str = 'resources/snapshots.csv', lengt
   if limit is None:
     limit = len(rows)
   return list(map(line_to_snapshot, rows[:limit]))
+
+def get_orderbooks(limit: int = None, src='resouces/orderbook10/orderbook.csv') -> List[OrderBook]:
+  df = pd.read_csv(src, nrows=limit, header=None)
+  items = []
+  for idx in range(limit):
+    items.append(helper.orderbook_line_parse(df.iloc[idx, :]))
+  return items

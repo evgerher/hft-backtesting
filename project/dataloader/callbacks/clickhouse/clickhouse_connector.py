@@ -39,7 +39,7 @@ class ClickHouse(Connector):
 
 
     # trade.action=partial means current values (when application is starting)
-    self.client.execute('insert into trades_orderbook values', [
+    self.client.execute('insert into trades_orderbook_10_03_20 values', [
       (
         trade.symbol,
         trade.timestamp,
@@ -73,7 +73,7 @@ class ClickHouse(Connector):
     av = orderbook.ask_volumes.tolist()
     bp = orderbook.bid_prices.tolist()
     bv = orderbook.bid_volumes.tolist()
-    self.client.execute('insert into orderbook values',
+    self.client.execute('insert into orderbook_10_03_20 values',
                         [[orderbook.timestamp,
                           orderbook.timestamp.microsecond  // 1000,
                           orderbook.symbol] + ap + av + bp + bv])
@@ -89,7 +89,7 @@ class ClickHouse(Connector):
   def store_index(self, trade: TradeMessage):
     logger.info(f"Insert index: {trade.timestamp}")
     self.total_snapshots += 1
-    self.client.execute('insert into indexes values', [
+    self.client.execute('insert into indexes_10_03_20 values', [
       (trade.symbol, trade.timestamp, trade.price)
     ])
 
