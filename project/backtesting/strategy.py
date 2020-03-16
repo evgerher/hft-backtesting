@@ -1,4 +1,5 @@
 import datetime
+from collections import defaultdict
 from typing import List, Deque, Dict, Tuple, Optional, Union
 
 from backtesting.data import OrderStatus, OrderRequest
@@ -27,30 +28,34 @@ class Strategy:
     self.time_metrics: List[TimeMetric] = time_metrics if time_metrics is not None else []
     self._delay: int = delay
     self.pending_orders: Dict[int, OrderRequest] = {}
-    self.balance: Dict[str, int] = {'USD': initial_balance, 'XBT': 0}
+    self.balance: Dict[str, int] = defaultdict(lambda: 0)
+    self.balance['USD'] = initial_balance
 
   def _update_balance_statuses(self, statuses: List[OrderStatus]):
     for status in statuses:
       if status.status == 'finished':
         order = self.pending_orders[status.id]
-        if order.side == 'Sell':
+        if order.side == 'ask':
           self.balance['USD'] += order.volume
-          # self.balance[order.symbol] -= order.volume / order.price
-        elif order.side == 'Buy':
-          # self.balance[order.symbol] -= order.volume
+        elif order.side == 'bid':
           self.balance[order.symbol] += order.volume / order.price
 
   def _update_balance_orders(self, orders: List[OrderRequest]):
     for order in orders:
-      if order.side == 'Sell':
+      self.pending_orders[order.id] = order
+      if order.side == 'ask':
         self.balance[order.symbol] -= order.volume / order.price
-      elif order.side == 'Buy':
-        self.balance[order.symbol] -= order.volume
+      elif order.side == 'bid':
+        self.balance['USD'] -= order.volume
 
-  def define_orders(self, *args) -> List[OrderRequest]:
-    pass
+  def define_orders(self, row: Union[Trade, OrderBook], # todo: add delay
+                    memory: Dict[Tuple[str], Deque[Tuple[datetime.datetime, Union[OrderBook, Trade]]]],
+                    snapshot_instant_metrics: Dict[Tuple[str], Deque[Tuple[datetime.datetime, List[float]]]],
+                    trade_time_metrics: Dict[Tuple[str, str, int], Deque[Tuple[datetime.datetime, List[float]]]],
+                    trades: Dict[Tuple[str, str], Deque[Tuple[datetime.datetime, Trade]]]) -> List[OrderRequest]:
+    return []
 
-  def trigger_trade(self, row: Trade,
+  def trigger_trade(self, row: Trade, # todo: add delay
                     statuses: List[OrderStatus],
                     memory: Dict[Tuple[str], Deque[Tuple[datetime.datetime, Union[OrderBook, Trade]]]],
                     # (symbol) -> (timestamp, instant-metric-values)

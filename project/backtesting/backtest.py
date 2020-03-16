@@ -98,8 +98,8 @@ class Backtest:
                                               self.memory, self.snapshot_instant_metrics,
                                               self.trade_time_metrics, self.trades)
 
-    if actions is not None:
-      self._process_actions(actions)
+    if len(actions) > 0:
+      self._process_actions(actions) # todo: add delay
 
 
   def run(self):

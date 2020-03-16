@@ -92,6 +92,3 @@ class StrategyTest(unittest.TestCase):
     backtester._process_event(reader[-1])
     self.assertEqual(initial_balance['USD'] - 650, simulation.balance['USD'])
     self.assertAlmostEqual(650.0 / 9.5, simulation.balance['test'], delta=1e-3)
-
-
-
