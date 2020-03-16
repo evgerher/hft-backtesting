@@ -43,8 +43,8 @@ class StrategyTest(unittest.TestCase):
 
     ##########################################################
     class SimpleStrategy(Strategy):
-      def __init__(self, instant_metrics: List[InstantMetric], time_metrics):
-        super().__init__(instant_metrics, time_metrics=time_metrics)
+      def __init__(self, instant_metrics: List[InstantMetric], time_metrics_trade):
+        super().__init__(instant_metrics, time_metrics_trade=time_metrics_trade)
         self.idx = 0
 
       def define_orders(self, row: Union[Trade, OrderBook],
@@ -64,7 +64,7 @@ class StrategyTest(unittest.TestCase):
     ###########################################################
 
     time_metrics = [TimeMetric(callables, 60), TimeMetric(callables, 30)]
-    simulation = SimpleStrategy(instant_metrics, time_metrics=time_metrics)
+    simulation = SimpleStrategy(instant_metrics, time_metrics_trade=time_metrics)
 
     output = TestOutput(instant_metric_names=instant_metric_names,
                         time_metric_names=[metric.metric_names for metric in time_metrics])

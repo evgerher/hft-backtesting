@@ -13,19 +13,21 @@ class Strategy:
   # delay = 1e-3  # 1 msec delay from my laptop
 
   def __init__(self, instant_metrics: List[InstantMetric],
-               filters: List[Filters.Filter] = (Filters.DepthFilter(3), ),
-               time_metrics: Optional[List[TimeMetric]] = None,
+               depth_filter: Filters.DepthFilter = (Filters.DepthFilter(3),),
+               time_metrics_trade: Optional[List[TimeMetric]] = None,
+               time_metrics_snapshot: Optional[List[TimeMetric]] = None,
                initial_balance: int = int(1e6),
                delay = 400e-6):
     """
 
     :param instant_metrics:
-    :param filters:
+    :param depth_filter:
     :param delay:
     """
     self.instant_metrics: List[InstantMetric] = instant_metrics
-    self.filters: List[Filters.Filter] = filters
-    self.time_metrics: List[TimeMetric] = time_metrics if time_metrics is not None else []
+    self.filter: Filters.DepthFilter = depth_filter
+    self.time_metrics: Dict[str, List[TimeMetric]] = {'trade': time_metrics_trade if time_metrics_trade is not None else [],
+                                                      'orderbook': time_metrics_snapshot if time_metrics_snapshot is not None else []}
     self._delay: int = delay
     self.pending_orders: Dict[int, OrderRequest] = {}
     self.balance: Dict[str, int] = defaultdict(lambda: 0)

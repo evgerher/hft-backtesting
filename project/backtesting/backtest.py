@@ -2,6 +2,7 @@ from backtesting.output import Output
 from backtesting.readers import Reader
 from backtesting.strategy import Strategy
 from backtesting.data import OrderStatus, OrderRequest
+from metrics.filters import Filters
 from utils.data import OrderBook, Trade
 from utils.logger import setup_logger
 
@@ -73,25 +74,21 @@ class Backtest:
     logger.info(f"Initialized {self}")
 
   def _process_event(self, event: Union[Trade, OrderBook]):
-    def filter_snapshot(row: OrderBook) -> bool:
-      filtered = True
-      for filter in self.simulation.filters:
-        if not filter.filter(row):
-          filtered = False
-          break
-
-      return filtered
+    def filter_snapshot(row: OrderBook) -> Optional:
+      option = self.simulation.filter.filter(row)
+      return option
 
     actions = None
-    if type(event) is OrderBook:
-      if not filter_snapshot(event):
+    if isinstance(event, OrderBook):
+      option = self.simulation.filter.filter(event)
+      if option is None:
         return
       self._update_memory(event)
       self._update_metrics(event)
       actions = self.simulation.trigger_snapshot(event,
                                                  self.memory, self.snapshot_instant_metrics,
                                                  self.trade_time_metrics, self.trades)
-    elif type(event) is Trade:  # it must be cumulative trade if any
+    elif isinstance(event, Trade):  # todo: it must be cumulative trade if any
       self._update_trades(event)
       statuses = self._evaluate_statuses(event)
       actions = self.simulation.trigger_trade(event, statuses,
@@ -175,8 +172,9 @@ class Backtest:
         self.simulated_orders[(symbol, side)][price].remove(order)
 
   def __initialize_time_metrics(self):
-    for metric in self.simulation.time_metrics:
-      metric.set_starting_moment(self.reader.initial_moment)
+    for metrics in self.simulation.time_metrics.values():
+      for metric in metrics:
+        metric.set_starting_moment(self.reader.initial_moment)
 
   def _flush_output(self, labels: List[str], timestamp: datetime.datetime, values: List[float]):
     """
@@ -209,7 +207,7 @@ class Backtest:
 
     # update timemetrics
     values: List[float] = []
-    for time_metric in self.simulation.time_metrics:
+    for time_metric in self.simulation.time_metrics['trade']:
       values += time_metric.evaluate(row)
 
       metric_name = (row.symbol, row.side, time_metric.seconds)
@@ -221,6 +219,9 @@ class Backtest:
 
   def _update_metrics(self, row: OrderBook):
     logger.debug(f'Update metrics with snapshot symbol={row.symbol} @ {row.timestamp}')
+
+    for time_metric in self.simulation.time_metrics['orderbook']:
+
 
     for instant_metric in self.simulation.instant_metrics:
       values = instant_metric.evaluate(row)
