@@ -1,6 +1,7 @@
 from backtesting.output import Output
 from backtesting.readers import Reader
-from backtesting.trade_simulation import Strategy, OrderRequest, OrderStatus
+from backtesting.strategy import Strategy
+from backtesting.data import OrderStatus, OrderRequest
 from utils.data import OrderBook, Trade
 from utils.logger import setup_logger
 
