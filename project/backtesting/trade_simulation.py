@@ -47,9 +47,14 @@ class OrderRequest:
     return OrderRequest(id, 'delete', None, None, None, None, None)
 
   @staticmethod
-  def create(price: float, volume: int, symbol: str, side: str, timestamp: datetime.datetime) -> 'OrderRequest':
+  def create_ask(price: float, volume: int, symbol: str, timestamp: datetime.datetime) -> 'OrderRequest':
     id = OrderRequest._generate_id()
-    return OrderRequest(id, 'new', price, volume, symbol, side, timestamp)
+    return OrderRequest(id, 'new', price, volume, symbol, 'ask', timestamp)
+
+  @staticmethod
+  def create_bid(price: float, volume: int, symbol: str, timestamp: datetime.datetime) -> 'OrderRequest':
+    id = OrderRequest._generate_id()
+    return OrderRequest(id, 'new', price, volume, symbol, 'bid', timestamp)
 
 class Strategy:
   delay = 400e-6  # 400 microsec from intranet computer to exchange terminal

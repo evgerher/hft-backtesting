@@ -1,5 +1,5 @@
 import datetime
-from typing import Optional
+from typing import Optional, Tuple, List, Union
 
 from utils import helper
 from utils.data import OrderBook, Trade
@@ -21,6 +21,27 @@ class Reader:
 
   def __next__(self):
     pass
+
+class ListReader(Reader):
+  def __init__(self, items: List[Union[OrderBook, Trade]]):
+    self.items = items
+    moment = items[0].timestamp
+    super().__init__(moment)
+    self.idx = 0
+
+  def __next__(self) -> Union[Trade, OrderBook]:
+    if self.idx == len(self.items):
+      raise StopIteration
+
+    item = self.items[self.idx]
+    self.idx += 1
+    return item
+
+  def __getitem__(self, idx):
+    return self.items[idx]
+
+
+
 
 class SnapshotReader(Reader):
 
