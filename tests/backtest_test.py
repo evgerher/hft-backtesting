@@ -3,7 +3,8 @@ import unittest
 from backtesting import readers, backtest
 from backtesting.output import TestOutput
 from backtesting.readers import ListReader
-from backtesting.trade_simulation import Strategy, OrderRequest, OrderStatus
+from backtesting.strategy import Strategy
+from backtesting.data import OrderStatus, OrderRequest
 
 from metrics.filters import Filters
 from metrics.metrics import *
