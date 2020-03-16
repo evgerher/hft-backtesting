@@ -5,10 +5,11 @@ from utils import helper
 from utils.data import OrderBook, Trade
 from utils.logger import setup_logger
 import pandas as pd
+from abc import ABC, abstractmethod
 
 logger = setup_logger('<reader>', 'INFO')
 
-class Reader:
+class Reader(ABC):
 
   def __init__(self, moment: datetime.datetime):
     self.initial_moment = moment
@@ -19,8 +20,9 @@ class Reader:
   def __iter__(self):
     return self
 
+  @abstractmethod
   def __next__(self):
-    pass
+    raise NotImplementedError
 
 class ListReader(Reader):
   def __init__(self, items: List[Union[OrderBook, Trade]]):

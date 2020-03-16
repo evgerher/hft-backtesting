@@ -5,6 +5,7 @@ from collections import deque, defaultdict
 from utils.data import OrderBook, Trade
 import numpy as np
 import math
+from abc import ABC, abstractmethod
 
 @dataclass
 class MetricData:
@@ -13,33 +14,38 @@ class MetricData:
   value: float
 
 
-class Metric:
+class Metric(ABC):
   # def evaluate(self, *args) -> 'MetricData':
+  @abstractmethod
   def evaluate(self, *args):
-      pass
+    raise NotImplementedError
 
 class InstantMetric(Metric):
+  @abstractmethod
   def evaluate(self, *args) -> Union[np.array, float]:
   # def evaluate(self, *args) -> List['MetricData']:
-      pass
+    raise NotImplementedError
 
+  @abstractmethod
   def label(self) -> str:
-    pass
+    raise NotImplementedError
 
-class ContinuousMetric:
+class ContinuousMetric(ABC):
 
   def __init__(self, n):
     self.n = n
 
+  @abstractmethod
   def evaluate(self, items):
-    pass
+    not NotImplementedError
 
-class CompositeMetric:
+class CompositeMetric(ABC):
   def __init__(self, *metric_names):
     self.targets = metric_names
 
+  @abstractmethod
   def evaluate(self):
-    pass
+    not NotImplementedError
 
 class TimeMetric(Metric):
   def __init__(self, callables: List[Tuple[str, Callable[[List[Trade]], float]]],
@@ -96,8 +102,9 @@ class _VWAP(InstantMetric):
     # )
     return [vwap_bid, vwap_ask, midpoint]
 
+  @abstractmethod
   def _evaluate_side(self, prices: np.array, volumes: np.array) -> np.array:
-    pass
+    raise NotImplementedError
 
   def VWAP_bid(self, snapshot: OrderBook) -> np.array:
     return self._evaluate_side(snapshot.bid_prices, snapshot.bid_volumes)

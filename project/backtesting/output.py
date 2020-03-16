@@ -3,9 +3,10 @@ from collections import defaultdict
 
 from utils.data import OrderBook, Trade
 from metrics.metrics import MetricData
+from abc import ABC, abstractmethod
 
 
-class Output:
+class Output(ABC):
   def __init__(self, instant_metric_names=None, time_metric_names=None):
     self.instant_metric_names = instant_metric_names
     self.time_metric_names = time_metric_names
@@ -29,23 +30,29 @@ class Output:
     else:
       self.additional_action(timestamp, labels, object)
 
+  @abstractmethod
   def snapshot_action(self, timestamp: datetime.datetime, object):
-    pass
+    raise NotImplementedError
 
+  @abstractmethod
   def metric_action(self, timestamp: datetime.datetime, object):
-    pass
+    raise NotImplementedError
 
+  @abstractmethod
   def trade_action(self, timestamp: datetime.datetime, object: Trade):
-    pass
+    raise NotImplementedError
 
+  @abstractmethod
   def additional_action(self, timestamp: datetime.datetime, labels, object):
-    pass
+    raise NotImplementedError
 
+  @abstractmethod
   def instant_metric_action(self, timestamp, labels, object):
-    pass
+    raise NotImplementedError
 
+  @abstractmethod
   def time_metric_action(self, timestamp, labels, object):
-    pass
+    raise NotImplementedError
 
 
 class TestOutput(Output):
