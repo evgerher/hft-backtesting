@@ -1,13 +1,15 @@
 from backtesting.output import Output
 from backtesting.readers import Reader
-from backtesting.trade_simulation import Strategy
+from backtesting.strategy import Strategy
+from backtesting.data import OrderStatus, OrderRequest
 from utils.data import OrderBook, Trade
 from utils.logger import setup_logger
-from metrics.metrics import MetricData
 
 import datetime
 from typing import Dict, List, Deque, Optional, Tuple, Union
-from collections import defaultdict, deque
+from collections import defaultdict, deque, OrderedDict
+import random
+import numpy as np
 
 
 logger = setup_logger('<backtest>', 'INFO')
@@ -18,12 +20,19 @@ class Backtest:
   def __init__(self, reader: Reader,
                simulation: Strategy,
                output: Optional[Output] = None,
-               time_horizon:int=120):
+               order_position_policy: str = 'top', # 'random' or 'bottom'
+               time_horizon:int=120,
+               seed=1337,
+               simulation_percentage = 0.15):
     """
 
     :param reader:
     :param simulation:
-    :param time_horizon: time in seconds for storaging Snapshots
+    :param output:
+    :param order_position_policy:
+    :param time_horizon:
+    :param seed:
+    :param simulation_percentage: how much trade's volume is consumed by simulated order
     """
     self.reader: Reader = reader
     self.simulation: Strategy = simulation
@@ -41,12 +50,30 @@ class Backtest:
     self.trades: Dict[Tuple[str, str], Deque[Tuple[datetime.datetime, Trade]]] = defaultdict(deque)
     self.output: Output = output
 
+    # (symbol, side) -> price -> List[(order_id, volume-left, consumption-ratio)]
+    self.simulated_orders: Dict[Tuple[str, str], OrderedDict[float, List[Tuple[int, float, float]]]] = defaultdict(lambda: defaultdict(list))
+    # id -> request
+    self.simulated_orders_id: Dict[int, OrderRequest] = {}
+
+    if order_position_policy == 'top':
+      policy = lambda: 1.0
+    elif order_position_policy == 'bottom':
+      policy = lambda: 0.0
+    elif order_position_policy == 'random':
+      r = random.Random()
+      r.seed(seed)
+      policy = lambda: r.uniform(0.0, 1.0)
+    else:
+      policy = lambda: 1.0
+
+    self._generate_initial_position = policy
+    self.simulation_percentage = simulation_percentage
     self.__initialize_time_metrics()
 
     logger.info(f"Initialized {self}")
 
-  def run(self):
-    def _filter_snapshot(row: OrderBook) -> bool:
+  def _process_event(self, event: Union[Trade, OrderBook]):
+    def filter_snapshot(row: OrderBook) -> bool:
       filtered = True
       for filter in self.simulation.filters:
         if not filter.filter(row):
@@ -55,24 +82,97 @@ class Backtest:
 
       return filtered
 
+    actions = None
+    if type(event) is OrderBook:
+      if not filter_snapshot(event):
+        return
+      self._update_memory(event)
+      self._update_metrics(event)
+      actions = self.simulation.trigger_snapshot(event,
+                                                 self.memory, self.snapshot_instant_metrics,
+                                                 self.trade_time_metrics, self.trades)
+    elif type(event) is Trade:  # it must be cumulative trade if any
+      self._update_trades(event)
+      statuses = self._evaluate_statuses(event)
+      actions = self.simulation.trigger_trade(event, statuses,
+                                              self.memory, self.snapshot_instant_metrics,
+                                              self.trade_time_metrics, self.trades)
+
+    if len(actions) > 0:
+      self._process_actions(actions) # todo: add delay
+
+
+  def run(self):
     logger.info(f'Backtest initialize run')
+
     for row in self.reader:
-      if type(row) is OrderBook:
-        if not _filter_snapshot(row):
-          continue
-        # self._update_memory(row)
-        self._update_metrics(row)
-        actions = self.simulation.trigger(row, self.memory, self.snapshot_instant_metrics, self.trade_time_metrics, self.trades)
-        if actions is not None:
-          self._process_actions(actions)
-      elif type(row) is Trade:
-        self._update_trades(row)
-        actions = self.simulation.trigger(row, self.memory, self.snapshot_instant_metrics, self.trade_time_metrics, self.trades)
-        if actions is not None:
-          self._process_actions(actions)
+      self._process_event(row)
 
     # self._flush_last()
     logger.info(f'Backtest finished run')
+
+  def _evaluate_statuses(self, trade: Trade) -> List[OrderStatus]:
+    """
+    Trade simulation unit
+    :param trade:
+    :return:
+    """
+    statuses = []
+
+    order_side = 'bid' if trade.side == 'Sell' else 'ask'
+    # todo: what about aggressive orders?
+    orders = self.simulated_orders[(trade.symbol, order_side)]
+
+    if len(orders) > 0:
+      # order_id, volume - left, consumption - ratio
+      sorted_orders: List[float, Tuple[int, float, float]] = list(sorted(orders.items(), key=lambda x: x[0]))
+
+      for price, order_requests in sorted_orders:
+        for idx, (order_id, volume_left_old, consumption) in enumerate(order_requests):
+          order: OrderRequest = self.simulated_orders_id[order_id]
+          if (trade.side == 'Sell' and order.side == 'bid' and order.price >= trade.price) or \
+              (trade.side == 'Buy' and order.side == 'ask' and order.price <= trade.price):
+
+            volume_left = max(0, volume_left_old - trade.volume)
+            if volume_left != 0:
+              orders[order.price][idx] = (order_id, volume_left, consumption)
+            else:
+              consumption += (float(trade.volume) - volume_left_old) / order.volume * self.simulation_percentage   # HERE ARE 15%
+              if consumption >= 1.0:  # order is executed
+                finished = OrderStatus.finish(order_id, trade.timestamp)
+                statuses.append(finished)
+                del orders[order.price][idx]
+                del self.simulated_orders_id[order.id]
+              else:
+                orders[order.price][idx] = (order_id, volume_left, consumption)
+
+    return statuses
+
+  def _process_actions(self, actions: List[OrderRequest]):
+    for action in actions:
+      if action.command == 'new':
+        symbol, side, price = action.label()
+        orderbook = self.memory[(symbol, )][-1][1] # get most recent (datetime, orderbook) and return orderbook
+        if side == 'bid':
+          prices = orderbook.bid_prices
+          volumes = orderbook.bid_volumes
+        elif side == 'ask':
+          prices = orderbook.ask_prices
+          volumes = orderbook.ask_volumes
+        else:
+          raise KeyError("wrong side")
+
+        idx = np.where(prices == price)[0]
+        level_volume = volumes[idx]
+
+        orders = self.simulated_orders[(symbol, side)][price]
+        orders_volume = sum(map(lambda x: x[0].volume * (1.0 - x[1]), map(lambda x: (self.simulated_orders_id[x[0]], x[2]), orders)))
+        orders.append((action.id, self._generate_initial_position() * level_volume + orders_volume, 0.0))
+        self.simulated_orders_id[action.id] = action
+      elif action.command == 'delete':
+        order = self.simulated_orders_id.pop(action.id)
+        symbol, side, price = order.label()
+        self.simulated_orders[(symbol, side)][price].remove(order)
 
   def __initialize_time_metrics(self):
     for metric in self.simulation.time_metrics:
@@ -122,7 +222,6 @@ class Backtest:
   def _update_metrics(self, row: OrderBook):
     logger.debug(f'Update metrics with snapshot symbol={row.symbol} @ {row.timestamp}')
 
-    values: List = []
     for instant_metric in self.simulation.instant_metrics:
       values = instant_metric.evaluate(row)
 
@@ -130,11 +229,8 @@ class Backtest:
       metric_deque: Deque[(datetime.datetime, List[float])] = self.snapshot_instant_metrics[metric_name]
       metric_deque.append((row.timestamp, values))
 
-    self._flush_output(['snapshot-instant-metric', *metric_name], row.timestamp, values)
+      self._flush_output(['snapshot-instant-metric', *metric_name], row.timestamp, values)
     self.__remove_old_metric('snapshot-instant-metric', row.timestamp)
-
-  def _process_actions(self, actions: List):
-    pass
 
   def _flush_last(self):
     """
