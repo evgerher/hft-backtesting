@@ -78,3 +78,6 @@ class TestOutput(Output):
 
   def additional_action(self, timestamp: datetime.datetime, labels, object):
     self.others.append((timestamp, labels, object))
+
+  def metric_action(self, timestamp: datetime.datetime, object):
+    pass

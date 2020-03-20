@@ -3,6 +3,7 @@ from backtesting.readers import Reader
 from backtesting.strategy import Strategy
 from backtesting.data import OrderStatus, OrderRequest
 from metrics.filters import Filters
+from metrics.types import Delta
 from utils.data import OrderBook, Trade
 from utils.logger import setup_logger
 
@@ -23,7 +24,8 @@ class Backtest:
                output: Optional[Output] = None,
                order_position_policy: str = 'top', # 'random' or 'bottom'
                time_horizon:int=120,
-               seed=1337):
+               seed=1337,
+               notify_partial = True):
     """
 
     :param reader:
@@ -37,22 +39,14 @@ class Backtest:
     self.simulation: Strategy = simulation
     self.time_horizon: int = time_horizon
 
-    self.memory: Dict[Tuple[str], Deque[Tuple[datetime.datetime, OrderBook]]] = defaultdict(deque)
-
-    # (symbol) -> (timestamp, instant-metric-values)
-    self.snapshot_instant_metrics: Dict[Tuple[str], Deque[Tuple[datetime.datetime, List[float]]]] = defaultdict(deque)
-
-    # (symbol, action, window-size) -> (timestamp, time-metric-values)
-    self.time_metrics: Dict[Tuple[str, str, int], Deque[Tuple[datetime.datetime, List[float]]]] = defaultdict(deque)
-
-    # (symbol, action) -> Trade
-    self.trades: Dict[Tuple[str, str], Deque[Tuple[datetime.datetime, Trade]]] = defaultdict(deque)
+    self.memory: Dict[str, Union[Trade, OrderBook]] = {}
     self.output: Output = output
 
     # (symbol, side) -> price -> List[(order_id, volume-left, consumption-ratio)]
     self.simulated_orders: Dict[Tuple[str, str], OrderedDict[float, List[Tuple[int, float, float]]]] = defaultdict(lambda: defaultdict(list))
     # id -> request
     self.simulated_orders_id: Dict[int, OrderRequest] = {}
+    self._notify_partial = notify_partial
 
     if order_position_policy == 'top':
       policy = lambda: 1.0
@@ -71,28 +65,25 @@ class Backtest:
     logger.info(f"Initialized {self}")
 
   def _process_event(self, event: Union[Trade, OrderBook]):
-    def filter_snapshot(row: OrderBook) -> Optional:
-      option = self.simulation.filter.process(row)
-      return option
+    # def filter_snapshot(row: OrderBook) -> Optional:
+    #   option = self.simulation.filter.process(row)
+    #   return option
 
     actions = None
+    option = None
     if isinstance(event, OrderBook):
       option = self.simulation.filter.process(event)
       if option is None:
         return
       self._update_memory(event)
       self._update_metrics(event, option)
-      actions = self.simulation.trigger_snapshot(event,
-                                                 self.memory, self.snapshot_instant_metrics,
-                                                 self.time_metrics, self.trades)
-    elif isinstance(event, Trade):  # todo: it must be cumulative trade if any
+      actions = self.simulation.trigger_snapshot(event, self.memory)
+    elif isinstance(event, Trade):
       self._update_trades(event)
       statuses = self._evaluate_statuses(event)
-      actions = self.simulation.trigger_trade(event, statuses,
-                                              self.memory, self.snapshot_instant_metrics,
-                                              self.time_metrics, self.trades)
+      actions = self.simulation.trigger_trade(event, statuses, self.memory)
 
-    self._update_composite_metrics()
+    self._update_composite_metrics(event, option)
     if len(actions) > 0:
       self._process_actions(actions) # todo: add delay
 
@@ -123,16 +114,16 @@ class Backtest:
       sorted_orders: List[float, Tuple[int, float, float]] = list(sorted(orders.items(), key=lambda x: x[0]))
 
       for price, order_requests in sorted_orders:
-        for idx, (order_id, volume_left_old, consumption) in enumerate(order_requests):
+        for idx, (order_id, volume_level_old, consumption) in enumerate(order_requests):
           order: OrderRequest = self.simulated_orders_id[order_id]
           if (trade.side == 'Sell' and order.side == 'bid' and order.price >= trade.price) or \
               (trade.side == 'Buy' and order.side == 'ask' and order.price <= trade.price):
 
-            volume_left = max(0, volume_left_old - trade.volume)
+            volume_left = max(0, volume_level_old - trade.volume)
             if volume_left != 0:
               orders[order.price][idx] = (order_id, volume_left, consumption)
             else:
-              consumption += (float(trade.volume) - volume_left_old) / order.volume
+              consumption += (float(trade.volume) - volume_level_old) / order.volume
               if consumption >= 1.0:  # order is executed
                 finished = OrderStatus.finish(order_id, trade.timestamp)
                 statuses.append(finished)
@@ -140,6 +131,8 @@ class Backtest:
                 del self.simulated_orders_id[order.id]
               else:
                 orders[order.price][idx] = (order_id, volume_left, consumption)
+                partial = OrderStatus.partial(order_id, trade.timestamp, int(consumption * order.volume))
+                statuses.append(partial)
 
     return statuses
 
@@ -147,7 +140,7 @@ class Backtest:
     for action in actions:
       if action.command == 'new':
         symbol, side, price = action.label()
-        orderbook = self.memory[(symbol, )][-1][1] # get most recent (datetime, orderbook) and return orderbook
+        orderbook = self.memory[('orderbook', symbol)] # get most recent (datetime, orderbook) and return orderbook
         if side == 'bid':
           prices = orderbook.bid_prices
           volumes = orderbook.bid_volumes
@@ -188,100 +181,80 @@ class Backtest:
   def _update_memory(self, row: OrderBook):
     logger.debug(f'Update memory with snapshot symbol={row.symbol} @ {row.timestamp}')
     # # fill memory
-    market: Deque[Tuple[datetime.datetime, OrderBook]] = self.memory[(row.symbol, )]
-    market.append((row.timestamp, row))
+    # market: Deque[Tuple[datetime.datetime, OrderBook]] = self.memory[(row.symbol, )]
+    # market.append((row.timestamp, row))
+    self.memory[('orderbook', row.symbol)] = row
 
     self._flush_output(['snapshot'], row.timestamp, row)  # todo: fix
-    self.__remove_old_metric('snapshot', row.timestamp)
+    # self.__remove_old_metric('snapshot', row.timestamp)
 
   def _update_trades(self, row: Trade):
 
     logger.debug(f'Update memory with trade symbol={row.symbol}, side={row.side} @ {row.timestamp}')
-    market: Deque[Tuple[datetime.datetime, Trade]] = self.trades[(row.symbol, row.side)]
-    market.append((row.timestamp, row))
-
+    # market: Deque[Tuple[datetime.datetime, Trade]] = self.trades[(row.symbol, row.side)]
+    # market.append((row.timestamp, row))
+    self.memory[('trade', row.symbol, row.side)] = row
     self._flush_output(['trade'], row.timestamp, row)  # todo: fix
-    self.__remove_old_metric('trade', row.timestamp)
-
-    # update timemetrics
-    values: List[float] = []
+    #
+    # self._flush_output(['trade'], row.timestamp, row)
     for time_metric in self.simulation.time_metrics['trade']:
-      values += time_metric.evaluate(row)
+      values = time_metric.evaluate(row)
+      self._flush_output(['time-metric', 'trade', row.symbol] + time_metric.label(), row.timestamp, values)
 
-      metric_name = ('trade', row.symbol, row.side, time_metric.seconds)
-      metric_deque: Deque[(datetime.datetime, List[float])] = self.time_metrics[metric_name]
-      metric_deque.append((row.timestamp, values))
-
-      self._flush_output(['time-metric', *metric_name], row.timestamp, values)
-      self.__remove_old_metric('time-metric', row.timestamp)
-
-  def _update_composite_metrics(self):
+  def _update_composite_metrics(self, data: Union[Trade, OrderBook], option: Optional[Delta]):
     logger.debug('Update composite metrics')
 
-    for composite_metric in self.simulation.composite_metrics:
-      data: Deque[Tuple[datetime.datetime, int]] = self.snapshot_instant_metrics
+    if isinstance(data, OrderBook):
+      for composite_metric in self.simulation.composite_metrics:
+        composite_metric.evaluate(data)
+        # data: Deque[Tuple[datetime.datetime, int]] = self.snapshot_instant_metrics
+        # todo - here
 
-  def _update_metrics(self, row: OrderBook, option: Tuple[datetime.datetime, str, str, int]):
+  def _update_metrics(self, row: OrderBook, option: Delta):
     logger.debug(f'Update metrics with snapshot symbol={row.symbol} @ {row.timestamp}')
-
-    for time_metric in self.simulation.time_metrics['orderbook']:
-      values = time_metric.evaluate(option)
-
-      # todo: here I suspect overusage of data, maybe move left one tab next 5 rows ?
-      # symbol, side, name, seconds, pos/neg
-      sign = 'pos' if option[3] > 0 else 'neg'
-      metric_name = ('orderbook', option[1], option[2], time_metric.seconds, sign)
-      metric_deque: Deque[(datetime.datetime, List[float])] = self.time_metrics[metric_name]
-      metric_deque.append((row.timestamp, values))
-
-      self._flush_output(['time-metric', *metric_name], row.timestamp, values)
-      self.__remove_old_metric('time-metric', row.timestamp)
 
     for instant_metric in self.simulation.instant_metrics:
       values = instant_metric.evaluate(row)
+      self._flush_output(['snapshot', 'instant', row.symbol] + instant_metric.label(), row.timestamp, values)
 
-      # todo: here I suspect overusage of data, maybe move left one tab next 5 rows ?
-      metric_name = (row.symbol, instant_metric.label())
-      metric_deque: Deque[(datetime.datetime, List[float])] = self.snapshot_instant_metrics[metric_name]
-      metric_deque.append((row.timestamp, values))
+    for time_metric in self.simulation.time_metrics['orderbook']:
+      values = time_metric.evaluate(option)
+      self._flush_output(['snapshot', 'delta', row.symbol] + time_metric.label(), row.timestamp, values)
 
-      self._flush_output(['snapshot-instant-metric', *metric_name], row.timestamp, values)
-    self.__remove_old_metric('snapshot-instant-metric', row.timestamp) # todo: not sure it works properly
+  # def _flush_last(self):
+  #   """
+  #
+  #   :return: flush contents of metric storage values when dataset is finished
+  #   """
+  #
+  #   for name, value in self.snapshot_instant_metrics.items():
+  #     while len(value) > 0:
+  #       self._flush_output(['snapshot-instant-metric', name], *value.popleft())
+  #
+  #   for symbol_action_window, metric in self.time_metrics.items():
+  #     while len(metric) > 0:
+  #       # symbol, action, window-size
+  #       self._flush_output(['trade-time-metric', *symbol_action_window], *metric.popleft())
 
-  def _flush_last(self):
-    """
-
-    :return: flush contents of metric storage values when dataset is finished
-    """
-
-    for name, value in self.snapshot_instant_metrics.items():
-      while len(value) > 0:
-        self._flush_output(['snapshot-instant-metric', name], *value.popleft())
-
-    for symbol_action_window, metric in self.time_metrics.items():
-      while len(metric) > 0:
-        # symbol, action, window-size
-        self._flush_output(['trade-time-metric', *symbol_action_window], *metric.popleft())
-
-  # todo: that would be great to be tracked by other thread, not main one
-  def __remove_old_metric(self, label: str, timestamp: datetime.datetime):
-    if label == 'trade-time-metric':
-      collection = self.time_metrics
-    elif label == 'snapshot-instant-metric':
-      collection = self.snapshot_instant_metrics
-    elif label == 'snapshot':
-      collection = self.memory
-    elif label == 'trade':
-      collection = self.trades
-
-
-    for name, deque in collection.items():
-      while True:
-        if (timestamp - deque[0][0]).seconds >= self.time_horizon:
-          # self._flush_output([label, *name], *deque.popleft())
-          deque.popleft()
-        else:
-          break
+  # # todo: that would be great to be tracked by other thread, not main one
+  # def __remove_old_metric(self, label: str, timestamp: datetime.datetime):
+  #   if label == 'trade-time-metric':
+  #     collection = self.time_metrics
+  #   elif label == 'snapshot-instant-metric':
+  #     collection = self.snapshot_instant_metrics
+  #   elif label == 'snapshot':
+  #     collection = self.memory
+  #   elif label == 'trade':
+  #     collection = self.trades
+  #
+  #
+  #   for name, deque in collection.items():
+  #     while True:
+  #       if (timestamp - deque[0][0]).seconds >= self.time_horizon:
+  #         # self._flush_output([label, *name], *deque.popleft())
+  #         deque.popleft()
+  #       else:
+  #         break
 
   def __str__(self):
     return '<Backtest with reader={}>'.format(self.reader)

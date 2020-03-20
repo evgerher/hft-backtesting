@@ -47,11 +47,7 @@ class StrategyTest(unittest.TestCase):
         super().__init__(instant_metrics, time_metrics_trade=time_metrics_trade)
         self.idx = 0
 
-      def define_orders(self, row: Union[Trade, OrderBook],
-                    memory: Dict[Tuple[str], Deque[Tuple[datetime.datetime, Union[OrderBook, Trade]]]],
-                    snapshot_instant_metrics: Dict[Tuple[str], Deque[Tuple[datetime.datetime, List[float]]]],
-                    trade_time_metrics: Dict[Tuple[str, str, int], Deque[Tuple[datetime.datetime, List[float]]]],
-                    trades: Dict[Tuple[str, str], Deque[Tuple[datetime.datetime, Trade]]]):
+      def define_orders(self, row: Union[Trade, OrderBook], memory: Dict[str, Union[Trade, OrderBook]]) -> List[OrderRequest]:
         item = []
         if self.idx == 0:
           item = [OrderRequest.create_bid(9.5, 450, 'test', reader[0].timestamp)]
@@ -92,3 +88,7 @@ class StrategyTest(unittest.TestCase):
     backtester._process_event(reader[-1])
     self.assertEqual(initial_balance['USD'] - 650, simulation.balance['USD'])
     self.assertAlmostEqual(650.0 / 9.5, simulation.balance['test'], delta=1e-3)
+
+
+if __name__ == '__main__':
+  unittest.main()

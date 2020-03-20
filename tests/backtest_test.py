@@ -291,3 +291,6 @@ class BacktestTest(unittest.TestCase):
     second_order = backtester.simulated_orders[(symbol, side)][price][0]
     consumed = second_order[2][0]
     self.assertAlmostEqual(consumed, 0.8625, delta=1e-3)
+
+if __name__ == '__main__':
+  unittest.main()
