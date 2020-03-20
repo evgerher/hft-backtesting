@@ -115,9 +115,12 @@ class VWAP_volume(_VWAP):
     return f'<VWAP (Volume): {self.volumes}>'
 
   def __init__(self, volumes: List[int], symbol: str = None, name: str = 'vwap-volume'):
-    super().__init__(name)
     self.volumes = sorted(volumes)
     self.symbol = symbol
+    super().__init__(name)
+
+  def subitems(self):
+    return self.volumes
 
   def _evaluate_side(self, prices: np.array, volumes: np.array) -> np.array:
     i = 0
@@ -193,10 +196,10 @@ class TimeMetric(Metric):
 
 
 class TradeMetric(TimeMetric):
-  def __init__(self, name: str,
+  def __init__(self,
                callables: List[TradeExecutable],
                seconds=60):
-    super().__init__(f'{name}-{seconds}', callables, seconds)
+    super().__init__(f'trade-metric-{seconds}', callables, seconds)
 
   def _remove_old_values(self, event: Trade, storage: Deque[Trade]):
     while (event.timestamp - storage[0].timestamp).seconds > self.seconds:

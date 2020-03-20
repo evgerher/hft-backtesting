@@ -7,13 +7,14 @@ from utils.data import OrderBook, Trade
 from metrics.metrics import InstantMetric, TradeMetric, TimeMetric, DeltaMetric, CompositeMetric
 from metrics.filters import Filters
 
+from abc import ABC, abstractmethod
 
-class Strategy:
+class Strategy(ABC):
   delay = 400e-6  # 400 microsec from intranet computer to exchange terminal
   # delay = 1e-3  # 1 msec delay from my laptop
 
   def __init__(self, instant_metrics: List[InstantMetric],
-               depth_filter: Filters.DepthFilter = (Filters.DepthFilter(3),),
+               depth_filter: Filters.DepthFilter = Filters.DepthFilter(3),
                time_metrics_trade: List[TradeMetric] = [],
                time_metrics_snapshot: List[DeltaMetric] = [],
                composite_metrics: List[CompositeMetric] = [],
@@ -59,6 +60,7 @@ class Strategy:
           self.balance['USD'] += order.volume
         elif order.side == 'bid':
           self.balance[order.symbol] += order.volume / order.price
+  #     todo: process here 'partial' cases
 
   def _update_balance_orders(self, orders: List[OrderRequest]):
     for order in orders:
@@ -68,35 +70,18 @@ class Strategy:
       elif order.side == 'bid':
         self.balance['USD'] -= order.volume
 
-  def define_orders(self, row: Union[Trade, OrderBook], # todo: add delay
-                    memory: Dict[Tuple[str], Deque[Tuple[datetime.datetime, Union[OrderBook, Trade]]]],
-                    snapshot_instant_metrics: Dict[Tuple[str], Deque[Tuple[datetime.datetime, List[float]]]],
-                    trade_time_metrics: Dict[Tuple[str, str, int], Deque[Tuple[datetime.datetime, List[float]]]],
-                    trades: Dict[Tuple[str, str], Deque[Tuple[datetime.datetime, Trade]]]) -> List[OrderRequest]:
+  # todo: add delay
+  @abstractmethod
+  def define_orders(self, row: Union[Trade, OrderBook], memory: Dict[str, Union[Trade, OrderBook]]) -> List[OrderRequest]:
     return []
 
-  def trigger_trade(self, row: Trade, # todo: add delay
-                    statuses: List[OrderStatus],
-                    memory: Dict[Tuple[str], Deque[Tuple[datetime.datetime, Union[OrderBook, Trade]]]],
-                    # (symbol) -> (timestamp, instant-metric-values)
-                    snapshot_instant_metrics: Dict[Tuple[str], Deque[Tuple[datetime.datetime, List[float]]]],
-                    # (symbol, action, window-size) -> (timestamp, time-metric-values)
-                    trade_time_metrics: Dict[Tuple[str, str, int], Deque[Tuple[datetime.datetime, List[float]]]],
-                    # (symbol, action) -> (timestamp, Trade)
-                    trades: Dict[Tuple[str, str], Deque[Tuple[datetime.datetime, Trade]]]) -> List[OrderRequest]:
+  def trigger_trade(self, row: Trade, statuses: List[OrderStatus], memory: Dict[str, Union[Trade, OrderBook]]):
     self._update_balance_statuses(statuses)
-    orders = self.define_orders(row, memory, snapshot_instant_metrics, trade_time_metrics, trades)
+    orders = self.define_orders(row, memory)
     self._update_balance_orders(orders)
     return orders
 
-  def trigger_snapshot(self, row: OrderBook,
-              memory: Dict[Tuple[str], Deque[Tuple[datetime.datetime, Union[OrderBook, Trade]]]],
-              # (symbol) -> (timestamp, instant-metric-values)
-              snapshot_instant_metrics: Dict[Tuple[str], Deque[Tuple[datetime.datetime, List[float]]]],
-              # (symbol, action, window-size) -> (timestamp, time-metric-values)
-              trade_time_metrics: Dict[Tuple[str, str, int], Deque[Tuple[datetime.datetime, List[float]]]],
-              # (symbol, action) -> (timestamp, Trade)
-              trades: Dict[Tuple[str, str], Deque[Tuple[datetime.datetime, Trade]]]) -> List[OrderRequest]:
-    orders = self.define_orders(row, memory, snapshot_instant_metrics, trade_time_metrics, trades)
+  def trigger_snapshot(self, row: OrderBook, memory: Dict[str, Union[Trade, OrderBook]]):
+    orders = self.define_orders(row, memory)
     self._update_balance_orders(orders)
     return orders

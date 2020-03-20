@@ -24,7 +24,8 @@ class Backtest:
                output: Optional[Output] = None,
                order_position_policy: str = 'top', # 'random' or 'bottom'
                time_horizon:int=120,
-               seed=1337):
+               seed=1337,
+               notify_partial = True):
     """
 
     :param reader:
@@ -38,22 +39,14 @@ class Backtest:
     self.simulation: Strategy = simulation
     self.time_horizon: int = time_horizon
 
-    self.memory: Dict[Tuple[str], Deque[Tuple[datetime.datetime, OrderBook]]] = defaultdict(deque)
-
-    # (symbol) -> (timestamp, instant-metric-values)
-    self.snapshot_instant_metrics: Dict[Tuple[str], Deque[Tuple[datetime.datetime, List[float]]]] = defaultdict(deque)
-
-    # (symbol, action, window-size) -> (timestamp, time-metric-values)
-    self.time_metrics: Dict[Tuple[str, str, int], Deque[Tuple[datetime.datetime, List[float]]]] = defaultdict(deque)
-
-    # (symbol, action) -> Trade
-    self.trades: Dict[Tuple[str, str], Deque[Tuple[datetime.datetime, Trade]]] = defaultdict(deque)
+    self.memory: Dict[str, Union[Trade, OrderBook]] = {}
     self.output: Output = output
 
     # (symbol, side) -> price -> List[(order_id, volume-left, consumption-ratio)]
     self.simulated_orders: Dict[Tuple[str, str], OrderedDict[float, List[Tuple[int, float, float]]]] = defaultdict(lambda: defaultdict(list))
     # id -> request
     self.simulated_orders_id: Dict[int, OrderRequest] = {}
+    self._notify_partial = notify_partial
 
     if order_position_policy == 'top':
       policy = lambda: 1.0
@@ -72,26 +65,23 @@ class Backtest:
     logger.info(f"Initialized {self}")
 
   def _process_event(self, event: Union[Trade, OrderBook]):
-    def filter_snapshot(row: OrderBook) -> Optional:
-      option = self.simulation.filter.process(row)
-      return option
+    # def filter_snapshot(row: OrderBook) -> Optional:
+    #   option = self.simulation.filter.process(row)
+    #   return option
 
     actions = None
+    option = None
     if isinstance(event, OrderBook):
       option = self.simulation.filter.process(event)
       if option is None:
         return
       self._update_memory(event)
       self._update_metrics(event, option)
-      actions = self.simulation.trigger_snapshot(event,
-                                                 self.memory, self.snapshot_instant_metrics,
-                                                 self.time_metrics, self.trades)
-    elif isinstance(event, Trade):  # todo: it must be cumulative trade if any
+      actions = self.simulation.trigger_snapshot(event, self.memory)
+    elif isinstance(event, Trade):
       self._update_trades(event)
       statuses = self._evaluate_statuses(event)
-      actions = self.simulation.trigger_trade(event, statuses,
-                                              self.memory, self.snapshot_instant_metrics,
-                                              self.time_metrics, self.trades)
+      actions = self.simulation.trigger_trade(event, statuses, self.memory)
 
     self._update_composite_metrics(event, option)
     if len(actions) > 0:
@@ -124,16 +114,16 @@ class Backtest:
       sorted_orders: List[float, Tuple[int, float, float]] = list(sorted(orders.items(), key=lambda x: x[0]))
 
       for price, order_requests in sorted_orders:
-        for idx, (order_id, volume_left_old, consumption) in enumerate(order_requests):
+        for idx, (order_id, volume_level_old, consumption) in enumerate(order_requests):
           order: OrderRequest = self.simulated_orders_id[order_id]
           if (trade.side == 'Sell' and order.side == 'bid' and order.price >= trade.price) or \
               (trade.side == 'Buy' and order.side == 'ask' and order.price <= trade.price):
 
-            volume_left = max(0, volume_left_old - trade.volume)
+            volume_left = max(0, volume_level_old - trade.volume)
             if volume_left != 0:
               orders[order.price][idx] = (order_id, volume_left, consumption)
             else:
-              consumption += (float(trade.volume) - volume_left_old) / order.volume
+              consumption += (float(trade.volume) - volume_level_old) / order.volume
               if consumption >= 1.0:  # order is executed
                 finished = OrderStatus.finish(order_id, trade.timestamp)
                 statuses.append(finished)
@@ -141,6 +131,8 @@ class Backtest:
                 del self.simulated_orders_id[order.id]
               else:
                 orders[order.price][idx] = (order_id, volume_left, consumption)
+                partial = OrderStatus.partial(order_id, trade.timestamp, int(consumption * order.volume))
+                statuses.append(partial)
 
     return statuses
 
@@ -148,7 +140,7 @@ class Backtest:
     for action in actions:
       if action.command == 'new':
         symbol, side, price = action.label()
-        orderbook = self.memory[(symbol, )][-1][1] # get most recent (datetime, orderbook) and return orderbook
+        orderbook = self.memory[('orderbook', symbol)] # get most recent (datetime, orderbook) and return orderbook
         if side == 'bid':
           prices = orderbook.bid_prices
           volumes = orderbook.bid_volumes
@@ -191,6 +183,7 @@ class Backtest:
     # # fill memory
     # market: Deque[Tuple[datetime.datetime, OrderBook]] = self.memory[(row.symbol, )]
     # market.append((row.timestamp, row))
+    self.memory[('orderbook', row.symbol)] = row
 
     self._flush_output(['snapshot'], row.timestamp, row)  # todo: fix
     # self.__remove_old_metric('snapshot', row.timestamp)
@@ -200,6 +193,7 @@ class Backtest:
     logger.debug(f'Update memory with trade symbol={row.symbol}, side={row.side} @ {row.timestamp}')
     # market: Deque[Tuple[datetime.datetime, Trade]] = self.trades[(row.symbol, row.side)]
     # market.append((row.timestamp, row))
+    self.memory[('trade', row.symbol, row.side)] = row
     self._flush_output(['trade'], row.timestamp, row)  # todo: fix
     #
     # self._flush_output(['trade'], row.timestamp, row)
