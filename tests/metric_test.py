@@ -62,7 +62,7 @@ class MetricTest(unittest.TestCase):
     self.assertEqual(values, tuple([latest[v] for v in volumes]))
 
   def test_delta_lipton_metric(self):
-    reader = OrderbookReader(snapshot_file='resources/orderbook_fixed/orderbook.csv', stop_after=15000, depth_to_load=5)
+    reader = OrderbookReader(snapshot_file='resources/orderbook_fixed/orderbooks.csv.gz', stop_after=5000, depth_to_load=5)
 
     delta10 = DeltaMetric(seconds=10)
     lipton = Lipton('delta-10')
@@ -95,13 +95,6 @@ class MetricTest(unittest.TestCase):
     self.assertEqual(volume_ask_pos, np.sum(ask_pos_xbtusd))
     self.assertEqual(quantity_ask_pos, len(ask_pos_xbtusd))
     self.assertEqual(quantity_ask_neg, len(ask_neg_xbtusd))
-
-
-
-
-
-
-
 
 if __name__ == '__main__':
   unittest.main()

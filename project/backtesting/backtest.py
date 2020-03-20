@@ -203,9 +203,10 @@ class Backtest:
       values = instant_metric.evaluate(row)
       self._flush_output(['snapshot', 'instant', row.symbol] + instant_metric.label(), row.timestamp, values)
 
-    for time_metric in self.simulation.time_metrics['orderbook']:
-      values = time_metric.evaluate(option)
-      self._flush_output(['snapshot', 'delta', row.symbol] + time_metric.label(), row.timestamp, values)
+    if option[-1] != 0: # if volume altered on best level
+      for time_metric in self.simulation.time_metrics['orderbook']:
+        values = time_metric.evaluate(option)
+        self._flush_output(['snapshot', 'delta', row.symbol] + time_metric.label(), row.timestamp, values)
 
   # def _flush_last(self):
   #   """

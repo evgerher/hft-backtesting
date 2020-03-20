@@ -175,7 +175,7 @@ class TimeMetric(Metric):
   def _get_update_deque(self, event) -> Tuple[Tuple, Deque]:
     raise NotImplementedError
 
-  def evaluate(self, event: Trade) -> List[float]:
+  def evaluate(self, event: Union[Trade, Delta]) -> List[float]:
     key, target = self._get_update_deque(event)
 
     if not self._skip_from:
@@ -250,7 +250,7 @@ class DeltaMetric(TimeMetric):
     symbol = event[1]
     side = event[2]
     volume = event[3]
-    sign = 'pos' if volume > 0 else 'neg'
+    sign = 'pos' if volume > 0 else 'neg' if volume < 0 else None
 
     key = (symbol, side, sign)
     target: Deque[int] = self.storage[key]
