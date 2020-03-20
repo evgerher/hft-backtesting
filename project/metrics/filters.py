@@ -1,13 +1,11 @@
-import datetime
-
+from metrics.types import Delta
 from utils.data import OrderBook
-from typing import Dict, List, Tuple, Optional
+from typing import Dict, List, Optional
 from utils.logger import  setup_logger
 import numpy as np
 from abc import ABC, abstractmethod
 
 logger = setup_logger('<filter>', 'INFO')
-
 
 class Filters:
 
@@ -25,6 +23,7 @@ class Filters:
       if snapshot.symbol == self.symbol:
         return True
       return None
+
 
   class DepthFilter(Filter):
 
@@ -45,7 +44,7 @@ class Filters:
       self.stored_bid_levels_volume[snapshot.symbol] = snapshot.bid_volumes[:self.levels]
       self.stored_ask_levels_volume[snapshot.symbol] = snapshot.ask_volumes[:self.levels]
 
-    def process(self, snapshot: OrderBook) -> Optional[Tuple[datetime.datetime, str, str, int]]:
+    def process(self, snapshot: OrderBook) -> Optional[Delta]:
       symbol: str = snapshot.symbol
       stored_snapshot: OrderBook = self.snapshots.get(symbol, None)
       

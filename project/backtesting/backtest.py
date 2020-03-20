@@ -3,6 +3,7 @@ from backtesting.readers import Reader
 from backtesting.strategy import Strategy
 from backtesting.data import OrderStatus, OrderRequest
 from metrics.filters import Filters
+from metrics.types import Delta
 from utils.data import OrderBook, Trade
 from utils.logger import setup_logger
 
@@ -92,7 +93,7 @@ class Backtest:
                                               self.memory, self.snapshot_instant_metrics,
                                               self.time_metrics, self.trades)
 
-    self._update_composite_metrics()
+    self._update_composite_metrics(event, option)
     if len(actions) > 0:
       self._process_actions(actions) # todo: add delay
 
@@ -188,100 +189,78 @@ class Backtest:
   def _update_memory(self, row: OrderBook):
     logger.debug(f'Update memory with snapshot symbol={row.symbol} @ {row.timestamp}')
     # # fill memory
-    market: Deque[Tuple[datetime.datetime, OrderBook]] = self.memory[(row.symbol, )]
-    market.append((row.timestamp, row))
+    # market: Deque[Tuple[datetime.datetime, OrderBook]] = self.memory[(row.symbol, )]
+    # market.append((row.timestamp, row))
 
     self._flush_output(['snapshot'], row.timestamp, row)  # todo: fix
-    self.__remove_old_metric('snapshot', row.timestamp)
+    # self.__remove_old_metric('snapshot', row.timestamp)
 
   def _update_trades(self, row: Trade):
 
     logger.debug(f'Update memory with trade symbol={row.symbol}, side={row.side} @ {row.timestamp}')
-    market: Deque[Tuple[datetime.datetime, Trade]] = self.trades[(row.symbol, row.side)]
-    market.append((row.timestamp, row))
-
+    # market: Deque[Tuple[datetime.datetime, Trade]] = self.trades[(row.symbol, row.side)]
+    # market.append((row.timestamp, row))
     self._flush_output(['trade'], row.timestamp, row)  # todo: fix
-    self.__remove_old_metric('trade', row.timestamp)
-
-    # update timemetrics
-    values: List[float] = []
+    #
+    # self._flush_output(['trade'], row.timestamp, row)
     for time_metric in self.simulation.time_metrics['trade']:
-      values += time_metric.evaluate(row)
+      values = time_metric.evaluate(row)
+      self._flush_output(['time-metric', 'trade', row.symbol] + time_metric.label(), row.timestamp, values)
 
-      metric_name = ('trade', row.symbol, row.side, time_metric.seconds)
-      metric_deque: Deque[(datetime.datetime, List[float])] = self.time_metrics[metric_name]
-      metric_deque.append((row.timestamp, values))
-
-      self._flush_output(['time-metric', *metric_name], row.timestamp, values)
-      self.__remove_old_metric('time-metric', row.timestamp)
-
-  def _update_composite_metrics(self):
+  def _update_composite_metrics(self, data: Union[Trade, OrderBook], option: Optional[Delta]):
     logger.debug('Update composite metrics')
 
-    for composite_metric in self.simulation.composite_metrics:
-      data: Deque[Tuple[datetime.datetime, int]] = self.snapshot_instant_metrics
+    if isinstance(data, OrderBook):
+      for composite_metric in self.simulation.composite_metrics:
+        composite_metric.evaluate(data)
+        # data: Deque[Tuple[datetime.datetime, int]] = self.snapshot_instant_metrics
+        # todo - here
 
-  def _update_metrics(self, row: OrderBook, option: Tuple[datetime.datetime, str, str, int]):
+  def _update_metrics(self, row: OrderBook, option: Delta):
     logger.debug(f'Update metrics with snapshot symbol={row.symbol} @ {row.timestamp}')
-
-    for time_metric in self.simulation.time_metrics['orderbook']:
-      values = time_metric.evaluate(option)
-
-      # todo: here I suspect overusage of data, maybe move left one tab next 5 rows ?
-      # symbol, side, name, seconds, pos/neg
-      sign = 'pos' if option[3] > 0 else 'neg'
-      metric_name = ('orderbook', option[1], option[2], time_metric.seconds, sign)
-      metric_deque: Deque[(datetime.datetime, List[float])] = self.time_metrics[metric_name]
-      metric_deque.append((row.timestamp, values))
-
-      self._flush_output(['time-metric', *metric_name], row.timestamp, values)
-      self.__remove_old_metric('time-metric', row.timestamp)
 
     for instant_metric in self.simulation.instant_metrics:
       values = instant_metric.evaluate(row)
+      self._flush_output(['snapshot', 'instant', row.symbol] + instant_metric.label(), row.timestamp, values)
 
-      # todo: here I suspect overusage of data, maybe move left one tab next 5 rows ?
-      metric_name = (row.symbol, instant_metric.label())
-      metric_deque: Deque[(datetime.datetime, List[float])] = self.snapshot_instant_metrics[metric_name]
-      metric_deque.append((row.timestamp, values))
+    for time_metric in self.simulation.time_metrics['orderbook']:
+      values = time_metric.evaluate(option)
+      self._flush_output(['snapshot', 'delta', row.symbol] + time_metric.label(), row.timestamp, values)
 
-      self._flush_output(['snapshot-instant-metric', *metric_name], row.timestamp, values)
-    self.__remove_old_metric('snapshot-instant-metric', row.timestamp) # todo: not sure it works properly
+  # def _flush_last(self):
+  #   """
+  #
+  #   :return: flush contents of metric storage values when dataset is finished
+  #   """
+  #
+  #   for name, value in self.snapshot_instant_metrics.items():
+  #     while len(value) > 0:
+  #       self._flush_output(['snapshot-instant-metric', name], *value.popleft())
+  #
+  #   for symbol_action_window, metric in self.time_metrics.items():
+  #     while len(metric) > 0:
+  #       # symbol, action, window-size
+  #       self._flush_output(['trade-time-metric', *symbol_action_window], *metric.popleft())
 
-  def _flush_last(self):
-    """
-
-    :return: flush contents of metric storage values when dataset is finished
-    """
-
-    for name, value in self.snapshot_instant_metrics.items():
-      while len(value) > 0:
-        self._flush_output(['snapshot-instant-metric', name], *value.popleft())
-
-    for symbol_action_window, metric in self.time_metrics.items():
-      while len(metric) > 0:
-        # symbol, action, window-size
-        self._flush_output(['trade-time-metric', *symbol_action_window], *metric.popleft())
-
-  # todo: that would be great to be tracked by other thread, not main one
-  def __remove_old_metric(self, label: str, timestamp: datetime.datetime):
-    if label == 'trade-time-metric':
-      collection = self.time_metrics
-    elif label == 'snapshot-instant-metric':
-      collection = self.snapshot_instant_metrics
-    elif label == 'snapshot':
-      collection = self.memory
-    elif label == 'trade':
-      collection = self.trades
-
-
-    for name, deque in collection.items():
-      while True:
-        if (timestamp - deque[0][0]).seconds >= self.time_horizon:
-          # self._flush_output([label, *name], *deque.popleft())
-          deque.popleft()
-        else:
-          break
+  # # todo: that would be great to be tracked by other thread, not main one
+  # def __remove_old_metric(self, label: str, timestamp: datetime.datetime):
+  #   if label == 'trade-time-metric':
+  #     collection = self.time_metrics
+  #   elif label == 'snapshot-instant-metric':
+  #     collection = self.snapshot_instant_metrics
+  #   elif label == 'snapshot':
+  #     collection = self.memory
+  #   elif label == 'trade':
+  #     collection = self.trades
+  #
+  #
+  #   for name, deque in collection.items():
+  #     while True:
+  #       if (timestamp - deque[0][0]).seconds >= self.time_horizon:
+  #         # self._flush_output([label, *name], *deque.popleft())
+  #         deque.popleft()
+  #       else:
+  #         break
 
   def __str__(self):
     return '<Backtest with reader={}>'.format(self.reader)

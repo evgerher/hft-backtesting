@@ -4,7 +4,7 @@ from typing import List, Deque, Dict, Tuple, Optional, Union
 
 from backtesting.data import OrderStatus, OrderRequest
 from utils.data import OrderBook, Trade
-from metrics.metrics import InstantMetric, TradeMetric, TimeMetric, DeltaMetric
+from metrics.metrics import InstantMetric, TradeMetric, TimeMetric, DeltaMetric, CompositeMetric
 from metrics.filters import Filters
 
 
@@ -14,8 +14,9 @@ class Strategy:
 
   def __init__(self, instant_metrics: List[InstantMetric],
                depth_filter: Filters.DepthFilter = (Filters.DepthFilter(3),),
-               time_metrics_trade: Optional[List[TradeMetric]] = None,
-               time_metrics_snapshot: Optional[List[DeltaMetric]] = None,
+               time_metrics_trade: List[TradeMetric] = [],
+               time_metrics_snapshot: List[DeltaMetric] = [],
+               composite_metrics: List[CompositeMetric] = [],
                initial_balance: int = int(1e6),
                delay = 400e-6):
     """
@@ -26,12 +27,29 @@ class Strategy:
     """
     self.instant_metrics: List[InstantMetric] = instant_metrics
     self.filter: Filters.DepthFilter = depth_filter
-    self.time_metrics: Dict[str, List[TimeMetric]] = {'trade': time_metrics_trade if time_metrics_trade is not None else [],
-                                                      'orderbook': time_metrics_snapshot if time_metrics_snapshot is not None else []}
+    self.time_metrics: Dict[str, List[TimeMetric]] = {'trade': time_metrics_trade,'orderbook': time_metrics_snapshot}
+    self.composite_metrics: List[CompositeMetric] = composite_metrics
     self._delay: int = delay
     self.pending_orders: Dict[int, OrderRequest] = {}
     self.balance: Dict[str, int] = defaultdict(lambda: 0)
     self.balance['USD'] = initial_balance
+
+    self._bind_metrics()
+
+  def _bind_metrics(self):
+    metrics_map = {}
+    for item in self.instant_metrics:
+      metrics_map[item.name] = item
+    for item in self.time_metrics['trade']:
+      metrics_map[item.name] = item
+    for item in self.time_metrics['orderbook']:
+      metrics_map[item.name] = item
+
+    for item in self.composite_metrics:
+      metrics_map[item.name] = item
+
+    for item in self.composite_metrics:
+      item.set_metric_map(metrics_map)
 
   def _update_balance_statuses(self, statuses: List[OrderStatus]):
     for status in statuses:
