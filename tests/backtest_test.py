@@ -27,7 +27,7 @@ class BacktestTest(unittest.TestCase):
   def test_init_moment(self):
     reader = readers.SnapshotReader('resources/snapshots.csv.gz')
     callables = [('trades count', lambda trades: len(trades))]
-    simulation = Strategy([], [], time_metrics_trade=[TimeMetric(callables, 60)])
+    simulation = Strategy([], [], time_metrics_trade=[TradeMetric(callables, 60)])
     backtester = backtest.Backtest(reader, simulation)
 
     row = reader.__next__()
@@ -39,7 +39,7 @@ class BacktestTest(unittest.TestCase):
   def test_trades_len_minute_metric(self):
     reader = readers.SnapshotReader('resources/trade/snapshots.csv.gz', trades_file='resources/trade/trades.csv.gz', stop_after=1000)
     callables = [('trades count', lambda trades: len(trades))]
-    simulation = Strategy([], [], time_metrics_trade=[TimeMetric(callables, 60)])
+    simulation = Strategy([], [], time_metrics_trade=[TradeMetric(callables, 60)])
 
     output = TestOutput([], simulation.time_metrics['trade'][0].metric_names)
     backtester = backtest.Backtest(reader, simulation, output)
@@ -53,7 +53,7 @@ class BacktestTest(unittest.TestCase):
       ('trades volume', lambda trades: sum(map(lambda x: x.volume, trades))),
       ('trades length', lambda trades: len(trades))
     ]
-    simulation = Strategy([], [], time_metrics_trade=[TimeMetric(callables, 60)])
+    simulation = Strategy([], [], time_metrics_trade=[TradeMetric(callables, 60)])
     instant_metric_names = []
 
     output = TestOutput(instant_metric_names, simulation.time_metrics['trade'][0].metric_names)
@@ -74,7 +74,7 @@ class BacktestTest(unittest.TestCase):
 
     metrics = [VWAP_volume(volumes=[100000, 1000000], symbol='XBTUSD'),
                VWAP_volume(volumes=[50000, 500000], symbol='ETHUSD')]
-    simulation = Strategy(metrics, [Filters.DepthFilter(3)], time_metrics_trade=[TimeMetric(callables, 60)])
+    simulation = Strategy(metrics, [Filters.DepthFilter(3)], time_metrics_trade=[TradeMetric(callables, 60)])
     instant_metric_names = [metric.names() for metric in metrics]
     output = TestOutput(instant_metric_names, simulation.time_metrics['trade'][0].metric_names)
     backtester = backtest.Backtest(reader, simulation, output)
@@ -97,7 +97,7 @@ class BacktestTest(unittest.TestCase):
     ]
     instant_metric_names = [metric.names() for metric in instant_metrics]
 
-    time_metrics = [TimeMetric(callables, 60), TimeMetric(callables, 30)]
+    time_metrics = [TradeMetric(callables, 60), TradeMetric(callables, 30)]
 
     simulation = Strategy(instant_metrics, time_metrics_trade=time_metrics)
     output = TestOutput(instant_metric_names=instant_metric_names,
@@ -122,7 +122,7 @@ class BacktestTest(unittest.TestCase):
     ]
     instant_metric_names = [metric.names() for metric in instant_metrics]
 
-    time_metrics = [TimeMetric(callables, 60), TimeMetric(callables, 30)]
+    time_metrics = [TradeMetric(callables, 60), TradeMetric(callables, 30)]
     simulation = Strategy(instant_metrics, time_metrics_trade=time_metrics)
 
     output = TestOutput(instant_metric_names=instant_metric_names,
@@ -210,7 +210,7 @@ class BacktestTest(unittest.TestCase):
     ]
     instant_metric_names = [metric.names() for metric in instant_metrics]
 
-    time_metrics = [TimeMetric(callables, 60), TimeMetric(callables, 30)]
+    time_metrics = [TradeMetric(callables, 60), TradeMetric(callables, 30)]
     simulation = Strategy(instant_metrics, time_metrics_trade=time_metrics)
 
     output = TestOutput(instant_metric_names=instant_metric_names,

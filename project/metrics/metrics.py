@@ -47,7 +47,32 @@ class CompositeMetric(ABC):
   def evaluate(self):
     not NotImplementedError
 
-class TimeMetric(Metric):
+class TimeMetric(ABC, Metric):
+  def __init__(self, callables: List[Tuple[str, Callable[[List], float]]],
+               seconds=60,
+               starting_moment: datetime.datetime = None):
+    self.metric_names: List[str] = [f'{c[0]}_{seconds}' for c in callables]
+    self.seconds = seconds
+    # symbol, side -> trade
+    self._storage: Dict[(str, str), Deque[Trade]] = defaultdict(deque)
+    self._callables: List[Callable[[List[Trade]], float]] = [c[1] for c in callables]
+    self._from: datetime.datetime = starting_moment
+    self._skip_from = False
+
+  def _skip(self, timestamp):
+    if (timestamp - self._from).seconds >= self.seconds:
+      self._skip_from = True
+    return [-1.0] * len(self._callables)
+
+  @abstractmethod
+  def evaluate(self, event) -> List[float]:
+    raise NotImplementedError
+
+  def set_starting_moment(self, moment: datetime.datetime):
+    self._from = moment
+
+
+class TradeMetric(TimeMetric):
   def __init__(self, callables: List[Tuple[str, Callable[[List[Trade]], float]]],
                seconds=60,
                starting_moment: datetime.datetime = None):
@@ -59,33 +84,64 @@ class TimeMetric(Metric):
     self._from: datetime.datetime = starting_moment
     self._skip_from = False
 
-  def evaluate(self, trade: Trade) -> List[float]:
-    target: Deque[Trade] = self._storage[(trade.symbol, trade.side)]
-    target.append(trade)
+
+
+  def evaluate(self, event: Trade) -> List[float]:
+    target: Deque[Trade] = self._storage[(event.symbol, event.side)]
+    target.append(event)
 
     if not self._skip_from:
-      if (trade.timestamp - self._from).seconds >= self.seconds:
-        self._skip_from = True
-      metrics = []
-      # for _callable in self._callables:
-      #   metrics.append(MetricData(f'TimeMetric {_callable[0]}', trade.label(), -1.0))
-      return [-1.0] * len(self._callables)
+      return self._skip(event.timestamp)
     else:
-      while (trade.timestamp - target[0].timestamp).seconds >= self.seconds:
+      while (event.timestamp - target[0].timestamp).seconds >= self.seconds:
         target.popleft()
 
       metrics = []
       for _callable in self._callables:
-      #   metrics.append(MetricData(f'TimeMetric {_callable[0]}', trade.label(), _callable[1](target)))
+      #   metrics.append(MetricData(f'TimeMetric {_callable[0]}', event.label(), _callable[1](target)))
         metrics.append(_callable(target))
 
       return metrics
 
-  def set_starting_moment(self, moment: datetime.datetime):
-    self._from = moment
+  def __str__(self):
+    return f'trade-time-metric:{self.seconds}'
+
+
+class DeltaMetric(TimeMetric):
+  def __init__(self,
+               seconds=60,
+               starting_moment: datetime.datetime = None):
+
+    callables: List[Tuple[str, Callable[[List[Tuple[datetime.datetime, int]]], float]]] = ['Lipton', ]
+    super().__init__(callables, seconds, starting_moment)
+
+  def evaluate(self, event: Tuple[datetime.datetime, str, str, int]) -> List[float]:
+    # datetime, symbol, ask/bid, volume
+
+    timestamp = event[0]
+    symbol = event[1]
+    side = event[2]
+    volume = event[3]
+    sign = 'pos' if volume > 0 else 'neg'
+
+    # symbol, side
+    target: Deque[Tuple[datetime.datetime, int]] = self._storage[(symbol, side)]
+    target.append((timestamp, volume))
+
+    if not self._skip_from:
+      return self._skip(timestamp)
+    else:
+      while (timestamp - target[0][0]).seconds >= self.seconds:
+        target.popleft()
+
+      metrics = []
+      for _callable in self._callables:
+        metrics.append(_callable(target))
+
+      return metrics
 
   def __str__(self):
-    return f'Time metric seconds={self.seconds}'
+    return f'lipton-time-metric:{self.seconds}'
 
 class _VWAP(InstantMetric):
 
@@ -172,7 +228,8 @@ class VWAP_volume(_VWAP):
       i -= 1
     return values
 
-class Lipton(InstantMetric):
+# todo: finish Lipton
+class Lipton(InstantMetric): # todo: use DeltaMetric as input
   def bidask_imbalance(self, snapshot: OrderBook):
     q_b = snapshot.bid_volumes[0]
     q_a = snapshot.ask_volumes[0]

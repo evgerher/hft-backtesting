@@ -4,7 +4,7 @@ from typing import List, Deque, Dict, Tuple, Optional, Union
 
 from backtesting.data import OrderStatus, OrderRequest
 from utils.data import OrderBook, Trade
-from metrics.metrics import InstantMetric, TimeMetric
+from metrics.metrics import InstantMetric, TradeMetric, TimeMetric, DeltaMetric
 from metrics.filters import Filters
 
 
@@ -14,8 +14,8 @@ class Strategy:
 
   def __init__(self, instant_metrics: List[InstantMetric],
                depth_filter: Filters.DepthFilter = (Filters.DepthFilter(3),),
-               time_metrics_trade: Optional[List[TimeMetric]] = None,
-               time_metrics_snapshot: Optional[List[TimeMetric]] = None,
+               time_metrics_trade: Optional[List[TradeMetric]] = None,
+               time_metrics_snapshot: Optional[List[DeltaMetric]] = None,
                initial_balance: int = int(1e6),
                delay = 400e-6):
     """
@@ -71,7 +71,7 @@ class Strategy:
     self._update_balance_orders(orders)
     return orders
 
-  def trigger_snapshot(self, row: Trade,
+  def trigger_snapshot(self, row: OrderBook,
               memory: Dict[Tuple[str], Deque[Tuple[datetime.datetime, Union[OrderBook, Trade]]]],
               # (symbol) -> (timestamp, instant-metric-values)
               snapshot_instant_metrics: Dict[Tuple[str], Deque[Tuple[datetime.datetime, List[float]]]],

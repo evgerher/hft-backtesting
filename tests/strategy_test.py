@@ -7,7 +7,7 @@ from backtesting.data import OrderRequest
 from backtesting.output import TestOutput
 from backtesting.readers import ListReader
 from backtesting.strategy import Strategy
-from metrics.metrics import VWAP_volume, TimeMetric, InstantMetric
+from metrics.metrics import VWAP_volume, TradeMetric, InstantMetric
 from utils.data import OrderBook, Trade
 import numpy as np
 
@@ -63,7 +63,7 @@ class StrategyTest(unittest.TestCase):
 
     ###########################################################
 
-    time_metrics = [TimeMetric(callables, 60), TimeMetric(callables, 30)]
+    time_metrics = [TradeMetric(callables, 60), TradeMetric(callables, 30)]
     simulation = SimpleStrategy(instant_metrics, time_metrics_trade=time_metrics)
 
     output = TestOutput(instant_metric_names=instant_metric_names,

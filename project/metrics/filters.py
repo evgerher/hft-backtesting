@@ -1,3 +1,5 @@
+import datetime
+
 from utils.data import OrderBook
 from typing import Dict, List, Tuple, Optional
 from utils.logger import  setup_logger
@@ -12,7 +14,7 @@ class Filters:
   class Filter(ABC):
 
     @abstractmethod
-    def filter(self, snapshot: OrderBook) -> Optional:
+    def process(self, snapshot: OrderBook) -> Optional:
       raise NotImplementedError
 
   class SymbolFilter(Filter):
@@ -43,20 +45,20 @@ class Filters:
       self.stored_bid_levels_volume[snapshot.symbol] = snapshot.bid_volumes[:self.levels]
       self.stored_ask_levels_volume[snapshot.symbol] = snapshot.ask_volumes[:self.levels]
 
-    def filter(self, snapshot: OrderBook) -> Optional[Tuple[str, int]]:
+    def process(self, snapshot: OrderBook) -> Optional[Tuple[datetime.datetime, str, str, int]]:
       symbol: str = snapshot.symbol
       stored_snapshot: OrderBook = self.snapshots.get(symbol, None)
       
       if stored_snapshot is None:
         self.snapshots[symbol] = snapshot
         self._store_levels(snapshot)
-        return ('init', self.stored_bid_levels_volume[snapshot.symbol][0] + self.stored_ask_levels_volume[snapshot.symbol][0])
+        return (snapshot.timestamp, snapshot.symbol, 'init', self.stored_bid_levels_volume[snapshot.symbol][0] + self.stored_ask_levels_volume[snapshot.symbol][0])
       else:
         bid_levels_price = snapshot.bid_prices[0]
         blp = bid_levels_price != self.stored_bid_levels_price[snapshot.symbol][0]
         if blp:
           logger.debug(f'Bid level price altered, on level=0')
-          result = ('bid', self.stored_bid_levels_volume[snapshot.symbol][0])
+          result = (snapshot.timestamp, snapshot.symbol, 'bid', self.stored_bid_levels_volume[snapshot.symbol][0])
           self._store_levels(snapshot)
           return result
 
@@ -64,7 +66,7 @@ class Filters:
         alp = ask_levels_price != self.stored_ask_levels_price[snapshot.symbol][0]
         if alp:
           logger.debug(f'Ask level price altered, on level=0')
-          result = ('ask', self.stored_ask_levels_volume[snapshot.symbol][0])
+          result = (snapshot.timestamp, snapshot.symbol, 'ask', self.stored_ask_levels_volume[snapshot.symbol][0])
           self._store_levels(snapshot)
           return result
 
@@ -73,13 +75,13 @@ class Filters:
         if (blv != 0).any():
           logger.debug(f'Bid level volume altered, on level={np.where(blv == True)[0]}')
           self._store_levels(snapshot)
-          return ('bid', blv[0])
+          return (snapshot.timestamp, snapshot.symbol, 'bid', blv[0])
 
         ask_levels_volume = snapshot.ask_volumes[:self.levels]
         alv = ask_levels_volume - self.stored_ask_levels_volume[snapshot.symbol]
         if (alv != 0).any():
           logger.debug(f'Ask level volume altered, on level={np.where(alv == True)[0]}')
           self._store_levels(snapshot)
-          return ('ask', alv[0])
+          return (snapshot.timestamp, snapshot.symbol, 'ask', alv[0])
 
       return None
