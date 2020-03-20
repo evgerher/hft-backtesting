@@ -48,7 +48,7 @@ class BacktestTest(unittest.TestCase):
     self.assertEqual(len(output.time_metrics), 87)
 
   def test_trades_volume_minute_metric(self):
-    reader = readers.SnapshotReader('resources/trade/snapshots.csv.gz', trades_file='resources/trade/trades.csv.gz', stop_after=10000, pairs_to_load=10)
+    reader = readers.SnapshotReader('resources/trade/snapshots.csv.gz', trades_file='resources/trade/trades.csv.gz', stop_after=10000, depth_to_load=10)
     callables = [
       ('trades volume', lambda trades: sum(map(lambda x: x.volume, trades))),
       ('trades length', lambda trades: len(trades))
@@ -65,7 +65,7 @@ class BacktestTest(unittest.TestCase):
 
 
   def test_all_metrics(self):
-    reader = readers.SnapshotReader('resources/trade/snapshots.csv.gz', trades_file='resources/trade/trades.csv.gz', stop_after=10000, pairs_to_load=5)
+    reader = readers.SnapshotReader('resources/trade/snapshots.csv.gz', trades_file='resources/trade/trades.csv.gz', stop_after=10000, depth_to_load=5)
     # todo: optimize return metrics (do not waste time on wrapping each -> transform into tuple of values with one header
     callables = [
       ('trades volume', lambda trades: sum(map(lambda x: x.volume, trades))),

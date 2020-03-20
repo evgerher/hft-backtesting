@@ -75,8 +75,7 @@ class Backtest:
       option = self.simulation.filter.process(event)
       if option is None:
         return
-      self._update_memory(event)
-      self._update_metrics(event, option)
+      self._update_snapshots(event, option)
       actions = self.simulation.trigger_snapshot(event, self.memory)
     elif isinstance(event, Trade):
       self._update_trades(event)
@@ -177,26 +176,11 @@ class Backtest:
     if self.output is not None:
       self.output.consume(labels, timestamp, values)
 
-  # todo: refactor _update_* into one function
-  def _update_memory(self, row: OrderBook):
-    logger.debug(f'Update memory with snapshot symbol={row.symbol} @ {row.timestamp}')
-    # # fill memory
-    # market: Deque[Tuple[datetime.datetime, OrderBook]] = self.memory[(row.symbol, )]
-    # market.append((row.timestamp, row))
-    self.memory[('orderbook', row.symbol)] = row
-
-    self._flush_output(['snapshot'], row.timestamp, row)  # todo: fix
-    # self.__remove_old_metric('snapshot', row.timestamp)
-
   def _update_trades(self, row: Trade):
-
     logger.debug(f'Update memory with trade symbol={row.symbol}, side={row.side} @ {row.timestamp}')
-    # market: Deque[Tuple[datetime.datetime, Trade]] = self.trades[(row.symbol, row.side)]
-    # market.append((row.timestamp, row))
     self.memory[('trade', row.symbol, row.side)] = row
     self._flush_output(['trade'], row.timestamp, row)  # todo: fix
-    #
-    # self._flush_output(['trade'], row.timestamp, row)
+
     for time_metric in self.simulation.time_metrics['trade']:
       values = time_metric.evaluate(row)
       self._flush_output(['time-metric', 'trade', row.symbol] + time_metric.label(), row.timestamp, values)
@@ -210,8 +194,10 @@ class Backtest:
         # data: Deque[Tuple[datetime.datetime, int]] = self.snapshot_instant_metrics
         # todo - here
 
-  def _update_metrics(self, row: OrderBook, option: Delta):
+  def _update_snapshots(self, row: OrderBook, option: Delta):
     logger.debug(f'Update metrics with snapshot symbol={row.symbol} @ {row.timestamp}')
+    self.memory[('orderbook', row.symbol)] = row
+    self._flush_output(['snapshot'], row.timestamp, row)  # todo: fix
 
     for instant_metric in self.simulation.instant_metrics:
       values = instant_metric.evaluate(row)

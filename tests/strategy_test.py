@@ -8,6 +8,7 @@ from backtesting.output import TestOutput
 from backtesting.readers import ListReader
 from backtesting.strategy import Strategy
 from metrics.metrics import VWAP_volume, TradeMetric, InstantMetric
+from sample_reader import SimpleStrategy
 from utils.data import OrderBook, Trade
 import numpy as np
 
@@ -40,24 +41,6 @@ class StrategyTest(unittest.TestCase):
       Trade('test', datetime.datetime(2020, 3, 10, 8, 10, 30, 500), 'Sell', 9.0, 1300),
       Trade('test', datetime.datetime(2020, 3, 10, 8, 10, 30, 500), 'Sell', 9.0, 1300),
     ])
-
-    ##########################################################
-    class SimpleStrategy(Strategy):
-      def __init__(self, instant_metrics: List[InstantMetric], time_metrics_trade):
-        super().__init__(instant_metrics, time_metrics_trade=time_metrics_trade)
-        self.idx = 0
-
-      def define_orders(self, row: Union[Trade, OrderBook], memory: Dict[str, Union[Trade, OrderBook]]) -> List[OrderRequest]:
-        item = []
-        if self.idx == 0:
-          item = [OrderRequest.create_bid(9.5, 450, 'test', reader[0].timestamp)]
-        elif self.idx == 4:
-          item = [OrderRequest.create_bid(9.5, 200, 'test', reader[3].timestamp)]
-
-        self.idx += 1
-        return item
-
-    ###########################################################
 
     time_metrics = [TradeMetric(callables, 60), TradeMetric(callables, 30)]
     simulation = SimpleStrategy(instant_metrics, time_metrics_trade=time_metrics)

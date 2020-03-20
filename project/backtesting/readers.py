@@ -47,7 +47,7 @@ class ListReader(Reader):
 
 class SnapshotReader(Reader):
 
-  def __init__(self, snapshot_file: str, trades_file: Optional[str] = None, nrows: int = 10000, stop_after: int = None, pairs_to_load:int=10):
+  def __init__(self, snapshot_file: str, trades_file: Optional[str] = None, nrows: int = 10000, stop_after: int = None, depth_to_load:int=10):
     """
     :param snapshot_file: to read
     :param trades_file: to read
@@ -61,7 +61,7 @@ class SnapshotReader(Reader):
     self._total_snapshots, self._total_trades = 0, 0
 
     self._nrows = nrows
-    self._pairs_to_load =  pairs_to_load
+    self._pairs_to_load =  depth_to_load
     self._snapshots_df: pd.DataFrame = self.__read_csv(self._snapshot_file)
     self.__limit_snapshot = len(self._snapshots_df)
     self._snapshot = self._load_snapshot()

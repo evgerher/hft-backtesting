@@ -3,7 +3,10 @@ from typing import List
 
 import numpy as np
 import sample_reader
-from metrics.metrics import VWAP_volume
+from backtesting import backtest
+from backtesting.readers import SnapshotReader, OrderbookReader
+from backtesting.strategy import CalmStrategy
+from metrics.metrics import VWAP_volume, DeltaMetric, Lipton
 from utils.data import OrderBook
 
 
@@ -47,13 +50,58 @@ class MetricTest(unittest.TestCase):
     assert all(almost_equal(*values) for values in zip(bid_values, [4.0, 3.0, 8./3]))
     assert all(almost_equal(*values) for values in zip(ask_values, [5.0, 5.5, 17./3]))
 
-  def test_vwap_real(self):
+  def test_vwap_latest(self):
 
-    vwap = VWAP_volume(list(map(lambda x: int(x), [5e5, 1e6, 1e6+5e5])))
+    volumes = list(map(lambda x: int(x), [5e5, 1e6, 1e6+5e5]))
+    vwap = VWAP_volume(volumes)
+    self.assertListEqual(volumes, vwap.subitems())
+
     snapshot = sample_reader.get_orderbooks(1, src='resources/orderbook10/orderbook.csv')[0]
     values = vwap.evaluate(snapshot)
-    print(values)
-    self.assertEqual(True, True)
+    latest = vwap.latest
+    self.assertEqual(values, tuple([latest[v] for v in volumes]))
+
+  def test_delta_lipton_metric(self):
+    reader = OrderbookReader(snapshot_file='resources/orderbook_fixed/orderbook.csv', stop_after=15000, depth_to_load=5)
+
+    delta10 = DeltaMetric(seconds=10)
+    lipton = Lipton('delta-10')
+    simulation = CalmStrategy(time_metrics_snapshot=[delta10], composite_metrics=[lipton])
+    metric_map = simulation.metrics_map
+    lipton.set_metric_map(metric_map)
+    self.assertEqual(metric_map['delta-10'], delta10)
+
+    first = reader._snapshot
+    backtester = backtest.Backtest(reader, simulation)
+    backtester.run()
+    last = reader._snapshot
+
+    self.assertTrue((last.timestamp - first.timestamp).seconds > 10)
+
+    storage = metric_map['delta-10'].storage
+    ask_pos_xbtusd = storage[('XBTUSD', 'ask', 'pos')]
+    ask_neg_xbtusd = storage[('XBTUSD', 'ask', 'neg')]
+    bid_pos_xbtusd = storage[('XBTUSD', 'bid', 'pos')]
+    bid_neg_xbtusd = storage[('XBTUSD', 'bid', 'neg')]
+
+    latest = metric_map['delta-10'].latest
+
+    quantity_ask_pos = latest['quantity', 'XBTUSD', 'ask', 'pos']
+    quantity_ask_neg = latest['quantity', 'XBTUSD', 'ask', 'neg']
+    volume_ask_pos = latest['volume', 'XBTUSD', 'ask', 'pos']
+    volume_ask_neg = latest['volume', 'XBTUSD', 'ask', 'neg']
+
+    self.assertEqual(volume_ask_neg, np.sum(ask_neg_xbtusd))
+    self.assertEqual(volume_ask_pos, np.sum(ask_pos_xbtusd))
+    self.assertEqual(quantity_ask_pos, len(ask_pos_xbtusd))
+    self.assertEqual(quantity_ask_neg, len(ask_neg_xbtusd))
+
+
+
+
+
+
+
 
 if __name__ == '__main__':
   unittest.main()

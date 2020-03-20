@@ -13,7 +13,7 @@ class Strategy(ABC):
   delay = 400e-6  # 400 microsec from intranet computer to exchange terminal
   # delay = 1e-3  # 1 msec delay from my laptop
 
-  def __init__(self, instant_metrics: List[InstantMetric],
+  def __init__(self, instant_metrics: List[InstantMetric] = [],
                depth_filter: Filters.DepthFilter = Filters.DepthFilter(3),
                time_metrics_trade: List[TradeMetric] = [],
                time_metrics_snapshot: List[DeltaMetric] = [],
@@ -35,7 +35,7 @@ class Strategy(ABC):
     self.balance: Dict[str, int] = defaultdict(lambda: 0)
     self.balance['USD'] = initial_balance
 
-    self._bind_metrics()
+    self.metrics_map = self._bind_metrics()
 
   def _bind_metrics(self):
     metrics_map = {}
@@ -51,6 +51,8 @@ class Strategy(ABC):
 
     for item in self.composite_metrics:
       item.set_metric_map(metrics_map)
+
+    return metrics_map
 
   def _update_balance_statuses(self, statuses: List[OrderStatus]):
     for status in statuses:
@@ -73,7 +75,7 @@ class Strategy(ABC):
   # todo: add delay
   @abstractmethod
   def define_orders(self, row: Union[Trade, OrderBook], memory: Dict[str, Union[Trade, OrderBook]]) -> List[OrderRequest]:
-    return []
+    raise NotImplementedError
 
   def trigger_trade(self, row: Trade, statuses: List[OrderStatus], memory: Dict[str, Union[Trade, OrderBook]]):
     self._update_balance_statuses(statuses)
@@ -85,3 +87,7 @@ class Strategy(ABC):
     orders = self.define_orders(row, memory)
     self._update_balance_orders(orders)
     return orders
+
+class CalmStrategy(Strategy):
+  def define_orders(self, row: Union[Trade, OrderBook], memory: Dict[str, Union[Trade, OrderBook]]):
+    return []
