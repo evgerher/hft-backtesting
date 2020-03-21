@@ -8,7 +8,7 @@ from utils.data import OrderBook, Trade
 class ReaderTest(unittest.TestCase):
   def test_read_csv(self):
     stop_after = 100
-    snapshotReader: Reader = SnapshotReader('resources/snapshots.csv', stop_after=stop_after)
+    snapshotReader = SnapshotReader('resources/snapshots.csv', stop_after=stop_after)
 
     snapshots = []
     for row in snapshotReader:
@@ -16,11 +16,11 @@ class ReaderTest(unittest.TestCase):
 
     self.assertEqual(len(snapshots), stop_after)
 
-    self.assertEqual(snapshots[0].market, 'XBTUSD')
-    self.assertTrue(325363 in snapshots[0].ask_volumes)
+    self.assertEqual(snapshots[0].symbol, 'XBTUSD')
+    self.assertTrue(26773 in snapshots[0].ask_volumes)
 
-    self.assertEqual(snapshots[-1].market, 'ETHUSD')
-    self.assertTrue(81742 in snapshots[-1].ask_volumes)
+    self.assertEqual(snapshots[-1].symbol, 'ETHUSD')
+    self.assertTrue(16030 in snapshots[-1].ask_volumes)
 
   def test_read_csv_gz(self):
     stop_after = 100
@@ -86,3 +86,5 @@ class ReaderTest(unittest.TestCase):
     matched_trades = [x[0] for x in matches]
     non_matched_trades = sorted(list(set(trades) - set(matched_trades)), key=lambda x: x.timestamp)
     print('matches={}, trades={}, non_matched_trades={}'.format(len(matches), len(trades), len(non_matched_trades)))
+if __name__ == '__main__':
+  unittest.main()

@@ -10,14 +10,19 @@ class OrderStatus:
   id: int
   status: str
   at: datetime.datetime
+  volume: int
 
   @staticmethod
   def finish(id: int, timestamp: datetime.datetime) -> 'OrderStatus':
-    return OrderStatus(id, 'finished', timestamp)
+    return OrderStatus(id, 'finished', timestamp, -1)
 
   @staticmethod
   def remove(id: int, timestamp: datetime.datetime) -> 'OrderStatus':
-    return OrderStatus(id, 'removed', timestamp)
+    return OrderStatus(id, 'removed', timestamp, -1)
+
+  @staticmethod
+  def partial(id: int, timestamp: datetime.datetime, volume: int) -> 'OrderStatus':
+    return OrderStatus(id, 'partial', timestamp, volume)
 
 
 @dataclass

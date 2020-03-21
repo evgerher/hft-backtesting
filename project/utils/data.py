@@ -38,11 +38,6 @@ class Trade:
     trade_side = 'bid' if self.side == 'Sell' else 'ask'
     price_condition = self.price >= snapshot_price if trade_side is 'ask' else self.price <= snapshot_price
 
-    # if snapshot_side in 'ask':
-    #   pass
-    # elif snapshot_side in 'bid':
-    #   pass
-
     return snapshot_side == trade_side \
         and np.abs(volume_total) == self.volume \
         and snapshot_price == self.price \

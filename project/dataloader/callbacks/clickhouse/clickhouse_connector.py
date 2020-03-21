@@ -9,7 +9,7 @@ from utils.logger import setup_logger
 import numpy as np
 from typing import List
 
-logger = setup_logger("<clickhouse>", "DEBUG")
+logger = setup_logger("<clickhouse>", "INFO")
 
 
 class ClickHouse(Connector):
@@ -52,6 +52,7 @@ class ClickHouse(Connector):
     self.trades_counter += 1
 
     if self.trades_counter % 2500 == 0:
+      logger.info('Trade ping clickhouse')
       self.client.connection.ping()
 
   def store_snapshot(self, symbol: str, timestamp: datetime.datetime, data: list):
@@ -63,6 +64,7 @@ class ClickHouse(Connector):
       self.client.connection.ping()
 
     if self.snapshot_counter % 5000 == 0:
+      logger.info('Snapshot reconnect to clickhouse')
       self.client.disconnect()
       self.client = self.create_client()
 

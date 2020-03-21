@@ -5,10 +5,11 @@ from utils import helper
 from utils.data import OrderBook, Trade
 from utils.logger import setup_logger
 import pandas as pd
+from abc import ABC, abstractmethod
 
 logger = setup_logger('<reader>', 'INFO')
 
-class Reader:
+class Reader(ABC):
 
   def __init__(self, moment: datetime.datetime):
     self.initial_moment = moment
@@ -19,8 +20,9 @@ class Reader:
   def __iter__(self):
     return self
 
+  @abstractmethod
   def __next__(self):
-    pass
+    raise NotImplementedError
 
 class ListReader(Reader):
   def __init__(self, items: List[Union[OrderBook, Trade]]):
@@ -45,7 +47,7 @@ class ListReader(Reader):
 
 class SnapshotReader(Reader):
 
-  def __init__(self, snapshot_file: str, trades_file: Optional[str] = None, nrows: int = 10000, stop_after: int = None, pairs_to_load:int=10):
+  def __init__(self, snapshot_file: str, trades_file: Optional[str] = None, nrows: int = 10000, stop_after: int = None, depth_to_load:int=10):
     """
     :param snapshot_file: to read
     :param trades_file: to read
@@ -59,7 +61,7 @@ class SnapshotReader(Reader):
     self._total_snapshots, self._total_trades = 0, 0
 
     self._nrows = nrows
-    self._pairs_to_load =  pairs_to_load
+    self._pairs_to_load =  depth_to_load
     self._snapshots_df: pd.DataFrame = self.__read_csv(self._snapshot_file)
     self.__limit_snapshot = len(self._snapshots_df)
     self._snapshot = self._load_snapshot()
@@ -70,13 +72,17 @@ class SnapshotReader(Reader):
       self.__trades_df: pd.DataFrame = self.__read_csv(self._trades_file)
       self._limit_trades = len(self.__trades_df)
       self._trade = self.__load_trade()
-
-
+      initial_trade = helper.convert_to_datetime(self.__trades_df.iloc[0, 1])
+    else:
+      initial_trade = None
+      self._limit_trades = 0
 
     self._read_first_trades = True
     self.__stop_after = stop_after
 
-    super().__init__(helper.convert_to_datetime(self.__trades_df.iloc[0, 1]))
+    initial_snapshot = helper.convert_to_datetime(self._snapshots_df.iloc[0, 0])
+    initial_trade = initial_trade or initial_snapshot
+    super().__init__(min(initial_trade, initial_snapshot))
 
   def __read_csv(self, fname, skiprows=0):
     return pd.read_csv(fname, header=None, sep=',',
@@ -92,7 +98,7 @@ class SnapshotReader(Reader):
 
     # end condition
     if (self.__limit_snapshot != self._nrows and self._snapshot_idx == self.__limit_snapshot) or \
-        (self.__stop_after is not None and self._snapshot_idx == self.__stop_after):
+        (self.__stop_after is not None and self._total_snapshots + self._snapshot_idx == self.__stop_after + 1):
       self._total_snapshots += self._snapshot_idx
       logger.debug(f"Finished snapshot_file {self._snapshot_file}, read {self._total_snapshots} rows")
       raise StopIteration
@@ -115,7 +121,7 @@ class SnapshotReader(Reader):
 
     # select whom to return
 
-    if self._read_first_trades or (
+    if self._limit_trades != 0 and self._read_first_trades or (
         not self.__finished_trades
         and self._trade.timestamp == self._snapshot.timestamp
         and self._trade.symbol == self._snapshot.symbol): # todo: here I loose the last trade in buffer

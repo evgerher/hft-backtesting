@@ -1,17 +1,22 @@
 import datetime
 from dataloader.callbacks.message import TradeMessage
 from utils.data import OrderBook
+from abc import ABC, abstractmethod
 
 
-class Connector:
+class Connector(ABC):
+  @abstractmethod
   def store_snapshot(self, market: str, timestamp:datetime.datetime, data: list):
-    pass
+    raise NotImplementedError
 
+  @abstractmethod
   def store_index(self, trade: TradeMessage):
-    pass
+    raise NotImplementedError
 
+  @abstractmethod
   def store_trade(self, trade: TradeMessage):
-    pass
+    raise NotImplementedError
 
+  @abstractmethod
   def store_orderbook(self, orderbook: OrderBook):
-    pass
+    raise NotImplementedError

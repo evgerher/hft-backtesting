@@ -7,7 +7,8 @@ from backtesting.data import OrderRequest
 from backtesting.output import TestOutput
 from backtesting.readers import ListReader
 from backtesting.strategy import Strategy
-from metrics.metrics import VWAP_volume, TimeMetric, InstantMetric
+from metrics.metrics import VWAP_volume, TradeMetric, InstantMetric
+from sample_reader import SimpleStrategy
 from utils.data import OrderBook, Trade
 import numpy as np
 
@@ -41,30 +42,8 @@ class StrategyTest(unittest.TestCase):
       Trade('test', datetime.datetime(2020, 3, 10, 8, 10, 30, 500), 'Sell', 9.0, 1300),
     ])
 
-    ##########################################################
-    class SimpleStrategy(Strategy):
-      def __init__(self, instant_metrics: List[InstantMetric], time_metrics):
-        super().__init__(instant_metrics, time_metrics=time_metrics)
-        self.idx = 0
-
-      def define_orders(self, row: Union[Trade, OrderBook],
-                    memory: Dict[Tuple[str], Deque[Tuple[datetime.datetime, Union[OrderBook, Trade]]]],
-                    snapshot_instant_metrics: Dict[Tuple[str], Deque[Tuple[datetime.datetime, List[float]]]],
-                    trade_time_metrics: Dict[Tuple[str, str, int], Deque[Tuple[datetime.datetime, List[float]]]],
-                    trades: Dict[Tuple[str, str], Deque[Tuple[datetime.datetime, Trade]]]):
-        item = []
-        if self.idx == 0:
-          item = [OrderRequest.create_bid(9.5, 450, 'test', reader[0].timestamp)]
-        elif self.idx == 4:
-          item = [OrderRequest.create_bid(9.5, 200, 'test', reader[3].timestamp)]
-
-        self.idx += 1
-        return item
-
-    ###########################################################
-
-    time_metrics = [TimeMetric(callables, 60), TimeMetric(callables, 30)]
-    simulation = SimpleStrategy(instant_metrics, time_metrics=time_metrics)
+    time_metrics = [TradeMetric(callables, 60), TradeMetric(callables, 30)]
+    simulation = SimpleStrategy(instant_metrics, time_metrics_trade=time_metrics)
 
     output = TestOutput(instant_metric_names=instant_metric_names,
                         time_metric_names=[metric.metric_names for metric in time_metrics])
@@ -92,3 +71,7 @@ class StrategyTest(unittest.TestCase):
     backtester._process_event(reader[-1])
     self.assertEqual(initial_balance['USD'] - 650, simulation.balance['USD'])
     self.assertAlmostEqual(650.0 / 9.5, simulation.balance['test'], delta=1e-3)
+
+
+if __name__ == '__main__':
+  unittest.main()

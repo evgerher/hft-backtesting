@@ -6,6 +6,7 @@ from dataloader.callbacks.connectors import Connector
 from utils.data import OrderBook
 from utils.logger import setup_logger
 from dataloader.callbacks.message import TradeMessage, MetaMessage
+from abc import ABC, abstractmethod
 
 logger = setup_logger('<data-loader>', 'INFO')
 
@@ -68,20 +69,23 @@ class SnapshotBuilder:
     return f'<Snapshot :: symbol={self.symbol}, highest bid = {bid}, lowest ask = {ask}>'
 
 
-class Data_Preprocessor:
+class Data_Preprocessor(ABC):
   def __init__(self, connector: Connector):
     self.connector = connector
     self.snapshots: Dict[str, SnapshotBuilder] = {}
     self.counter = 0
 
+  @abstractmethod
   def _preprocess_partial(self, partial: dict) -> list:
-    pass
+    raise NotImplementedError
 
+  @abstractmethod
   def _preprocess_update(self, tick: dict) -> list:
-    pass
+    raise NotImplementedError
 
+  @abstractmethod
   def _get_message_meta(self, msg: Dict[str, str]) -> 'MetaMessage':
-    pass
+    raise NotImplementedError
 
   def callback(self, msg: dict):
     meta = self._get_message_meta(msg)
