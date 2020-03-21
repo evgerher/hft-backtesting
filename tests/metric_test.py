@@ -64,28 +64,26 @@ class MetricTest(unittest.TestCase):
   def test_delta_lipton_metric(self):
     reader = OrderbookReader(snapshot_file='resources/orderbook_fixed/orderbooks.csv.gz', stop_after=5000, depth_to_load=5)
 
-    delta10 = DeltaMetric(seconds=10)
-    lipton = Lipton('delta-10')
+    delta10 = DeltaMetric(seconds=60)
+    lipton = Lipton('delta-60')
     simulation = CalmStrategy(time_metrics_snapshot=[delta10], composite_metrics=[lipton])
     metric_map = simulation.metrics_map
     lipton.set_metric_map(metric_map)
-    self.assertEqual(metric_map['delta-10'], delta10)
+    self.assertEqual(metric_map['delta-60'], delta10)
 
     first = reader._snapshot
     backtester = backtest.Backtest(reader, simulation)
     backtester.run()
     last = reader._snapshot
 
-    self.assertTrue((last.timestamp - first.timestamp).seconds > 10)
-
-    storage = metric_map['delta-10'].storage
+    # self.assertTrue((last.timestamp - first.timestamp).seconds > 60)
+    # TODO: REFACTOR DELTA TO QUANTITY LIMITED METRIC (NOT TIME LIMITED)
+    storage = metric_map['delta-60'].storage
     ask_pos_xbtusd = storage[('XBTUSD', 'ask', 'pos')]
     ask_neg_xbtusd = storage[('XBTUSD', 'ask', 'neg')]
     bid_pos_xbtusd = storage[('XBTUSD', 'bid', 'pos')]
-    bid_neg_xbtusd = storage[('XBTUSD', 'bid', 'neg')]
 
-    latest = metric_map['delta-10'].latest
-
+    latest = metric_map['delta-60'].latest
     quantity_ask_pos = latest['quantity', 'XBTUSD', 'ask', 'pos']
     quantity_ask_neg = latest['quantity', 'XBTUSD', 'ask', 'neg']
     volume_ask_pos = latest['volume', 'XBTUSD', 'ask', 'pos']
@@ -95,6 +93,19 @@ class MetricTest(unittest.TestCase):
     self.assertEqual(volume_ask_pos, np.sum(ask_pos_xbtusd))
     self.assertEqual(quantity_ask_pos, len(ask_pos_xbtusd))
     self.assertEqual(quantity_ask_neg, len(ask_neg_xbtusd))
+
+    replenishment = storage[(last.symbol, 'ask', 'pos')]
+    depletion = storage[(last.symbol, 'bid', 'neg')]
+    length = min(len(depletion), len(replenishment))
+    lipton_latest = metric_map['lipton'].latest[last.symbol]
+    p_xy = np.corrcoef(list(depletion)[-length:], list(replenishment)[-length:])[0, 1]
+
+    x = float(last.bid_volumes[0])
+    y = float(last.ask_volumes[0])
+    sqrt_corr = np.sqrt((1 + p_xy) / (1 - p_xy))
+    p = 0.5 * (1. - np.arctan(sqrt_corr * (y - x) / (y + x)) / np.arctan(sqrt_corr))
+    self.assertAlmostEqual(p, lipton_latest)
+    print(p)
 
 if __name__ == '__main__':
   unittest.main()

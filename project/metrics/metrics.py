@@ -32,9 +32,9 @@ class Metric(ABC):
     raise NotImplementedError
 
 class InstantMetric(Metric):
-  def evaluate(self, arg)  -> Union[np.array, float]:
+  def evaluate(self, arg: Union[Trade, OrderBook])  -> Union[np.array, float]:
     latest = self._evaluate(arg)
-    self.latest = latest
+    self.latest[arg.symbol] = latest
     return latest
 
   @abstractmethod
@@ -240,10 +240,24 @@ class DeltaMetric(TimeMetric):
     sign = 'pos' if volume > 0 else 'neg' if volume < 0 else None
     key = (symbol, side, sign)
 
-    time_storage = self._time_storage[key]
-    while (event[0] - time_storage[0]).seconds > self.seconds:
+    time_storage = self._time_storage[key] # TODO: REFACTOR TO ANOTHER TYPE
+    while len(time_storage) > 50:
       time_storage.popleft()
       storage.popleft()
+    # while (event[0] - time_storage[0]).seconds > self.seconds:
+    #   time_storage.popleft()
+    #   storage.popleft()
+
+  def _skip(self, event):
+    timestamp = event[0]
+    symbol = event[1]
+    side = event[2]
+    volume = event[3]
+    sign = 'pos' if volume > 0 else 'neg' if volume < 0 else None
+
+    if len(self.storage[(symbol, side, sign)]) > 50:
+      self._skip_from = True
+    return [-1.0] * len(self._callables)
 
   def _get_update_deque(self, event: Delta):
     timestamp = event[0]
@@ -251,6 +265,7 @@ class DeltaMetric(TimeMetric):
     side = event[2]
     volume = event[3]
     sign = 'pos' if volume > 0 else 'neg' if volume < 0 else None
+    volume = volume if volume > 0 else -volume
 
     key = (symbol, side, sign)
     target: Deque[int] = self.storage[key]
@@ -271,21 +286,24 @@ class CompositeMetric(InstantMetric):
 
 class Lipton(CompositeMetric):
   def __init__(self, delta_name: str, metric_map: Dict[str, Metric] = None):
-    super().__init__('lipton-upward-probability')
+    super().__init__('lipton')
     self.delta_name = delta_name
-    self._first_time = False
+    self._first_time = True
 
   def _evaluate(self, snapshot: OrderBook): # todo: test it
     assert self._metric_map is not None
     delta_storage = self._metric_map[self.delta_name].storage
     replenishment_ask: List[int] = delta_storage[(snapshot.symbol, 'ask', 'pos')]
     depletion_bid: List[int] = delta_storage[(snapshot.symbol, 'bid', 'neg')]
-    if not self._first_time:
-      if len(replenishment_ask) > 3 and len(depletion_bid) > 3:
+
+    if self._first_time:
+      if len(replenishment_ask) > 5 and len(depletion_bid) > 5:
         self._first_time = False
       return 0.0
 
-    p_xy = np.corrcoef(depletion_bid, replenishment_ask)[0, 1]
+    length = min(len(depletion_bid), len(replenishment_ask)) # todo: here I need NOT TIME LIMITED, BUT QUANTITY LIMITED
+    # TODO: UPDATE STORAGE METHOD
+    p_xy = np.corrcoef(list(depletion_bid)[-length:], list(replenishment_ask)[-length:])[0, 1]
 
     x = float(snapshot.bid_volumes[0])
     y = float(snapshot.ask_volumes[0])

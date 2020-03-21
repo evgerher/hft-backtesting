@@ -9,3 +9,4 @@ tests/resources/huge_dataset/
 tests/resources/logs.txt
 tests/tmp.py
 .pytest_cache
+project/clickhouse_storage/
