@@ -1,0 +1,50 @@
+{
+  "logging": {
+    "version": 1,
+    "disable_existing_loggers": true,
+    "formatters": {
+      "brief": {
+        "class": "logging.Formatter",
+        "datefmt": "%I:%M:%S",
+        "format": "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+      },
+      "single-line": {
+        "class": "logging.Formatter",
+        "datefmt": "%I:%M:%S",
+        "format": "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+      },
+      "multi-process": {
+        "class": "logging.Formatter",
+        "datefmt": "%I:%M:%S",
+        "format": "%%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+      },
+      "multi-thread": {
+        "class": "logging.Formatter",
+        "datefmt": "%I:%M:%S",
+        "format": "%%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+      },
+      "verbose": {
+        "class": "logging.Formatter",
+        "datefmt": "%I:%M:%S",
+        "format": "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+      },
+      "multiline": {
+        "class": "logging.Formatter",
+        "format": "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+      }
+    },
+    "handlers": {
+      "console":{
+        "level": "DEBUG",
+        "class": "logging.StreamHandler",
+        "formatter": "single-line",
+        "stream" : "ext://sys.stdout"
+      }
+    },
+    "loggers": { },
+    "root": {
+      "handlers": ["console"],
+      "level": "DEBUG"
+    }
+  }
+}

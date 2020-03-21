@@ -5,7 +5,7 @@ name: Python application
 
 on:
   push:
-    branches: [ feature/*, master, refactor/* ]
+    branches: [ feature/*, master, develop, refactor/* ]
 jobs:
   build:
 

@@ -10,6 +10,7 @@ COPY utils /utils
 RUN pip install -r /dataloader/requirements.txt
 ENV PYTHONPATH "${PYTHONPATH}:/usr/lib/python3.7/site-packages:/"
 EXPOSE 9000
+EXPOSE 13000
 ARG HOST
 ARG PASSWORD
 ENTRYPOINT python /dataloader/loader.py --host=${HOST} --password=${PASSWORD}

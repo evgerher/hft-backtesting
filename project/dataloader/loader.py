@@ -1,3 +1,4 @@
+import logging.config
 import time
 
 from dataloader.callbacks.clickhouse.clickhouse_connector import ClickHouse
@@ -44,6 +45,7 @@ def main(db_host, db_password):
     finished = True
     # kdb_connector.close()
     # Stop app with kill -14 <pid>
+    logging.config.stopListening()
 
 if __name__ == '__main__':
   # Get command line parameters
