@@ -87,11 +87,14 @@ class _VWAP(InstantMultiMetric):
 
 class VWAP_depth(_VWAP):
   def __str__(self):
-    return f'VWAP (Depth): {self.levels}'
+    return f'VWAP (Depth): {self.level}'
 
-  def __init__(self, name = 'vwap-depth', levels = 3):
+  def __init__(self, name = 'vwap-depth', level = 3):
     super().__init__(name)
-    self.levels = levels
+    self.level = level
+
+  def subitems(self):
+    return [self.level]
 
   def _evaluate_side(self, prices: np.array, volumes: np.array) -> np.array: # todo: test
     # volumes are assumed to be sorted
@@ -101,7 +104,7 @@ class VWAP_depth(_VWAP):
       if volumes[i] != 0:
         counter += 1
 
-      if counter == self.levels:
+      if counter == self.level:
         break
 
       i += 1

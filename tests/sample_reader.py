@@ -39,7 +39,7 @@ class SimpleStrategy(Strategy):
     self.idx = 0
     self.reader = reader
 
-  def define_orders(self, row: Union[Trade, OrderBook], memory: Dict[str, Union[Trade, OrderBook]]) -> List[OrderRequest]:
+  def define_orders(self, row: Union[Trade, OrderBook], statuses, memory: Dict[str, Union[Trade, OrderBook]]) -> List[OrderRequest]:
     item = []
     if self.idx == 0:
       item = [OrderRequest.create_bid(9.5, 450, 'test', self.reader[0].timestamp)]

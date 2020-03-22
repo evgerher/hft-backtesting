@@ -1,13 +1,14 @@
-import datetime
 from collections import defaultdict
-from typing import List, Deque, Dict, Tuple, Optional, Union
+from typing import List, Dict, Tuple, Union
 
 from backtesting.data import OrderStatus, OrderRequest
 from utils.data import OrderBook, Trade
 from metrics.metrics import InstantMetric, TradeMetric, TimeMetric, DeltaMetric, CompositeMetric
 from metrics.filters import Filters
+from utils.logger import setup_logger
 
 from abc import ABC, abstractmethod
+logger = setup_logger('<Strategy>')
 
 class Strategy(ABC):
   delay = 400e-6  # 400 microsec from intranet computer to exchange terminal
@@ -28,23 +29,26 @@ class Strategy(ABC):
     """
     self.instant_metrics: List[InstantMetric] = instant_metrics
     self.filter: Filters.DepthFilter = depth_filter
-    self.time_metrics: Dict[str, List[TimeMetric]] = {'trade': time_metrics_trade,'orderbook': time_metrics_snapshot}
+    self.time_metrics: Dict[str, List[TimeMetric]] = {
+      'trade': time_metrics_trade,
+      'orderbook': time_metrics_snapshot
+    }
     self.composite_metrics: List[CompositeMetric] = composite_metrics
     self._delay: int = delay
-    self.pending_orders: Dict[int, OrderRequest] = {}
+    self.active_orders: Dict[int, OrderRequest] = {}
     self.balance: Dict[str, int] = defaultdict(lambda: 0)
     self.balance['USD'] = initial_balance
 
-    self.metrics_map = self._bind_metrics()
+    self.metrics_map = self.__bind_metrics()
 
-  def _bind_metrics(self):
+  def __bind_metrics(self):
     metrics_map = {}
     for item in self.instant_metrics:
       metrics_map[item.name] = item
-    for item in self.time_metrics['trade']:
-      metrics_map[item.name] = item
-    for item in self.time_metrics['orderbook']:
-      metrics_map[item.name] = item
+
+    for sublist in self.time_metrics.values():
+      for item in sublist:
+        metrics_map[item.name] = item
 
     for item in self.composite_metrics:
       metrics_map[item.name] = item
@@ -54,40 +58,78 @@ class Strategy(ABC):
 
     return metrics_map
 
-  def _update_balance_statuses(self, statuses: List[OrderStatus]):
+  def _balance_update_by_status(self, statuses: List[OrderStatus]):
     for status in statuses:
-      if status.status == 'finished':
-        order = self.pending_orders[status.id]
-        if order.side == 'ask':
-          self.balance['USD'] += order.volume
-        elif order.side == 'bid':
-          self.balance[order.symbol] += order.volume / order.price
-  #     todo: process here 'partial' cases
+      logger.info(f'Received status: {status}')
 
-  def _update_balance_orders(self, orders: List[OrderRequest]):
+      if status.status == 'finished' or status.status == 'partial':
+        order = self.active_orders[status.id]
+        if status.status == 'finished':
+          volume = order.volume
+          order.volume_filled = order.volume
+        else:
+          volume = status.volume
+          order.volume_filled += status.volume
+
+        ### action positive update balance
+        if order.side == 'ask':
+          self.balance['USD'] += volume
+        elif order.side == 'bid':
+          self.balance[order.symbol] += volume / order.price
+
+      elif status.status == 'removed':
+        del self.active_orders[status.id]
+
+  def _balance_update_new_order(self, orders: Tuple[OrderRequest]):
     for order in orders:
-      self.pending_orders[order.id] = order
+      ### action negative update balance
+      self.active_orders[order.id] = order
       if order.side == 'ask':
         self.balance[order.symbol] -= order.volume / order.price
       elif order.side == 'bid':
         self.balance['USD'] -= order.volume
 
-  # todo: add delay
+  def _get_allowed_volume(self, symbol, memory, side):
+    latest: OrderBook = memory[('orderbook', symbol)]
+    side_level = latest.bid_volumes[0] if side == 'bid' else latest.ask_volumes[0]
+    return max(side_level * 0.15, 10000)
+
+  def __validate_orders(self, orders, memory):
+    for order in orders:
+      latest: OrderBook = memory[('orderbook', order.symbol)]
+      side_level = latest.bid_volumes[0] if order.side == 'bid' else latest.ask_volumes[0]
+      assert (side_level * 0.15 >= order.volume) or (side_level < order.volume and order.volume <= 10000), \
+        f"order size must be max 15% of the level or 10000 units"
+
+  def __remove_finished_orders(self, statuses):
+    for status in statuses:
+      if status.status == 'finished':
+        del self.active_orders[status.id]
+
   @abstractmethod
-  def define_orders(self, row: Union[Trade, OrderBook], memory: Dict[str, Union[Trade, OrderBook]]) -> List[OrderRequest]:
+  def define_orders(self, row: Union[Trade, OrderBook],
+                    statuses: List[OrderStatus],
+                    memory: Dict[str, Union[Trade, OrderBook]]) -> Tuple[OrderRequest]:
     raise NotImplementedError
 
   def trigger_trade(self, row: Trade, statuses: List[OrderStatus], memory: Dict[str, Union[Trade, OrderBook]]):
-    self._update_balance_statuses(statuses)
-    orders = self.define_orders(row, memory)
-    self._update_balance_orders(orders)
-    return orders
+    self._balance_update_by_status(statuses)
+    return self._trigger(row, statuses, memory)
 
   def trigger_snapshot(self, row: OrderBook, memory: Dict[str, Union[Trade, OrderBook]]):
-    orders = self.define_orders(row, memory)
-    self._update_balance_orders(orders)
+    return self._trigger(row, [], memory)
+
+  def _trigger(self, row: Union[Trade, OrderBook],
+               statuses: List[OrderStatus],
+               memory: Dict[str, Union[Trade, OrderBook]]):
+    orders = self.define_orders(row, statuses, memory)
+    self.__validate_orders(orders, memory)
+    self._balance_update_new_order(orders)
+    self.__remove_finished_orders(statuses)
     return orders
 
 class CalmStrategy(Strategy):
-  def define_orders(self, row: Union[Trade, OrderBook], memory: Dict[str, Union[Trade, OrderBook]]):
+  def define_orders(self, row: Union[Trade, OrderBook],
+                    statuses: List[OrderStatus],
+                    memory: Dict[str, Union[Trade, OrderBook]]):
     return []

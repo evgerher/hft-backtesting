@@ -25,7 +25,8 @@ class Backtest:
                order_position_policy: str = 'top', # 'random' or 'bottom'
                time_horizon:int=120,
                seed=1337,
-               notify_partial = True):
+               notify_partial = True,
+               ):
     """
 
     :param reader:
@@ -69,7 +70,7 @@ class Backtest:
     #   option = self.simulation.filter.process(row)
     #   return option
 
-    actions = None
+    actions = []
     option = None
     if isinstance(event, OrderBook):
       option = self.simulation.filter.process(event)
@@ -130,8 +131,9 @@ class Backtest:
                 del self.simulated_orders_id[order.id]
               else:
                 orders[order.price][idx] = (order_id, volume_left, consumption)
-                partial = OrderStatus.partial(order_id, trade.timestamp, int(consumption * order.volume))
-                statuses.append(partial)
+                if self._notify_partial:
+                  partial = OrderStatus.partial(order_id, trade.timestamp, int(consumption * order.volume))
+                  statuses.append(partial)
 
     return statuses
 
