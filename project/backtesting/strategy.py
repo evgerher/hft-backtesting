@@ -35,6 +35,7 @@ class Strategy(ABC):
     }
     self.composite_metrics: List[CompositeMetric] = composite_metrics
     self._delay: int = delay
+
     self.active_orders: Dict[int, OrderRequest] = {}
     self.balance: Dict[str, int] = defaultdict(lambda: 0)
     self.balance['USD'] = initial_balance

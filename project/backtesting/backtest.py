@@ -2,13 +2,13 @@ from backtesting.output import Output
 from backtesting.readers import Reader
 from backtesting.strategy import Strategy
 from backtesting.data import OrderStatus, OrderRequest
-from metrics.types import Delta
+from utils.types import Delta
 from utils.data import OrderBook, Trade
 from utils.logger import setup_logger
 
 import datetime
-from typing import Dict, List, Optional, Tuple, Union
-from collections import defaultdict, OrderedDict
+from typing import Dict, List, Optional, Tuple, Union, Deque
+from collections import defaultdict, OrderedDict, deque
 import random
 import numpy as np
 
@@ -26,7 +26,7 @@ class Backtest:
                time_horizon:int=120,
                seed=1337,
                notify_partial = True,
-               ):
+               delay=400e-3):
     """
 
     :param reader:
@@ -35,6 +35,7 @@ class Backtest:
     :param order_position_policy:
     :param time_horizon:
     :param seed:
+    :param delay:
     """
     self.reader: Reader = reader
     self.simulation: Strategy = simulation
@@ -43,6 +44,8 @@ class Backtest:
     self.memory: Dict[str, Union[Trade, OrderBook]] = {}
     self.output: Output = output
 
+    self.pending_orders: Deque[(datetime.datetime, OrderRequest)] = deque()
+    self.pending_statuses: Deque[(datetime.datetime, OrderStatus)] = deque()
     # (symbol, side) -> price -> List[(order_id, volume-left, consumption-ratio)]
     self.simulated_orders: Dict[SymbolSide, OrderedDict[float, List[OrderState]]] = defaultdict(lambda: defaultdict(list))
     # id -> request
@@ -62,7 +65,7 @@ class Backtest:
 
     self._generate_initial_position = policy
     self.__initialize_time_metrics()
-
+    self.delay = delay
     logger.info(f"Initialized {self}")
 
   def _process_event(self, event: Union[Trade, OrderBook]):
@@ -75,13 +78,25 @@ class Backtest:
       self._update_snapshots(event, option)
       actions = self.simulation.trigger_snapshot(event, self.memory)
     elif isinstance(event, Trade):
+
+      if self.delay != 0: # todo: may be remove it? It will make slight performance lowerance
+        # update pending orders, if delay passed
+        pend_orders = self.__update_pending_objects(event.timestamp, self.pending_orders)
+        for ord in pend_orders:
+          self.__move_order_to_active(ord)
+
       self._update_trades(event)
       statuses = self._evaluate_statuses(event)
+
+      if self.delay != 0: # if delay, statuses are also queued
+        self.pending_statuses.append(statuses)
+        statuses = self.__update_pending_objects(event.timestamp, self.pending_statuses)
+
       actions = self.simulation.trigger_trade(event, statuses, self.memory)
 
     self._update_composite_metrics(event, option)
     if len(actions) > 0:
-      self._process_actions(actions) # todo: add delay
+      self._process_actions(actions)
 
 
   def run(self):
@@ -130,27 +145,43 @@ class Backtest:
 
     return statuses
 
+  def __move_order_to_active(self, action: OrderRequest):
+    symbol, side, price = action.label()
+    orderbook = self.memory[('orderbook', symbol)]  # get most recent (datetime, orderbook) and return orderbook
+    if side == 'bid':
+      prices = orderbook.bid_prices
+      volumes = orderbook.bid_volumes
+    elif side == 'ask':
+      prices = orderbook.ask_prices
+      volumes = orderbook.ask_volumes
+    else:
+      raise KeyError("wrong side")
+
+    idx = np.where(prices == price)[0]
+    level_volume = volumes[idx]
+
+    orders = self.simulated_orders[(symbol, side)][price]
+    orders_volume = sum(map(lambda x: x[0].volume * (1.0 - x[1]),
+                            map(lambda x: (self.simulated_orders_id[x[0]], x[2]),
+                                orders))) # todo: add explanation
+    orders.append((action.id, self._generate_initial_position() * level_volume + orders_volume, 0.0))
+    self.simulated_orders_id[action.id] = action
+
+  def __update_pending_objects(self, timestamp: datetime.datetime, objects_deque: Deque):
+    t = timestamp - datetime.timedelta(seconds=self.delay)
+    objs = []
+    while len(objects_deque) > 0 and t > objects_deque[0]:
+      objs.append(objects_deque.popleft())
+    return objs
+
+
   def _process_actions(self, actions: List[OrderRequest]):
     for action in actions:
       if action.command == 'new':
-        symbol, side, price = action.label()
-        orderbook = self.memory[('orderbook', symbol)] # get most recent (datetime, orderbook) and return orderbook
-        if side == 'bid':
-          prices = orderbook.bid_prices
-          volumes = orderbook.bid_volumes
-        elif side == 'ask':
-          prices = orderbook.ask_prices
-          volumes = orderbook.ask_volumes
+        if self.delay == 0:
+          self.__move_order_to_active(action)
         else:
-          raise KeyError("wrong side")
-
-        idx = np.where(prices == price)[0]
-        level_volume = volumes[idx]
-
-        orders = self.simulated_orders[(symbol, side)][price]
-        orders_volume = sum(map(lambda x: x[0].volume * (1.0 - x[1]), map(lambda x: (self.simulated_orders_id[x[0]], x[2]), orders)))
-        orders.append((action.id, self._generate_initial_position() * level_volume + orders_volume, 0.0))
-        self.simulated_orders_id[action.id] = action
+          self.pending_orders.append((action.created, action))
       elif action.command == 'delete':
         order = self.simulated_orders_id.pop(action.id)
         symbol, side, price = order.label()
