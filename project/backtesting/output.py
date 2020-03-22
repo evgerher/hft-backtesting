@@ -2,7 +2,6 @@ import datetime
 from collections import defaultdict
 
 from utils.data import OrderBook, Trade
-from metrics.metrics import MetricData
 from abc import ABC, abstractmethod
 
 

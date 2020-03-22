@@ -2,17 +2,17 @@ from backtesting.output import Output
 from backtesting.readers import Reader
 from backtesting.strategy import Strategy
 from backtesting.data import OrderStatus, OrderRequest
-from metrics.filters import Filters
 from metrics.types import Delta
 from utils.data import OrderBook, Trade
 from utils.logger import setup_logger
 
 import datetime
-from typing import Dict, List, Deque, Optional, Tuple, Union
-from collections import defaultdict, deque, OrderedDict
+from typing import Dict, List, Optional, Tuple, Union
+from collections import defaultdict, OrderedDict
 import random
 import numpy as np
 
+from utils.types import SymbolSide, OrderState
 
 logger = setup_logger('<backtest>', 'INFO')
 
@@ -44,7 +44,7 @@ class Backtest:
     self.output: Output = output
 
     # (symbol, side) -> price -> List[(order_id, volume-left, consumption-ratio)]
-    self.simulated_orders: Dict[Tuple[str, str], OrderedDict[float, List[Tuple[int, float, float]]]] = defaultdict(lambda: defaultdict(list))
+    self.simulated_orders: Dict[SymbolSide, OrderedDict[float, List[OrderState]]] = defaultdict(lambda: defaultdict(list))
     # id -> request
     self.simulated_orders_id: Dict[int, OrderRequest] = {}
     self._notify_partial = notify_partial
@@ -66,10 +66,6 @@ class Backtest:
     logger.info(f"Initialized {self}")
 
   def _process_event(self, event: Union[Trade, OrderBook]):
-    # def filter_snapshot(row: OrderBook) -> Optional:
-    #   option = self.simulation.filter.process(row)
-    #   return option
-
     actions = []
     option = None
     if isinstance(event, OrderBook):
@@ -90,11 +86,8 @@ class Backtest:
 
   def run(self):
     logger.info(f'Backtest initialize run')
-
     for row in self.reader:
       self._process_event(row)
-
-    # self._flush_last()
     logger.info(f'Backtest finished run')
 
   def _evaluate_statuses(self, trade: Trade) -> List[OrderStatus]:
@@ -111,7 +104,7 @@ class Backtest:
 
     if len(orders) > 0:
       # order_id, volume - left, consumption - ratio
-      sorted_orders: List[float, Tuple[int, float, float]] = list(sorted(orders.items(), key=lambda x: x[0]))
+      sorted_orders: List[float, OrderState] = list(sorted(orders.items(), key=lambda x: x[0]))
 
       for price, order_requests in sorted_orders:
         for idx, (order_id, volume_level_old, consumption) in enumerate(order_requests):
@@ -192,9 +185,8 @@ class Backtest:
 
     if isinstance(data, OrderBook):
       for composite_metric in self.simulation.composite_metrics:
-        composite_metric.evaluate(data)
-        # data: Deque[Tuple[datetime.datetime, int]] = self.snapshot_instant_metrics
-        # todo - here
+        value = composite_metric.evaluate(data)
+        self._flush_output(['composite-metric', 'orderbook', data.symbol] + composite_metric.label(), data.timestamp, [value])
 
   def _update_snapshots(self, row: OrderBook, option: Delta):
     logger.debug(f'Update metrics with snapshot symbol={row.symbol} @ {row.timestamp}')
@@ -209,41 +201,6 @@ class Backtest:
       for time_metric in self.simulation.time_metrics['orderbook']:
         values = time_metric.evaluate(option)
         self._flush_output(['snapshot', 'delta', row.symbol] + time_metric.label(), row.timestamp, values)
-
-  # def _flush_last(self):
-  #   """
-  #
-  #   :return: flush contents of metric storage values when dataset is finished
-  #   """
-  #
-  #   for name, value in self.snapshot_instant_metrics.items():
-  #     while len(value) > 0:
-  #       self._flush_output(['snapshot-instant-metric', name], *value.popleft())
-  #
-  #   for symbol_action_window, metric in self.time_metrics.items():
-  #     while len(metric) > 0:
-  #       # symbol, action, window-size
-  #       self._flush_output(['trade-time-metric', *symbol_action_window], *metric.popleft())
-
-  # # todo: that would be great to be tracked by other thread, not main one
-  # def __remove_old_metric(self, label: str, timestamp: datetime.datetime):
-  #   if label == 'trade-time-metric':
-  #     collection = self.time_metrics
-  #   elif label == 'snapshot-instant-metric':
-  #     collection = self.snapshot_instant_metrics
-  #   elif label == 'snapshot':
-  #     collection = self.memory
-  #   elif label == 'trade':
-  #     collection = self.trades
-  #
-  #
-  #   for name, deque in collection.items():
-  #     while True:
-  #       if (timestamp - deque[0][0]).seconds >= self.time_horizon:
-  #         # self._flush_output([label, *name], *deque.popleft())
-  #         deque.popleft()
-  #       else:
-  #         break
 
   def __str__(self):
     return '<Backtest with reader={}>'.format(self.reader)

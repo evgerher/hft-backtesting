@@ -13,7 +13,7 @@ class GatlingMM(Strategy):
 
   def define_orders(self, row: Union[Trade, OrderBook],
                     statuses: List[OrderStatus],
-                    memory: Dict[str, Union[Trade, OrderBook]]):
+                    memory: Dict[str, Union[Trade, OrderBook]]) -> List[OrderRequest]:
     if isinstance(row, OrderBook) and self.balance.get(row.symbol, None) is None:
       # Initialize first orders
       ask_volume = self._get_allowed_volume(row.symbol, memory, 'ask')
@@ -47,6 +47,3 @@ class GatlingMM(Strategy):
         orders.append(neworder)
 
       return orders
-
-
-
