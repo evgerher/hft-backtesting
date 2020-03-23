@@ -19,13 +19,11 @@ class Strategy(ABC):
                time_metrics_trade: List[TradeMetric] = [],
                time_metrics_snapshot: List[DeltaMetric] = [],
                composite_metrics: List[CompositeMetric] = [],
-               initial_balance: int = int(1e6),
-               delay = 400e-6):
+               initial_balance: int = int(1e6)):
     """
 
     :param instant_metrics:
     :param depth_filter:
-    :param delay:
     """
     self.instant_metrics: List[InstantMetric] = instant_metrics
     self.filter: Filters.DepthFilter = depth_filter
@@ -34,7 +32,6 @@ class Strategy(ABC):
       'orderbook': time_metrics_snapshot
     }
     self.composite_metrics: List[CompositeMetric] = composite_metrics
-    self._delay: int = delay
 
     self.active_orders: Dict[int, OrderRequest] = {}
     self.balance: Dict[str, int] = defaultdict(lambda: 0)
@@ -113,16 +110,10 @@ class Strategy(ABC):
                     memory: Dict[str, Union[Trade, OrderBook]]) -> Tuple[OrderRequest]:
     raise NotImplementedError
 
-  def trigger_trade(self, row: Trade, statuses: List[OrderStatus], memory: Dict[str, Union[Trade, OrderBook]]):
-    self._balance_update_by_status(statuses)
-    return self._trigger(row, statuses, memory)
-
-  def trigger_snapshot(self, row: OrderBook, memory: Dict[str, Union[Trade, OrderBook]]):
-    return self._trigger(row, [], memory)
-
-  def _trigger(self, row: Union[Trade, OrderBook],
+  def trigger(self, row: Union[Trade, OrderBook],
                statuses: List[OrderStatus],
                memory: Dict[str, Union[Trade, OrderBook]]):
+    self._balance_update_by_status(statuses)
     orders = self.define_orders(row, statuses, memory)
     self.__validate_orders(orders, memory)
     self._balance_update_new_order(orders)
