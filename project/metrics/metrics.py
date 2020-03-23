@@ -96,7 +96,7 @@ class VWAP_depth(_VWAP):
   def subitems(self):
     return [self.level]
 
-  def _evaluate_side(self, prices: np.array, volumes: np.array) -> np.array: # todo: test
+  def _evaluate_side(self, prices: np.array, volumes: np.array) -> np.array:
     # volumes are assumed to be sorted
     counter = 0
     i = 0
@@ -293,7 +293,7 @@ class Lipton(CompositeMetric):
     self.delta_name = delta_name
     self._first_time = True
 
-  def _evaluate(self, snapshot: OrderBook): # todo: test it
+  def _evaluate(self, snapshot: OrderBook):
     assert self._metric_map is not None
     delta_storage = self._metric_map[self.delta_name].storage
     replenishment_ask: List[int] = delta_storage[(snapshot.symbol, 'ask', 'pos')]

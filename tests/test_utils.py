@@ -1,3 +1,4 @@
+import logging
 from typing import List, Union, Dict
 
 from backtesting.data import OrderRequest
@@ -7,6 +8,9 @@ from metrics.metrics import InstantMetric
 from utils import helper
 from utils.data import OrderBook, Trade
 import pandas as pd
+
+
+logging.disable(logging.CRITICAL)
 
 def read_snapshot_rows(src: str = 'resources/snapshots.csv') -> List[str]:
   with open(src, 'r') as f:
@@ -43,7 +47,7 @@ class TestStrategy(Strategy):
     item = []
     if self.idx == 0:
       item = [OrderRequest.create_bid(9.5, 450, 'test', self.reader[0].timestamp)]
-    elif self.idx == 4:
+    elif self.idx == 5:
       item = [OrderRequest.create_bid(9.5, 200, 'test', self.reader[3].timestamp)]
 
     self.idx += 1

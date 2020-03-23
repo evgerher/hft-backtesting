@@ -66,7 +66,7 @@ class Strategy(ABC):
       if status.status == 'finished' or status.status == 'partial':
         order = self.active_orders[status.id]
         if status.status == 'finished':
-          volume = order.volume
+          volume = order.volume - order.volume_filled
           order.volume_filled = order.volume
         else:
           volume = status.volume
@@ -99,7 +99,7 @@ class Strategy(ABC):
     for order in orders:
       latest: OrderBook = memory[('orderbook', order.symbol)]
       side_level = latest.bid_volumes[0] if order.side == 'bid' else latest.ask_volumes[0]
-      assert (side_level * 0.15 >= order.volume) or (side_level < order.volume and order.volume <= 10000), \
+      assert (side_level * 0.15 >= order.volume) or order.volume <= 10000, \
         f"order size must be max 15% of the level or 10000 units"
 
   def __remove_finished_orders(self, statuses):

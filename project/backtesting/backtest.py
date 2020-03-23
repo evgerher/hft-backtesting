@@ -119,7 +119,7 @@ class Backtest:
     if len(orders) > 0:
       # order_id, volume - left, consumption - ratio
       sorted_orders: List[float, OrderState] = list(sorted(orders.items(), key=lambda x: x[0]))
-      remove_finished = []
+      remove_finished = defaultdict(list)
       for price, order_requests in sorted_orders:
         for idx, (order_id, volume_level_old, consumption) in enumerate(order_requests):
           order: OrderRequest = self.simulated_orders_id[order_id]
@@ -134,16 +134,17 @@ class Backtest:
               if consumption >= 1.0:  # order is executed
                 finished = OrderStatus.finish(order_id, trade.timestamp)
                 statuses.append(finished)
-                remove_finished.append((order.price, idx))
+                remove_finished[order.price].append(idx)
                 del self.simulated_orders_id[order.id]
               else:
                 orders[order.price][idx] = (order_id, volume_left, consumption)
-                if self._notify_partial:
+                if self._notify_partial and consumption > 0:
                   partial = OrderStatus.partial(order_id, trade.timestamp, int(consumption * order.volume))
                   statuses.append(partial)
 
-      for price, idx in remove_finished:
-        del orders[price][idx]
+      for price, idxs in remove_finished.items():
+        self.simulated_orders[(trade.symbol, order_side)][price] = [v for i, v in enumerate(orders[price]) if i not in idxs]
+        # del orders[price][idx]
 
     return statuses
 
@@ -160,7 +161,7 @@ class Backtest:
       raise KeyError("wrong side")
 
     idx = np.where(prices == price)[0]
-    level_volume = volumes[idx]
+    level_volume = int(volumes[idx] or 0) # get rid of numpy
 
     orders = self.simulated_orders[(symbol, side)][price]
     orders_volume = sum(map(lambda x: x[0].volume * (1.0 - x[1]),

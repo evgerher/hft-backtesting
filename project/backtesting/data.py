@@ -13,7 +13,7 @@ class OrderStatus:
   volume: int
 
   def __str__(self):
-    return f'<order-status id:{self.id} status:{self.status} volume:{self.volume} at:{self.at}>'
+    return f'<order-status id={self.id}, status={self.status}, volume={self.volume}, at={self.at}>'
 
   @staticmethod
   def finish(id: int, timestamp: datetime.datetime) -> 'OrderStatus':
@@ -43,7 +43,8 @@ class OrderRequest:
     return (self.symbol, self.side, self.price)
 
   def __str__(self):
-    return f'<order-request id:{self.id} command:{self.command} symbol:{self.symbol} side:{self.side}>'
+    return f'<order-request id={self.id}, command={self.command}, symbol={self.symbol}, side={self.side}, ' \
+           f'volume={self.volume}, price={self.price}>'
 
   @staticmethod
   def _generate_id() -> int:

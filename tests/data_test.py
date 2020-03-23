@@ -1,15 +1,16 @@
 import unittest
 
+import test_utils
 from utils import helper
 from utils.data import OrderBook
-import sample_reader
+import utils
 import numpy as np
 import datetime
 
 
 class SnapshotTest(unittest.TestCase):
   def test_snapshot_is_sorted(self):
-    lines = sample_reader.read_snapshot_rows()
+    lines = test_utils.read_snapshot_rows()
     line = lines[0].split(',')
     date, symbol, bids, asks = helper.snapshot_line_parser(line)
 
