@@ -1,4 +1,4 @@
-from metrics.types import Delta
+from utils.types import Delta
 from utils.data import OrderBook
 from typing import Dict, List, Optional
 from utils.logger import  setup_logger

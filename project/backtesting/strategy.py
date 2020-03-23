@@ -134,3 +134,9 @@ class CalmStrategy(Strategy):
                     statuses: List[OrderStatus],
                     memory: Dict[str, Union[Trade, OrderBook]]):
     return []
+
+  def trigger_trade(self, *args):
+    return []
+
+  def _trigger(self, *args):
+    return []

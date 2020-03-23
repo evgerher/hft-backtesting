@@ -3,7 +3,7 @@ from typing import List, Deque, Dict, Callable, Tuple, Union, Sequence, TypeVar
 import datetime
 from collections import deque, defaultdict
 
-from metrics.types import Delta, DeltaValue, NamedExecutable, DeltaExecutable, TradeExecutable
+from utils.types import Delta, NamedExecutable, DeltaExecutable, TradeExecutable
 from utils.data import OrderBook, Trade
 import numpy as np
 import math
@@ -90,8 +90,8 @@ class VWAP_depth(_VWAP):
     return f'VWAP (Depth): {self.level}'
 
   def __init__(self, name = 'vwap-depth', level = 3):
-    super().__init__(name)
     self.level = level
+    super().__init__(name)
 
   def subitems(self):
     return [self.level]

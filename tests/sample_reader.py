@@ -33,7 +33,7 @@ def get_orderbooks(limit: int = None, src='resouces/orderbook10/orderbook.csv') 
     items.append(helper.orderbook_line_parse(df.iloc[idx, :]))
   return items
 
-class SimpleStrategy(Strategy):
+class TestStrategy(Strategy):
   def __init__(self, instant_metrics: List[InstantMetric], time_metrics_trade, reader: ListReader):
     super().__init__(instant_metrics, time_metrics_trade=time_metrics_trade)
     self.idx = 0

@@ -26,7 +26,7 @@ class Backtest:
                time_horizon:int=120,
                seed=1337,
                notify_partial = True,
-               delay=400e-3):
+               delay=0):
     """
 
     :param reader:
@@ -75,16 +75,15 @@ class Backtest:
       option = self.simulation.filter.process(event)
       if option is None:
         return
-      self._update_snapshots(event, option)
-      actions = self.simulation.trigger_snapshot(event, self.memory)
-    elif isinstance(event, Trade):
 
       if self.delay != 0: # todo: may be remove it? It will make slight performance lowerance
         # update pending orders, if delay passed
         pend_orders = self.__update_pending_objects(event.timestamp, self.pending_orders)
         for ord in pend_orders:
           self.__move_order_to_active(ord)
-
+      self._update_snapshots(event, option)
+      actions = self.simulation.trigger_snapshot(event, self.memory)
+    elif isinstance(event, Trade):
       self._update_trades(event)
       statuses = self._evaluate_statuses(event)
 
@@ -120,7 +119,7 @@ class Backtest:
     if len(orders) > 0:
       # order_id, volume - left, consumption - ratio
       sorted_orders: List[float, OrderState] = list(sorted(orders.items(), key=lambda x: x[0]))
-
+      remove_finished = []
       for price, order_requests in sorted_orders:
         for idx, (order_id, volume_level_old, consumption) in enumerate(order_requests):
           order: OrderRequest = self.simulated_orders_id[order_id]
@@ -135,13 +134,16 @@ class Backtest:
               if consumption >= 1.0:  # order is executed
                 finished = OrderStatus.finish(order_id, trade.timestamp)
                 statuses.append(finished)
-                del orders[order.price][idx]
+                remove_finished.append((order.price, idx))
                 del self.simulated_orders_id[order.id]
               else:
                 orders[order.price][idx] = (order_id, volume_left, consumption)
                 if self._notify_partial:
                   partial = OrderStatus.partial(order_id, trade.timestamp, int(consumption * order.volume))
                   statuses.append(partial)
+
+      for price, idx in remove_finished:
+        del orders[price][idx]
 
     return statuses
 
@@ -209,7 +211,7 @@ class Backtest:
 
     for time_metric in self.simulation.time_metrics['trade']:
       values = time_metric.evaluate(row)
-      self._flush_output(['time-metric', 'trade', row.symbol] + time_metric.label(), row.timestamp, values)
+      self._flush_output(['time-metric', 'trade', row.symbol, time_metric.name], row.timestamp, values)
 
   def _update_composite_metrics(self, data: Union[Trade, OrderBook], option: Optional[Delta]):
     logger.debug('Update composite metrics')
@@ -217,7 +219,7 @@ class Backtest:
     if isinstance(data, OrderBook):
       for composite_metric in self.simulation.composite_metrics:
         value = composite_metric.evaluate(data)
-        self._flush_output(['composite-metric', 'orderbook', data.symbol] + composite_metric.label(), data.timestamp, [value])
+        self._flush_output(['composite-metric', 'snapshot', data.symbol, composite_metric.name], data.timestamp, [value])
 
   def _update_snapshots(self, row: OrderBook, option: Delta):
     logger.debug(f'Update metrics with snapshot symbol={row.symbol} @ {row.timestamp}')
@@ -226,12 +228,12 @@ class Backtest:
 
     for instant_metric in self.simulation.instant_metrics:
       values = instant_metric.evaluate(row)
-      self._flush_output(['snapshot', 'instant', row.symbol] + instant_metric.label(), row.timestamp, values)
+      self._flush_output(['instant-metric', 'snapshot', row.symbol, instant_metric.name], row.timestamp, values)
 
     if option[-1] != 0: # if volume altered on best level
       for time_metric in self.simulation.time_metrics['orderbook']:
         values = time_metric.evaluate(option)
-        self._flush_output(['snapshot', 'delta', row.symbol] + time_metric.label(), row.timestamp, values)
+        self._flush_output(['delta', 'snapshot', row.symbol, time_metric.name], row.timestamp, values)
 
   def __str__(self):
     return '<Backtest with reader={}>'.format(self.reader)
