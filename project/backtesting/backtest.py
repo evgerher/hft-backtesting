@@ -35,7 +35,7 @@ class Backtest:
     :param order_position_policy:
     :param time_horizon:
     :param seed:
-    :param delay:
+    :param delay: delay in microseconds !
     """
     self.reader: Reader = reader
     self.simulation: Strategy = simulation
@@ -69,7 +69,7 @@ class Backtest:
     logger.info(f"Initialized {self}")
 
   def _process_event(self, event: Union[Trade, OrderBook]):
-    actions = []
+    statuses = []
     option = None
     if isinstance(event, OrderBook):
       option = self.simulation.filter.process(event)
@@ -82,16 +82,17 @@ class Backtest:
         for ord in pend_orders:
           self.__move_order_to_active(ord)
       self._update_snapshots(event, option)
-      actions = self.simulation.trigger_snapshot(event, self.memory)
     elif isinstance(event, Trade):
       self._update_trades(event)
       statuses = self._evaluate_statuses(event)
 
       if self.delay != 0: # if delay, statuses are also queued
-        self.pending_statuses.append(statuses)
-        statuses = self.__update_pending_objects(event.timestamp, self.pending_statuses)
+        for status in statuses:
+          self.pending_statuses.append((status.at, status))
 
-      actions = self.simulation.trigger_trade(event, statuses, self.memory)
+    if self.delay != 0:
+      statuses = self.__update_pending_objects(event.timestamp, self.pending_statuses)
+    actions = self.simulation.trigger(event, statuses, self.memory)
 
     self._update_composite_metrics(event, option)
     if len(actions) > 0:
@@ -149,7 +150,7 @@ class Backtest:
     return statuses
 
   def __move_order_to_active(self, action: OrderRequest):
-    symbol, side, price = action.label()
+    symbol, side, price = action.symbol, action.side, action.price
     orderbook = self.memory[('orderbook', symbol)]  # get most recent (datetime, orderbook) and return orderbook
     if side == 'bid':
       prices = orderbook.bid_prices
@@ -170,11 +171,11 @@ class Backtest:
     orders.append((action.id, self._generate_initial_position() * level_volume + orders_volume, 0.0))
     self.simulated_orders_id[action.id] = action
 
-  def __update_pending_objects(self, timestamp: datetime.datetime, objects_deque: Deque):
-    t = timestamp - datetime.timedelta(seconds=self.delay)
+  def __update_pending_objects(self, timestamp: datetime.datetime, objects_deque: Deque) -> List[Union[OrderRequest, OrderStatus]]:
+    t = timestamp - datetime.timedelta(microseconds=self.delay * 1000)
     objs = []
-    while len(objects_deque) > 0 and t > objects_deque[0]:
-      objs.append(objects_deque.popleft())
+    while len(objects_deque) > 0 and t >= objects_deque[0][0]:
+      objs.append(objects_deque.popleft()[1])
     return objs
 
 

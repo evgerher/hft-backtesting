@@ -202,5 +202,59 @@ class BacktestTest(unittest.TestCase):
     consumed = second_order[2]
     self.assertAlmostEqual(consumed, 175./200, delta=1e-3)
 
+  def test_delay(self):
+    simulation = CalmStrategy()
+
+    output = TestOutput([],[])
+
+    reader = ListReader([
+      OrderBook('test', datetime.datetime(2020, 3, 10, 8, 10, 30, microsecond=200000),
+                np.array([9.5, 9.0, 8.5]), np.array([1100, 100, 100]),
+                np.array([10.0, 10.5, 11.0]), np.array([100, 100, 100])),
+      Trade('test', datetime.datetime(2020, 3, 10, 8, 10, 30, microsecond=300000), 'Sell', 9.5, 100),
+      OrderBook('test', datetime.datetime(2020, 3, 10, 8, 10, 30, microsecond=300000),
+                np.array([9.5, 9.0, 8.5]), np.array([1000, 100, 100]),
+                np.array([10.0, 10.5, 11.0]), np.array([100, 100, 100])),
+      Trade('test', datetime.datetime(2020, 3, 10, 8, 10, 30, microsecond=350000), 'Sell', 9.5, 1150),
+      Trade('test', datetime.datetime(2020, 3, 10, 8, 10, 30, microsecond=350000), 'Sell', 9.5, 500),
+      OrderBook('test', datetime.datetime(2020, 3, 10, 8, 10, 30, microsecond=350000),
+                np.array([9.5, 9.0, 8.5]), np.array([1000, 100, 100]),
+                np.array([10.0, 10.5, 11.0]), np.array([100, 100, 500])),
+      OrderBook('test', datetime.datetime(2020, 3, 10, 8, 10, 30, microsecond=500000),
+                np.array([9.5, 9.0, 8.5]), np.array([1000, 100, 100]),
+                np.array([10.0, 10.5, 11.0]), np.array([100, 100, 600]))
+    ])
+
+    simulation.trigger = lambda *args: [] # disable inner logic for simulation
+    backtester = backtest.Backtest(reader, simulation, output, delay=100)
+
+    backtester._process_event(reader[0])
+    backtester._process_actions([OrderRequest.create_bid(9.5, 450, 'test', reader[0].timestamp)])
+    self.assertEqual(len(backtester.simulated_orders), 0)
+    self.assertEqual(len(backtester.simulated_orders_id), 0)
+    self.assertEqual(len(backtester.pending_orders), 1)
+
+
+    backtester._process_event(reader[1])
+    backtester._process_event(reader[2])
+    self.assertEqual(len(backtester.simulated_orders[('test', 'bid')][9.5]), 1)
+    self.assertEqual(len(backtester.simulated_orders_id), 1)
+    self.assertEqual(len(backtester.pending_orders), 0)
+    self.assertEqual(len(backtester.pending_statuses), 0)
+
+    backtester._process_event(reader[3])
+    self.assertEqual(len(backtester.simulated_orders[('test', 'bid')][9.5]), 1)
+    self.assertEqual(len(backtester.simulated_orders_id), 1)
+    self.assertEqual(len(backtester.pending_statuses), 1)
+
+    backtester._process_event(reader[4])
+    self.assertEqual(len(backtester.simulated_orders[('test', 'bid')][9.5]), 0)
+    self.assertEqual(len(backtester.simulated_orders_id), 0)
+    self.assertEqual(len(backtester.pending_statuses), 2)
+
+    backtester._process_event(reader[5])
+    backtester._process_event(reader[6])
+    self.assertEqual(len(backtester.pending_statuses), 0)
+
 if __name__ == '__main__':
   unittest.main()

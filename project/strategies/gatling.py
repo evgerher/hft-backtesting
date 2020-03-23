@@ -6,8 +6,8 @@ from utils.data import Trade, OrderBook
 
 
 class GatlingMM(Strategy):
-  def __init__(self, side_volume=30000, delay=0.3):
-    super().__init__(delay=delay)
+  def __init__(self, side_volume=30000):
+    super().__init__()
     self.side_volume = side_volume
     self.volumes_set = {}
 
