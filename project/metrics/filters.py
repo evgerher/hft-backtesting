@@ -1,4 +1,4 @@
-from metrics.types import Delta
+from utils.types import Delta
 from utils.data import OrderBook
 from typing import Dict, List, Optional
 from utils.logger import  setup_logger
@@ -36,7 +36,7 @@ class Filters:
       self.stored_ask_levels_volume: Dict[str, List] = {}
 
     def __str__(self):
-      return f'<Depth filter for n={self.levels}>'
+      return f'<Depth filter for n={self.level}>'
 
     def _store_levels(self, snapshot: OrderBook):
       self.stored_bid_levels_price[snapshot.symbol] = snapshot.bid_prices[:self.levels]

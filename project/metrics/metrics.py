@@ -3,7 +3,7 @@ from typing import List, Deque, Dict, Callable, Tuple, Union, Sequence, TypeVar
 import datetime
 from collections import deque, defaultdict
 
-from metrics.types import Delta, DeltaValue, NamedExecutable, DeltaExecutable, TradeExecutable
+from utils.types import Delta, NamedExecutable, DeltaExecutable, TradeExecutable
 from utils.data import OrderBook, Trade
 import numpy as np
 import math
@@ -87,13 +87,16 @@ class _VWAP(InstantMultiMetric):
 
 class VWAP_depth(_VWAP):
   def __str__(self):
-    return f'VWAP (Depth): {self.levels}'
+    return f'VWAP (Depth): {self.level}'
 
-  def __init__(self, name = 'vwap-depth', levels = 3):
+  def __init__(self, name = 'vwap-depth', level = 3):
+    self.level = level
     super().__init__(name)
-    self.levels = levels
 
-  def _evaluate_side(self, prices: np.array, volumes: np.array) -> np.array: # todo: test
+  def subitems(self):
+    return [self.level]
+
+  def _evaluate_side(self, prices: np.array, volumes: np.array) -> np.array:
     # volumes are assumed to be sorted
     counter = 0
     i = 0
@@ -101,7 +104,7 @@ class VWAP_depth(_VWAP):
       if volumes[i] != 0:
         counter += 1
 
-      if counter == self.levels:
+      if counter == self.level:
         break
 
       i += 1
@@ -290,7 +293,7 @@ class Lipton(CompositeMetric):
     self.delta_name = delta_name
     self._first_time = True
 
-  def _evaluate(self, snapshot: OrderBook): # todo: test it
+  def _evaluate(self, snapshot: OrderBook):
     assert self._metric_map is not None
     delta_storage = self._metric_map[self.delta_name].storage
     replenishment_ask: List[int] = delta_storage[(snapshot.symbol, 'ask', 'pos')]

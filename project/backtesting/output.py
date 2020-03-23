@@ -2,7 +2,6 @@ import datetime
 from collections import defaultdict
 
 from utils.data import OrderBook, Trade
-from metrics.metrics import MetricData
 from abc import ABC, abstractmethod
 
 
@@ -19,14 +18,14 @@ class Output(ABC):
     :return:
     """
 
-    if 'trade' in labels:
+    if isinstance(object, Trade):
       self.trade_action(timestamp, object)
-    elif 'snapshot' in labels:
+    elif isinstance(object, OrderBook):
       self.snapshot_action(timestamp, object)
-    elif 'trade-time-metric' in labels:
-      self.time_metric_action(timestamp, labels, object)
-    elif 'snapshot-instant-metric' in labels:
+    elif 'instant-metric' in labels:
       self.instant_metric_action(timestamp, labels, object)
+    elif 'time-metric' in labels:
+      self.time_metric_action(timestamp, labels, object)
     else:
       self.additional_action(timestamp, labels, object)
 

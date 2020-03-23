@@ -57,7 +57,7 @@ class ReaderTest(unittest.TestCase):
   def test_orderbook_reader(self):
     reader: Reader = OrderbookReader('resources/orderbook10/orderbook.csv.gz',
                                      trades_file='resources/orderbook10/trades.csv.gz',
-                                     stop_after=10000, pairs_to_load=5)
+                                     stop_after=10000, depth_to_load=5)
 
     trades: List[Trade] = []
 

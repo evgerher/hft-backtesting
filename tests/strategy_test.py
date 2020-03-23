@@ -1,14 +1,11 @@
 import datetime
 import unittest
-from typing import Dict, Tuple, Union, Deque, List
 
 from backtesting import backtest
-from backtesting.data import OrderRequest
 from backtesting.output import TestOutput
 from backtesting.readers import ListReader
-from backtesting.strategy import Strategy
-from metrics.metrics import VWAP_volume, TradeMetric, InstantMetric
-from sample_reader import SimpleStrategy
+from metrics.metrics import VWAP_volume, TradeMetric
+from test_utils import TestStrategy
 from utils.data import OrderBook, Trade
 import numpy as np
 
@@ -37,13 +34,13 @@ class StrategyTest(unittest.TestCase):
       OrderBook('test', datetime.datetime(2020, 3, 10, 8, 10, 30, 400),
                 np.array([9.0, 8.5, 8.0]), np.array([100, 100, 140]),
                 np.array([10.0, 10.5, 11.0]), np.array([100, 100, 100])),
-      Trade('test', datetime.datetime(2020, 3, 10, 8, 10, 30, 500), 'Sell', 9.0, 2000),
-      Trade('test', datetime.datetime(2020, 3, 10, 8, 10, 30, 500), 'Sell', 9.0, 1300),
+      Trade('test', datetime.datetime(2020, 3, 10, 8, 10, 30, 500), 'Sell', 9.0, 550),
+      Trade('test', datetime.datetime(2020, 3, 10, 8, 10, 30, 500), 'Sell', 9.0, 200),
       Trade('test', datetime.datetime(2020, 3, 10, 8, 10, 30, 500), 'Sell', 9.0, 1300),
     ])
 
     time_metrics = [TradeMetric(callables, 60), TradeMetric(callables, 30)]
-    simulation = SimpleStrategy(instant_metrics, time_metrics_trade=time_metrics)
+    simulation = TestStrategy(instant_metrics, time_metrics_trade=time_metrics, reader=reader)
 
     output = TestOutput(instant_metric_names=instant_metric_names,
                         time_metric_names=[metric.metric_names for metric in time_metrics])
@@ -61,15 +58,10 @@ class StrategyTest(unittest.TestCase):
       backtester._process_event(event)
 
     self.assertEqual(initial_balance['USD'] - 650, simulation.balance['USD'])
+    self.assertAlmostEqual((450 + 100) / 9.5, simulation.balance['test'], delta=1e-3)
 
-    for event in reader[7:-1]:
+    for event in reader[7:]:
       backtester._process_event(event)
-
-    self.assertEqual(initial_balance['USD'] - 650, simulation.balance['USD'])
-    self.assertAlmostEqual(450.0 / 9.5, simulation.balance['test'], delta=1e-3)
-
-    backtester._process_event(reader[-1])
-    self.assertEqual(initial_balance['USD'] - 650, simulation.balance['USD'])
     self.assertAlmostEqual(650.0 / 9.5, simulation.balance['test'], delta=1e-3)
 
 
