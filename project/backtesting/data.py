@@ -20,8 +20,8 @@ class OrderStatus:
     return OrderStatus(id, 'finished', timestamp, -1)
 
   @staticmethod
-  def remove(id: int, timestamp: datetime.datetime) -> 'OrderStatus':
-    return OrderStatus(id, 'removed', timestamp, -1)
+  def cancel(id: int, timestamp: datetime.datetime) -> 'OrderStatus':
+    return OrderStatus(id, 'cancel', timestamp, -1)
 
   @staticmethod
   def partial(id: int, timestamp: datetime.datetime, volume: int) -> 'OrderStatus':

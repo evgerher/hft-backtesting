@@ -51,6 +51,7 @@ class Backtest:
     # id -> request
     self.simulated_orders_id: Dict[int, OrderRequest] = {}
     self._notify_partial = notify_partial
+    self.price_step: Dict[str, float] = {'XBTUSD': 0.5, 'ETHUSD': 0.05}
 
     if order_position_policy == 'top':
       policy = lambda: 1.0
@@ -120,12 +121,13 @@ class Backtest:
     if len(orders) > 0:
       # order_id, volume - left, consumption - ratio
       sorted_orders: List[float, OrderState] = list(sorted(orders.items(), key=lambda x: x[0]))
-      remove_finished = defaultdict(list)
+      to_remove = defaultdict(list)
       for price, order_requests in sorted_orders:
         for idx, (order_id, volume_level_old, consumption) in enumerate(order_requests):
           order: OrderRequest = self.simulated_orders_id[order_id]
-          if (trade.side == 'Sell' and order.side == 'bid' and order.price >= trade.price) or \
-              (trade.side == 'Buy' and order.side == 'ask' and order.price <= trade.price):
+          # if (trade.side == 'Sell' and order.side == 'bid' and order.price >= trade.price) or \
+          #     (trade.side == 'Buy' and order.side == 'ask' and order.price <= trade.price):
+          if order.price >= trade.price or order.price <= trade.price:
 
             volume_left = max(0, volume_level_old - trade.volume)
             if volume_left != 0:
@@ -135,17 +137,22 @@ class Backtest:
               if consumption >= 1.0:  # order is executed
                 finished = OrderStatus.finish(order_id, trade.timestamp)
                 statuses.append(finished)
-                remove_finished[order.price].append(idx)
+                to_remove[order.price].append(idx)
                 del self.simulated_orders_id[order.id]
               else:
                 orders[order.price][idx] = (order_id, volume_left, consumption)
                 if self._notify_partial and consumption > 0:
                   partial = OrderStatus.partial(order_id, trade.timestamp, int(consumption * order.volume))
                   statuses.append(partial)
+          elif (order.side == 'bid' and trade.price - 2 * self.price_step[trade.symbol] >= order.price) or \
+              (order.side == 'ask' and trade.price + 2 * self.price_step[trade.symbol] <= order.price): # todo: cancel condition
+            # print('cancel')
+            statuses.append(OrderStatus.cancel(order.id, trade.timestamp))
+            to_remove[order.price].append(idx)
+            del self.simulated_orders_id[order.id]
 
-      for price, idxs in remove_finished.items():
+      for price, idxs in to_remove.items():
         self.simulated_orders[(trade.symbol, order_side)][price] = [v for i, v in enumerate(orders[price]) if i not in idxs]
-        # del orders[price][idx]
 
     return statuses
 

@@ -31,12 +31,12 @@ class GatlingMM(Strategy):
       for status in statuses:
         order: OrderRequest = self.active_orders[status.id]
 
-        if status.status == 'finished':
+        if status.status != 'partial': # cancelled and finished
           self.volumes_left[(order.symbol, order.side)] += order.volume - order.volume_filled
         elif status.status == 'partial':
           self.volumes_left[(order.symbol, order.side)] += status.volume
-        elif status.status == 'cancelled':
-          self.volumes_left[(order.symbol, order.side)] += order.volume - order.volume_filled
+        # elif status.status == 'cancelled':
+        #   self.volumes_left[(order.symbol, order.side)] += order.volume - order.volume_filled
 
         volume = min(self.volumes_left[(order.symbol, order.side)], self._get_allowed_volume(order.symbol, memory, order.side))
         if volume > 0:

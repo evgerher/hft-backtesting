@@ -63,23 +63,19 @@ class Strategy(ABC):
     for status in statuses:
       logger.info(f'Received status: {status}')
 
-      if status.status == 'finished' or status.status == 'partial':
-        order = self.active_orders[status.id]
-        if status.status == 'finished':
-          volume = order.volume - order.volume_filled
-          order.volume_filled = order.volume
-        else:
-          volume = status.volume
-          order.volume_filled += status.volume
+      order = self.active_orders[status.id]
+      if status.status != 'partial':
+        volume = order.volume - order.volume_filled
+        order.volume_filled = order.volume
+      else: # todo: partial else always
+        volume = status.volume
+        order.volume_filled += status.volume
 
-        ### action positive update balance
-        if order.side == 'ask':
-          self.balance['USD'] += volume
-        elif order.side == 'bid':
-          self.balance[order.symbol] += volume / order.price
-
-      elif status.status == 'removed':
-        del self.active_orders[status.id]
+      ### action positive update balance
+      if order.side == 'ask':
+        self.balance['USD'] += volume
+      elif order.side == 'bid':
+        self.balance[order.symbol] += volume / order.price
 
   def _balance_update_new_order(self, orders: Tuple[OrderRequest]):
     for order in orders:
