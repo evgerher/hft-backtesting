@@ -1,7 +1,7 @@
 import unittest
 
 from backtesting import readers, backtest
-from backtesting.output import TestOutput
+from backtesting.output import StorageOutput
 from backtesting.readers import ListReader
 from backtesting.strategy import Strategy, CalmStrategy
 from backtesting.data import OrderStatus, OrderRequest
@@ -41,7 +41,7 @@ class BacktestTest(unittest.TestCase):
     simulation = CalmStrategy([], time_metrics_trade=[TradeMetric(callables, 60)])
     instant_metric_names = []
 
-    output = TestOutput(instant_metric_names, simulation.time_metrics['trade'][0].metric_names)
+    output = StorageOutput(instant_metric_names, simulation.time_metrics['trade'][0].metric_names)
 
     backtester = backtest.Backtest(reader, simulation, output)
     backtester.run()
@@ -61,7 +61,7 @@ class BacktestTest(unittest.TestCase):
                VWAP_volume(volumes=[50000, 500000], symbol='ETHUSD')]
     simulation = CalmStrategy(metrics, time_metrics_trade=[TradeMetric(callables, 60)])
     instant_metric_names = [metric.names() for metric in metrics]
-    output = TestOutput(instant_metric_names, simulation.time_metrics['trade'][0].metric_names)
+    output = StorageOutput(instant_metric_names, simulation.time_metrics['trade'][0].metric_names)
     backtester = backtest.Backtest(reader, simulation, output)
     backtester.run()
     instant_metrics_q = sum([len(item) for item in output.instant_metrics.values()])
@@ -88,8 +88,8 @@ class BacktestTest(unittest.TestCase):
     time_metrics = [TradeMetric(callables, 60), TradeMetric(callables, 30)]
 
     simulation = CalmStrategy(instant_metrics, time_metrics_trade=time_metrics)
-    output = TestOutput(instant_metric_names=instant_metric_names,
-                        time_metric_names=[metric.metric_names for metric in time_metrics])
+    output = StorageOutput(instant_metric_names=instant_metric_names,
+                           time_metric_names=[metric.metric_names for metric in time_metrics])
     backtester = backtest.Backtest(reader, simulation, output)
 
     backtester.run()
@@ -113,8 +113,8 @@ class BacktestTest(unittest.TestCase):
     time_metrics = [TradeMetric(callables, 60), TradeMetric(callables, 30)]
     simulation = CalmStrategy(instant_metrics, time_metrics_trade=time_metrics)
 
-    output = TestOutput(instant_metric_names=instant_metric_names,
-                        time_metric_names=[metric.metric_names for metric in time_metrics])
+    output = StorageOutput(instant_metric_names=instant_metric_names,
+                           time_metric_names=[metric.metric_names for metric in time_metrics])
 
 
     reader = ListReader([
@@ -205,7 +205,7 @@ class BacktestTest(unittest.TestCase):
   def test_delay(self):
     simulation = CalmStrategy()
 
-    output = TestOutput([],[])
+    output = StorageOutput([], [])
 
     reader = ListReader([
       OrderBook('test', datetime.datetime(2020, 3, 10, 8, 10, 30, microsecond=200000),

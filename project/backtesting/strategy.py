@@ -1,5 +1,5 @@
 from collections import defaultdict
-from typing import List, Dict, Tuple, Union
+from typing import List, Dict, Tuple, Union, Callable
 
 from backtesting.data import OrderStatus, OrderRequest
 from utils.data import OrderBook, Trade
@@ -19,7 +19,8 @@ class Strategy(ABC):
                time_metrics_trade: List[TradeMetric] = [],
                time_metrics_snapshot: List[DeltaMetric] = [],
                composite_metrics: List[CompositeMetric] = [],
-               initial_balance: int = int(1e6)):
+               initial_balance: int = int(1e6),
+               balance_listener: Callable[[Dict], None] = None):
     """
 
     :param instant_metrics:
@@ -34,8 +35,10 @@ class Strategy(ABC):
     self.composite_metrics: List[CompositeMetric] = composite_metrics
 
     self.active_orders: Dict[int, OrderRequest] = {}
+
     self.balance: Dict[str, int] = defaultdict(lambda: 0)
     self.balance['USD'] = initial_balance
+    self.balance_listener = balance_listener
 
     self.metrics_map = self.__bind_metrics()
 
@@ -80,6 +83,7 @@ class Strategy(ABC):
 
   def _balance_update_new_order(self, orders: Tuple[OrderRequest]):
     for order in orders:
+      logger.info(f'New order: {order}')
       ### action negative update balance
       self.active_orders[order.id] = order
       if order.side == 'ask':
@@ -96,13 +100,13 @@ class Strategy(ABC):
     for order in orders:
       latest: OrderBook = memory[('orderbook', order.symbol)]
       side_level = latest.bid_volumes[0] if order.side == 'bid' else latest.ask_volumes[0]
-      assert (side_level * 0.15 >= order.volume) or order.volume <= 10000, \
-        f"order size must be max 15% of the level or 10000 units"
+      assert order.volume > 0 and ((side_level * 0.15 >= order.volume) or order.volume <= 10000), \
+        f"order size must be max 15% of the level or 10000 units: {order.volume}, {side_level}"
 
   def __remove_finished_orders(self, statuses):
     for status in statuses:
       if status.status == 'finished':
-        del self.active_orders[status.id]
+        del self.active_orders[status.id] # todo: delete also from queue ?
 
   @abstractmethod
   def define_orders(self, row: Union[Trade, OrderBook],
@@ -118,6 +122,10 @@ class Strategy(ABC):
     self.__validate_orders(orders, memory)
     self._balance_update_new_order(orders)
     self.__remove_finished_orders(statuses)
+
+    # balance updated, notify listener
+    if self.balance_listener is not None and len(orders) > 0 or len(statuses) > 0:
+      self.balance_listener(self.balance, row.timestamp)
     return orders
 
 class CalmStrategy(Strategy):
@@ -126,8 +134,5 @@ class CalmStrategy(Strategy):
                     memory: Dict[str, Union[Trade, OrderBook]]):
     return []
 
-  def trigger_trade(self, *args):
-    return []
-
-  def _trigger(self, *args):
+  def trigger(self, *args):
     return []

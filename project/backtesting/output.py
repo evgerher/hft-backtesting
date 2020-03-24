@@ -54,7 +54,8 @@ class Output(ABC):
     raise NotImplementedError
 
 
-class TestOutput(Output):
+class StorageOutput(Output):
+  # todo: make it return list of accessible fields, like model.describe()
   def __init__(self, instant_metric_names, time_metric_names):
     super().__init__(instant_metric_names, time_metric_names)
     self.snapshots = []

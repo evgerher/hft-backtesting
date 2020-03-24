@@ -2,7 +2,7 @@ import datetime
 import unittest
 
 from backtesting import backtest
-from backtesting.output import TestOutput
+from backtesting.output import StorageOutput
 from backtesting.readers import ListReader
 from metrics.metrics import VWAP_volume, TradeMetric
 from test_utils import TestStrategy
@@ -42,8 +42,8 @@ class StrategyTest(unittest.TestCase):
     time_metrics = [TradeMetric(callables, 60), TradeMetric(callables, 30)]
     simulation = TestStrategy(instant_metrics, time_metrics_trade=time_metrics, reader=reader)
 
-    output = TestOutput(instant_metric_names=instant_metric_names,
-                        time_metric_names=[metric.metric_names for metric in time_metrics])
+    output = StorageOutput(instant_metric_names=instant_metric_names,
+                           time_metric_names=[metric.metric_names for metric in time_metrics])
 
 
 
