@@ -76,10 +76,7 @@ class Strategy(ABC):
       logger.info(f'Received status: {status}')
 
       order = self.active_orders[status.id]
-      if status.status == 'finished':
-        volume = order.volume - order.volume_filled
-        order.volume_filled = order.volume
-      elif status.status == 'cancel':
+      if status.status != 'partial': # finished and cancel
         volume = order.volume - order.volume_filled
         order.volume_filled = order.volume
       else: # todo: partial else always
@@ -87,10 +84,17 @@ class Strategy(ABC):
         order.volume_filled += status.volume
 
       ### action positive update balance
-      if order.side == 'ask' or (order.side == 'bid' and status.status == 'cancel'):
-        self.balance['USD'] += volume
-      elif order.side == 'bid'  or (order.side == 'ask' and status.status == 'cancel'):
-        self.balance[order.symbol] += volume / order.price # todo: do I update volume correctly ?
+
+      if status.status == 'cancel':
+        if order.side == 'bid':
+          self.balance['USD'] += volume
+        else: # ask
+          self.balance[order.symbol] += volume / order.price
+      else:
+        if order.side == 'ask':
+          self.balance['USD'] += volume
+        elif order.side: # bid
+          self.balance[order.symbol] += volume / order.price
 
   def _balance_update_new_order(self, orders: Tuple[OrderRequest]):
     for order in orders:
