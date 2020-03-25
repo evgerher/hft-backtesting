@@ -57,7 +57,7 @@ class Filters:
         blp = bid_levels_price != self.stored_bid_levels_price[snapshot.symbol][0]
         if blp:
           logger.debug(f'Bid level price altered, on level=0')
-          result = (snapshot.timestamp, snapshot.symbol, 'bid', self.stored_bid_levels_volume[snapshot.symbol][0])
+          result = (snapshot.timestamp, snapshot.symbol, 'bid-alter', self.stored_bid_levels_volume[snapshot.symbol][0])
           self._store_levels(snapshot)
           return result
 
@@ -65,7 +65,7 @@ class Filters:
         alp = ask_levels_price != self.stored_ask_levels_price[snapshot.symbol][0]
         if alp:
           logger.debug(f'Ask level price altered, on level=0')
-          result = (snapshot.timestamp, snapshot.symbol, 'ask', self.stored_ask_levels_volume[snapshot.symbol][0])
+          result = (snapshot.timestamp, snapshot.symbol, 'ask-alter', self.stored_ask_levels_volume[snapshot.symbol][0])
           self._store_levels(snapshot)
           return result
 

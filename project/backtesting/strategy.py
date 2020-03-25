@@ -130,7 +130,7 @@ class Strategy(ABC):
                memory: Dict[str, Union[Trade, OrderBook]]):
     self._balance_update_by_status(statuses)
     orders = self.define_orders(row, statuses, memory)
-    self.__validate_orders(orders, memory)
+    self.__validate_orders(orders, memory) # todo: reduce multiple new orders of same type into one
     self._balance_update_new_order(orders)
     self.__remove_finished_orders(statuses)
 
@@ -142,6 +142,8 @@ class Strategy(ABC):
   def return_unfinished(self, statuses: List[OrderStatus], memory: Dict[str, Union[Trade, OrderBook]]):
     logger.info('Update balance with unfinished tasks')
     self._balance_update_by_status(statuses)
+    self.balance_listener(self.balance, -1)
+
 
 class CalmStrategy(Strategy):
   def define_orders(self, row: Union[Trade, OrderBook],

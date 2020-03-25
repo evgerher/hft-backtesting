@@ -10,5 +10,5 @@ DeltaExecutable = Tuple[str, Callable[[List[DeltaValue]], float]]
 Delta = Tuple[datetime.datetime, str, str, int]
 
 SymbolSide = Tuple[str, str] # (symbol, side)
-OrderState = Tuple[id, float, float] # (id, volume-left, consumption-ratio
+OrderState = Tuple[int, float, float] # (id, volume-left, consumption-ratio
 

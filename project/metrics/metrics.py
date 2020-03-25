@@ -265,7 +265,7 @@ class DeltaMetric(TimeMetric):
   def _get_update_deque(self, event: Delta):
     timestamp = event[0]
     symbol = event[1]
-    side = event[2]
+    side = event[2][:3]  # first three symbols `ask-alter` -> `ask`
     volume = event[3]
     sign = 'pos' if volume > 0 else 'neg' if volume < 0 else None
     volume = volume if volume > 0 else -volume

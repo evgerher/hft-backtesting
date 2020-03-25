@@ -83,21 +83,38 @@ class Backtest:
         for ord in pend_orders:
           self.__move_order_to_active(ord)
       self._update_snapshots(event, option)
+      if 'alter' in option[2]:
+        statuses = self._price_step_status(event, option)
     elif isinstance(event, Trade):
       self._update_trades(event)
       statuses = self._evaluate_statuses(event)
 
-      if self.delay != 0: # if delay, statuses are also queued
-        for status in statuses:
-          self.pending_statuses.append((status.at, status))
-
-    if self.delay != 0:
+    if self.delay != 0: # if delay, statuses are also queued
+      for status in statuses:
+        self.pending_statuses.append((status.at, status))
       statuses = self.__update_pending_objects(event.timestamp, self.pending_statuses)
     actions = self.simulation.trigger(event, statuses, self.memory)
 
     self._update_composite_metrics(event, option)
     if len(actions) > 0:
       self._process_actions(actions)
+
+
+  def _price_step_status(self, event: OrderBook, option: Delta) -> List[OrderStatus]:
+    statuses = []
+
+    side = option[1][:3]
+    orders = self.simulated_orders[(event.symbol, side)]
+    altered_side_price = event.bid_prices[0] if side == 'bid' else event.ask_prices[0]
+
+    for price, suborders in orders.items():
+      if (side == 'bid' and altered_side_price - 2 * self.price_step[event.symbol] >= price) or \
+          (side == 'ask' and altered_side_price + 2 * self.price_step[event.symbol] <= price):
+        for sub in suborders:
+          statuses.append(OrderStatus.cancel(sub[0], event.timestamp))
+          del self.simulated_orders_id[sub[0]]
+        del orders[price]
+    return statuses
 
 
   def run(self):
@@ -152,11 +169,11 @@ class Backtest:
                 if self._notify_partial and consumption > 0:
                   partial = OrderStatus.partial(order_id, trade.timestamp, int(consumption * order.volume))
                   statuses.append(partial)
-          elif (order.side == 'bid' and trade.price - 2 * self.price_step[trade.symbol] >= order.price) or \
-              (order.side == 'ask' and trade.price + 2 * self.price_step[trade.symbol] <= order.price): # todo: cancel condition
-            statuses.append(OrderStatus.cancel(order.id, trade.timestamp))
-            to_remove[order.price].append(idx)
-            del self.simulated_orders_id[order.id]
+          # elif trade.price - 2 * self.price_step[trade.symbol] >= order.price or \
+          #     trade.price + 2 * self.price_step[trade.symbol] <= order.price: # todo: cancel condition does not work
+          #   statuses.append(OrderStatus.cancel(order.id, trade.timestamp))
+          #   to_remove[order.price].append(idx)
+          #   del self.simulated_orders_id[order.id]
 
       for price, idxs in to_remove.items():
         self.simulated_orders[(trade.symbol, order_side)][price] = [v for i, v in enumerate(orders[price]) if i not in idxs]
