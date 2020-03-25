@@ -10,6 +10,9 @@ from utils.logger import setup_logger
 from abc import ABC, abstractmethod
 logger = setup_logger('<Strategy>')
 
+class Fee:
+  pass
+
 class Strategy(ABC):
   delay = 400e-6  # 400 microsec from intranet computer to exchange terminal
   # delay = 1e-3  # 1 msec delay from my laptop
@@ -60,11 +63,23 @@ class Strategy(ABC):
     return metrics_map
 
   def _balance_update_by_status(self, statuses: List[OrderStatus]):
+    # direction_mappings = {
+    #   ('ask', 'partial') : 'USD',
+    #   ('bid', 'partial') : order.symbol,
+    #   ('ask', 'finished'): 'USD',
+    #   ('bid', 'finished'): order.symbol,
+    #   ('ask', 'cancel')  : order.symbol,
+    #   ('bid', 'cancel')  : 'USD',
+    # }
+
     for status in statuses:
       logger.info(f'Received status: {status}')
 
       order = self.active_orders[status.id]
-      if status.status != 'partial':
+      if status.status == 'finished':
+        volume = order.volume - order.volume_filled
+        order.volume_filled = order.volume
+      elif status.status == 'cancel':
         volume = order.volume - order.volume_filled
         order.volume_filled = order.volume
       else: # todo: partial else always
@@ -72,10 +87,10 @@ class Strategy(ABC):
         order.volume_filled += status.volume
 
       ### action positive update balance
-      if order.side == 'ask':
+      if order.side == 'ask' or (order.side == 'bid' and status.status == 'cancel'):
         self.balance['USD'] += volume
-      elif order.side == 'bid':
-        self.balance[order.symbol] += volume / order.price
+      elif order.side == 'bid'  or (order.side == 'ask' and status.status == 'cancel'):
+        self.balance[order.symbol] += volume / order.price # todo: do I update volume correctly ?
 
   def _balance_update_new_order(self, orders: Tuple[OrderRequest]):
     for order in orders:
@@ -83,7 +98,7 @@ class Strategy(ABC):
       ### action negative update balance
       self.active_orders[order.id] = order
       if order.side == 'ask':
-        self.balance[order.symbol] -= order.volume / order.price
+        self.balance[order.symbol] -= int(order.volume / order.price)
       elif order.side == 'bid':
         self.balance['USD'] -= order.volume
 
@@ -101,7 +116,7 @@ class Strategy(ABC):
 
   def __remove_finished_orders(self, statuses):
     for status in statuses:
-      if status.status == 'finished':
+      if status.status == 'finished' or status.status == 'cancel':
         del self.active_orders[status.id] # todo: delete also from queue ?
 
   @abstractmethod
@@ -123,6 +138,10 @@ class Strategy(ABC):
     if self.balance_listener is not None and len(orders) > 0 or len(statuses) > 0:
       self.balance_listener(self.balance, row.timestamp)
     return orders
+
+  def return_unfinished(self, statuses: List[OrderStatus], memory: Dict[str, Union[Trade, OrderBook]]):
+    logger.info('Update balance with unfinished tasks')
+    self._balance_update_by_status(statuses)
 
 class CalmStrategy(Strategy):
   def define_orders(self, row: Union[Trade, OrderBook],

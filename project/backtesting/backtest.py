@@ -105,6 +105,14 @@ class Backtest:
     for row in self.reader:
       self._process_event(row)
     logger.info(f'Backtest finished run')
+    statuses = self._return_unfinished_orders(row.timestamp)
+    self.simulation.return_unfinished(statuses, self.memory)
+
+  def _return_unfinished_orders(self, timestamp: datetime.datetime) -> List[OrderStatus]:
+    statuses = [x[1] for x in list(self.pending_statuses)]
+    statuses += [OrderStatus.cancel(x[1].id, timestamp) for x in list(self.pending_orders)]
+    statuses += [OrderStatus.cancel(x.id, timestamp) for x in self.simulated_orders_id.values()]
+    return statuses
 
   def _evaluate_statuses(self, trade: Trade) -> List[OrderStatus]:
     """
@@ -146,7 +154,6 @@ class Backtest:
                   statuses.append(partial)
           elif (order.side == 'bid' and trade.price - 2 * self.price_step[trade.symbol] >= order.price) or \
               (order.side == 'ask' and trade.price + 2 * self.price_step[trade.symbol] <= order.price): # todo: cancel condition
-            # print('cancel')
             statuses.append(OrderStatus.cancel(order.id, trade.timestamp))
             to_remove[order.price].append(idx)
             del self.simulated_orders_id[order.id]
