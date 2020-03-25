@@ -103,9 +103,10 @@ class Backtest:
   def _price_step_status(self, event: OrderBook, option: Delta) -> List[OrderStatus]:
     statuses = []
 
-    side = option[1][:3]
+    side = option[2][:3]
     orders = self.simulated_orders[(event.symbol, side)]
     altered_side_price = event.bid_prices[0] if side == 'bid' else event.ask_prices[0]
+    price_to_del = []
 
     for price, suborders in orders.items():
       if (side == 'bid' and altered_side_price - 2 * self.price_step[event.symbol] >= price) or \
@@ -113,7 +114,10 @@ class Backtest:
         for sub in suborders:
           statuses.append(OrderStatus.cancel(sub[0], event.timestamp))
           del self.simulated_orders_id[sub[0]]
-        del orders[price]
+        price_to_del.append(price)
+    for price in price_to_del:
+      del self.simulated_orders[(event.symbol, side)][price]
+
     return statuses
 
 

@@ -256,5 +256,42 @@ class BacktestTest(unittest.TestCase):
     backtester._process_event(reader[6])
     self.assertEqual(len(backtester.pending_statuses), 0)
 
+  def test_cancel(self):
+    simulation = CalmStrategy()
+    output = StorageOutput([], [])
+    reader = ListReader([
+      OrderBook('XBTUSD', datetime.datetime(2020, 3, 10, 8, 10, 30, microsecond=200000),
+                np.array([9.5, 9.0, 8.5]), np.array([1100, 100, 100]),
+                np.array([10.0, 10.5, 11.0]), np.array([100, 100, 100])),
+      OrderBook('XBTUSD', datetime.datetime(2020, 3, 10, 8, 10, 30, microsecond=300000),
+                np.array([10.0, 9.5, 9.0]), np.array([1000, 100, 100]),
+                np.array([10.0, 10.5, 11.0]), np.array([100, 100, 100])),
+
+      OrderBook('XBTUSD', datetime.datetime(2020, 3, 10, 8, 10, 30, microsecond=310000),
+                np.array([10.5, 10.0, 9.5]), np.array([1000, 100, 100]),
+                np.array([10.0, 10.5, 11.0]), np.array([100, 100, 100])),
+
+      OrderBook('XBTUSD', datetime.datetime(2020, 3, 10, 8, 10, 30, microsecond=350000),
+                np.array([10.5, 10.0, 9.5]), np.array([1000, 100, 100]),
+                np.array([8.5, 9.0, 9.5]), np.array([100, 100, 500])),
+    ])
+
+    backtester = backtest.Backtest(reader, simulation, output, delay=0)
+
+    backtester._process_event(reader[0])
+    backtester._process_actions([OrderRequest.create_bid(9.5, 200, 'XBTUSD', reader[0].timestamp)])
+    backtester._process_actions([OrderRequest.create_ask(10.0, 200, 'XBTUSD', reader[0].timestamp)])
+    self.assertEqual(len(backtester.simulated_orders_id), 2)
+
+    backtester._process_event(reader[1])
+    self.assertEqual(len(backtester.simulated_orders_id), 2)
+
+    backtester._process_event(reader[2])
+    self.assertEqual(len(backtester.simulated_orders_id), 1)
+
+    backtester._process_event(reader[3])
+    self.assertEqual(len(backtester.simulated_orders_id), 0)
+
+
 if __name__ == '__main__':
   unittest.main()
