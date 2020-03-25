@@ -10,7 +10,7 @@ class GatlingTest(unittest.TestCase):
   def test_gatling(self):
     reader = OrderbookReader('resources/huge_dataset/orderbook_10_03_20.csv.gz',
                              'resources/huge_dataset/trades_10_03_20.csv.gz',
-                             stop_after=300000, depth_to_load=5)
+                             stop_after=300000, depth_to_load=3)
 
     output = StorageOutput([], [])
     output.balances = []

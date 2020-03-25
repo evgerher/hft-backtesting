@@ -13,7 +13,7 @@ import numpy as np
 class StrategyTest(unittest.TestCase):
   def test_balance(self):
     callables = [
-      ('trades volume', lambda trades: sum(map(lambda x: x.volume, trades))),
+      ('trades volume_total', lambda trades: sum(map(lambda x: x.volume, trades))),
       ('trades length', lambda trades: len(trades))
     ]
     instant_metrics = [

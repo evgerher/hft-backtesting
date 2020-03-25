@@ -88,8 +88,8 @@ class MetricTest(unittest.TestCase):
     latest = metric_map['delta-60'].latest
     quantity_ask_pos = latest['quantity', 'XBTUSD', 'ask', 'pos']
     quantity_ask_neg = latest['quantity', 'XBTUSD', 'ask', 'neg']
-    volume_ask_pos = latest['volume', 'XBTUSD', 'ask', 'pos']
-    volume_ask_neg = latest['volume', 'XBTUSD', 'ask', 'neg']
+    volume_ask_pos = latest['volume_total', 'XBTUSD', 'ask', 'pos']
+    volume_ask_neg = latest['volume_total', 'XBTUSD', 'ask', 'neg']
 
     self.assertEqual(volume_ask_neg, np.sum(ask_neg_xbtusd))
     self.assertEqual(volume_ask_pos, np.sum(ask_pos_xbtusd))

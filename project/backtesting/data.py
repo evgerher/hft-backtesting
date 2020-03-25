@@ -10,22 +10,24 @@ class OrderStatus:
   id: int
   status: str
   at: datetime.datetime
+  volume_total: int
   volume: int
 
+
   def __str__(self):
-    return f'<order-status id={self.id}, status={self.status}, volume={self.volume}, at={self.at}>'
+    return f'<order-status id={self.id}, status={self.status}, volume_total={self.volume_total}, at={self.at}>'
 
   @staticmethod
   def finish(id: int, timestamp: datetime.datetime) -> 'OrderStatus':
-    return OrderStatus(id, 'finished', timestamp, -1)
+    return OrderStatus(id, 'finished', timestamp, -1, -1)
 
   @staticmethod
   def cancel(id: int, timestamp: datetime.datetime) -> 'OrderStatus':
-    return OrderStatus(id, 'cancel', timestamp, -1)
+    return OrderStatus(id, 'cancel', timestamp, -1, -1)
 
   @staticmethod
-  def partial(id: int, timestamp: datetime.datetime, volume: int) -> 'OrderStatus':
-    return OrderStatus(id, 'partial', timestamp, volume)
+  def partial(id: int, timestamp: datetime.datetime, volume_total: int, volume) -> 'OrderStatus':
+    return OrderStatus(id, 'partial', timestamp, volume_total, volume)
 
 
 @dataclass
@@ -44,7 +46,7 @@ class OrderRequest:
 
   def __str__(self):
     return f'<order-request id={self.id}, command={self.command}, symbol={self.symbol}, side={self.side}, ' \
-           f'volume={self.volume}, price={self.price}>'
+           f'volume={self.volume}, price={self.price}, volume_filled={self.volume_filled}>'
 
   @staticmethod
   def _generate_id() -> int:

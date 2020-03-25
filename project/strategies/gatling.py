@@ -31,21 +31,22 @@ class GatlingMM(Strategy):
       for status in statuses:
         order: OrderRequest = self.active_orders[status.id]
 
-        if status.status != 'finished':
+        if status.status != 'partial': # finished and cancel
           self.volumes_left[(order.symbol, order.side)] += order.volume - order.volume_filled
         elif status.status == 'partial':
           self.volumes_left[(order.symbol, order.side)] += status.volume
 
-        volume = min(self.volumes_left[(order.symbol, order.side)], self._get_allowed_volume(order.symbol, memory, order.side))
-        if volume > 0:
-          self.volumes_left[(order.symbol, order.side)] -= volume
+      for (symbol, side), left_volume in self.volumes_left.items():
+        if left_volume > 500:
+          volume = min(left_volume, self._get_allowed_volume(symbol, memory, side))
+          self.volumes_left[(symbol, side)] -= volume
 
-          if order.side == 'bid':
-            price = memory[('orderbook', order.symbol)].bid_prices[0]
+          if side == 'bid':
+            price = memory[('orderbook', symbol)].bid_prices[0]
           else:
-            price = memory[('orderbook', order.symbol)].ask_prices[0]
+            price = memory[('orderbook', symbol)].ask_prices[0]
 
-          neworder = OrderRequest.create(price, volume, order.symbol, order.side, row.timestamp)
+          neworder = OrderRequest.create(price, volume, symbol, side, row.timestamp)
           orders.append(neworder)
 
       return orders

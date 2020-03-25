@@ -69,14 +69,14 @@ class OrderBook:
     bid_levels_volume = other.bid_volumes[:levels]
     blv = bid_levels_volume - self.bid_volumes[:levels]
     if (blv != 0).any():
-      logger.debug(f'Bid level volume altered, on depth={np.where(blv != 0)[0]}')
-      return ('bid', 'volume', blv)
+      logger.debug(f'Bid level volume_total altered, on depth={np.where(blv != 0)[0]}')
+      return ('bid', 'volume_total', blv)
 
     ask_levels_volume = other.ask_volumes[:levels]
     alv = ask_levels_volume - self.ask_volumes[:levels]
     if (alv != 0).any():
-      logger.debug(f'Ask level volume altered, on depth={np.where(alv != 0)[0]}')
-      return ('ask' ,'volume', alv)
+      logger.debug(f'Ask level volume_total altered, on depth={np.where(alv != 0)[0]}')
+      return ('ask' ,'volume_total', alv)
 
     logger.debug('Levels are equal')
     return ('equal', '', np.zeros(levels, np.int))
@@ -119,7 +119,7 @@ class OrderBook:
   def sort_side(side: np.array, is_bid=False):
     """
 
-    :param side: array of 50 elements: 25 pairs of (price, volume)
+    :param side: array of 50 elements: 25 pairs of (price, volume_total)
     :param is_ask: flag of ask side, if so -> reverse order
     :return:
     """
@@ -133,8 +133,8 @@ class OrderBook:
   def __str__(self):
     return f'<snapshot, symbol={self.symbol}, ' \
            f'timestamp: {self.timestamp} ' \
-           f'best bid,volume=({self.bid_prices[0], self.bid_volumes[0]}), ' \
-           f'lowest ask,volume=({self.ask_prices[0], self.ask_volumes[0]})>'
+           f'best bid,volume_total=({self.bid_prices[0], self.bid_volumes[0]}), ' \
+           f'lowest ask,volume_total=({self.ask_prices[0], self.ask_volumes[0]})>'
 
 
 from utils import helper

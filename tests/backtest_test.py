@@ -35,7 +35,7 @@ class BacktestTest(unittest.TestCase):
   def test_trades_volume_minute_metric(self):
     reader = readers.OrderbookReader('resources/orderbook10/orderbook.csv.gz', trades_file='resources/orderbook10/trades.csv.gz', stop_after=10000, depth_to_load=10)
     callables = [
-      ('trades volume', lambda trades: sum(map(lambda x: x.volume, trades))),
+      ('trades volume_total', lambda trades: sum(map(lambda x: x.volume, trades))),
       ('trades length', lambda trades: len(trades))
     ]
     simulation = CalmStrategy([], time_metrics_trade=[TradeMetric(callables, 60)])
@@ -53,7 +53,7 @@ class BacktestTest(unittest.TestCase):
   def test_all_metrics(self):
     reader = readers.SnapshotReader('resources/trade/snapshots.csv.gz', trades_file='resources/trade/trades.csv.gz', stop_after=3000, depth_to_load=3)
     callables = [
-      ('trades volume', lambda trades: sum(map(lambda x: x.volume, trades))),
+      ('trades volume_total', lambda trades: sum(map(lambda x: x.volume, trades))),
       ('trades length', lambda trades: len(trades))
     ]
 
@@ -76,7 +76,7 @@ class BacktestTest(unittest.TestCase):
                                      depth_to_load=5)
 
     callables = [
-      ('trades volume', lambda trades: sum(map(lambda x: x.volume, trades))),
+      ('trades volume_total', lambda trades: sum(map(lambda x: x.volume, trades))),
       ('trades length', lambda trades: len(trades))
     ]
 
@@ -102,7 +102,7 @@ class BacktestTest(unittest.TestCase):
     #                                  pairs_to_load=5)
 
     callables = [
-      ('trades volume', lambda trades: sum(map(lambda x: x.volume, trades))),
+      ('trades volume_total', lambda trades: sum(map(lambda x: x.volume, trades))),
       ('trades length', lambda trades: len(trades))
     ]
     instant_metrics = [
@@ -136,13 +136,13 @@ class BacktestTest(unittest.TestCase):
 
     trigged = []
 
-    initial_call = simulation.trigger_trade
+    initial_call = simulation.trigger
     def substitute_action(*args):
       res = initial_call(*args)
       trigged.append(args)
       return res
 
-    simulation.trigger_trade = substitute_action
+    simulation.trigger = substitute_action
 
 
     backtester = backtest.Backtest(reader, simulation, output)

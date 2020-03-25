@@ -72,14 +72,14 @@ class Filters:
         bid_levels_volume = snapshot.bid_volumes[:self.levels]
         blv = bid_levels_volume - self.stored_bid_levels_volume[snapshot.symbol]
         if (blv != 0).any():
-          logger.debug(f'Bid level volume altered, on level={np.where(blv == True)[0]}')
+          logger.debug(f'Bid level volume_total altered, on level={np.where(blv == True)[0]}')
           self._store_levels(snapshot)
           return (snapshot.timestamp, snapshot.symbol, 'bid', blv[0])
 
         ask_levels_volume = snapshot.ask_volumes[:self.levels]
         alv = ask_levels_volume - self.stored_ask_levels_volume[snapshot.symbol]
         if (alv != 0).any():
-          logger.debug(f'Ask level volume altered, on level={np.where(alv == True)[0]}')
+          logger.debug(f'Ask level volume_total altered, on level={np.where(alv == True)[0]}')
           self._store_levels(snapshot)
           return (snapshot.timestamp, snapshot.symbol, 'ask', alv[0])
 

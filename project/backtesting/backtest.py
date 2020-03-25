@@ -46,7 +46,7 @@ class Backtest:
 
     self.pending_orders: Deque[(datetime.datetime, OrderRequest)] = deque()
     self.pending_statuses: Deque[(datetime.datetime, OrderStatus)] = deque()
-    # (symbol, side) -> price -> List[(order_id, volume-left, consumption-ratio)]
+    # (symbol, side) -> price -> List[(order_id, volume_total-left, consumption-ratio)]
     self.simulated_orders: Dict[SymbolSide, OrderedDict[float, List[OrderState]]] = defaultdict(lambda: defaultdict(list))
     # id -> request
     self.simulated_orders_id: Dict[int, OrderRequest] = {}
@@ -143,26 +143,30 @@ class Backtest:
     """
     statuses = []
 
-    order_side = 'bid' if trade.side == 'Sell' else 'ask'
+    order_side = 'bid' if trade.side == 'Sell' else 'ask' # todo: do I understand it correct?
     # todo: what about aggressive orders?
     orders = self.simulated_orders[(trade.symbol, order_side)]
 
     if len(orders) > 0:
-      # order_id, volume - left, consumption - ratio
+      # order_id, volume_total - left, consumption - ratio
       sorted_orders: List[float, OrderState] = list(sorted(orders.items(), key=lambda x: x[0]))
       to_remove = defaultdict(list)
       for price, order_requests in sorted_orders:
         for idx, (order_id, volume_level_old, consumption) in enumerate(order_requests):
           order: OrderRequest = self.simulated_orders_id[order_id]
-          # if (trade.side == 'Sell' and order.side == 'bid' and order.price >= trade.price) or \
-          #     (trade.side == 'Buy' and order.side == 'ask' and order.price <= trade.price):
-          if order.price >= trade.price or order.price <= trade.price:
+          if (order.side == 'bid' and order.price >= trade.price) or \
+              (order.side == 'ask' and order.price <= trade.price):
+            if order.side == 'ask':
+              # print('alog')
+              a = 10
+          # if order.price >= trade.price or order.price <= trade.price:
 
-            volume_left = max(0, volume_level_old - trade.volume)
+            volume_for_order = trade.volume - volume_level_old
+            volume_left = max(0, -volume_for_order)
             if volume_left != 0:
               orders[order.price][idx] = (order_id, volume_left, consumption)
             else:
-              consumption += (float(trade.volume) - volume_level_old) / order.volume
+              consumption += float(volume_for_order) / order.volume
               if consumption >= 1.0:  # order is executed
                 finished = OrderStatus.finish(order_id, trade.timestamp)
                 statuses.append(finished)
@@ -171,7 +175,7 @@ class Backtest:
               else:
                 orders[order.price][idx] = (order_id, volume_left, consumption)
                 if self._notify_partial and consumption > 0:
-                  partial = OrderStatus.partial(order_id, trade.timestamp, int(consumption * order.volume))
+                  partial = OrderStatus.partial(order_id, trade.timestamp, int(consumption * order.volume), volume_for_order)
                   statuses.append(partial)
           # elif trade.price - 2 * self.price_step[trade.symbol] >= order.price or \
           #     trade.price + 2 * self.price_step[trade.symbol] <= order.price: # todo: cancel condition does not work
@@ -267,7 +271,7 @@ class Backtest:
       values = instant_metric.evaluate(row)
       self._flush_output(['instant-metric', 'snapshot', row.symbol, instant_metric.name], row.timestamp, values)
 
-    if option[-1] != 0: # if volume altered on best level
+    if option[-1] != 0: # if volume_total altered on best level
       for time_metric in self.simulation.time_metrics['orderbook']:
         values = time_metric.evaluate(option)
         self._flush_output(['delta', 'snapshot', row.symbol, time_metric.name], row.timestamp, values)

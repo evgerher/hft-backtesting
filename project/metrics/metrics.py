@@ -117,7 +117,7 @@ class VWAP_volume(_VWAP):
   def __str__(self):
     return f'<VWAP (Volume): {self.volumes}>'
 
-  def __init__(self, volumes: List[int], symbol: str = None, name: str = 'vwap-volume'):
+  def __init__(self, volumes: List[int], symbol: str = None, name: str = 'vwap-volume_total'):
     self.volumes = sorted(volumes)
     self.symbol = symbol
     super().__init__(name)
@@ -231,7 +231,7 @@ class DeltaMetric(TimeMetric):
                seconds=60,
                starting_moment: datetime.datetime = None):
 
-    callables: List[DeltaExecutable] = [('quantity', lambda x: len(x)), ('volume', lambda x: sum(x))]
+    callables: List[DeltaExecutable] = [('quantity', lambda x: len(x)), ('volume_total', lambda x: sum(x))]
     super().__init__(f'delta-{seconds}', callables, seconds, starting_moment)
     self._time_storage = defaultdict(deque)
 

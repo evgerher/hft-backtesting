@@ -78,9 +78,9 @@ class Strategy(ABC):
       order = self.active_orders[status.id]
       if status.status != 'partial': # finished and cancel
         volume = order.volume - order.volume_filled
-        order.volume_filled = order.volume
+        # order.volume_filled = order.volume_total # todo: cancelled must not be filled
       else: # todo: partial else always
-        volume = status.volume
+        volume = status.volume_total
         order.volume_filled += status.volume
 
       ### action positive update balance
@@ -109,14 +109,14 @@ class Strategy(ABC):
   def _get_allowed_volume(self, symbol, memory, side):
     latest: OrderBook = memory[('orderbook', symbol)]
     side_level = latest.bid_volumes[0] if side == 'bid' else latest.ask_volumes[0]
-    return max(side_level * 0.15, 10000)
+    return int(max(side_level * 0.15, 10000))
 
   def __validate_orders(self, orders, memory):
     for order in orders:
       latest: OrderBook = memory[('orderbook', order.symbol)]
       side_level = latest.bid_volumes[0] if order.side == 'bid' else latest.ask_volumes[0]
       assert order.volume > 0 and ((side_level * 0.15 >= order.volume) or order.volume <= 10000), \
-        f"order size must be max 15% of the level or 10000 units: {order.volume}, {side_level}"
+        f"order size must be max 15% of the level or 10000 units: {order.volume_total}, {side_level}"
 
   def __remove_finished_orders(self, statuses):
     for status in statuses:
@@ -146,7 +146,8 @@ class Strategy(ABC):
   def return_unfinished(self, statuses: List[OrderStatus], memory: Dict[str, Union[Trade, OrderBook]]):
     logger.info('Update balance with unfinished tasks')
     self._balance_update_by_status(statuses)
-    self.balance_listener(self.balance, -1)
+    if self.balance_listener is not None:
+      self.balance_listener(self.balance, -1)
 
 
 class CalmStrategy(Strategy):
