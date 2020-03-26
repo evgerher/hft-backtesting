@@ -4,7 +4,8 @@ from backtesting import backtest
 from backtesting.output import StorageOutput
 from backtesting.readers import OrderbookReader
 from strategies.gatling import GatlingMM
-
+import logging
+logging.disable(logging.CRITICAL)
 
 class GatlingTest(unittest.TestCase):
   # @unittest.skip("Skip as it is manual run")

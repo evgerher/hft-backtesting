@@ -2,6 +2,7 @@ import logging
 import logging.config
 
 fmt_string = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+to_file = False
 
 def set_fmt_string(s):
   global fmt_string
@@ -15,7 +16,11 @@ def setup_logger(name:str = None, level='INFO'):
   logger = logging.getLogger(name)
 
   logger.setLevel(level)  # Change this to DEBUG if you want a lot more info
-  ch = logging.StreamHandler()
+  global to_file
+  if to_file:
+    ch = logging.FileHandler('log.log')
+  else:
+    ch = logging.StreamHandler()
   # create formatter
   formatter = logging.Formatter(fmt_string)
   # add formatter to ch

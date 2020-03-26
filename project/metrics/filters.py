@@ -49,21 +49,17 @@ class Filters:
 
     def __delta_level_consumed(self, price_new, price_old, volume_new, volume_old) -> np.array:
       # in most cases it will be 1, but multiple levels may be consumed
-      shift = np.where(price_old == price_new[0])[0][0] # get single item
-      # if shift.size > 0:
-      #   shift = shift[0]
-      # else:
-      #   return None
-      volume_delta = volume_new[0] - volume_old[shift]
-      # try:
-      #   volume_delta = volume_new[0] - volume_old[shift]
-      # except:
-      #   print("wtii")
-      volume_delta = np.concatenate((-volume_old[:shift], [volume_delta]))
-      # prices = np.concatenate((price_old[:shift+1], [price_new[shift]]))
-      prices = price_old[:shift+1]
-      selector = volume_delta != 0
-      return np.stack((prices[selector], volume_delta[selector]))
+      shift = np.where(price_old == price_new[0])[0] # get single item
+      if shift.size > 0:
+        shift = shift[0]
+        volume_delta = volume_new[0] - volume_old[shift]
+        volume_delta = np.concatenate((-volume_old[:shift], [volume_delta]))
+        prices = price_old[:shift + 1]
+        selector = volume_delta != 0
+        return np.stack((prices[selector], volume_delta[selector]))
+      else:
+        logger.critical(f'Critical prices: {price_new}; {price_old}')
+        return np.stack((price_old, volume_old))
 
     def process(self, snapshot: OrderBook) -> Optional[Delta]:
       symbol: str = snapshot.symbol
@@ -84,8 +80,6 @@ class Filters:
             logger.debug(f'Bid price descreased, level=0')
             answer = self.__delta_level_consumed(snapshot.bid_prices, self.stored_bid_price[snapshot.symbol],
                                                  snapshot.bid_volumes, self.stored_bid_volume[snapshot.symbol])
-          if answer is None:
-            return None
           result = (snapshot.timestamp, snapshot.symbol, 'bid-alter', answer)
           self._store_levels(snapshot)
           return result
@@ -97,8 +91,6 @@ class Filters:
             logger.debug(f'Ask price increased, level=0')
             answer = self.__delta_level_consumed(snapshot.ask_prices, self.stored_ask_price[snapshot.symbol],
                                                  snapshot.ask_volumes, self.stored_ask_volume[snapshot.symbol])
-            if answer is None:
-              return None
           else: # new level is added
             logger.debug(f'Ask price descreased, level=0')
             answer = np.stack(([snapshot.ask_prices[0]], [snapshot.ask_volumes[0]]))

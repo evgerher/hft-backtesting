@@ -187,14 +187,11 @@ class Backtest:
                 if self._notify_partial and consumption > 0:
                   partial = OrderStatus.partial(order_id, trade.timestamp, int(consumption * order.volume), volume_for_order)
                   statuses.append(partial)
-          # elif trade.price - 2 * self.price_step[trade.symbol] >= order.price or \
-          #     trade.price + 2 * self.price_step[trade.symbol] <= order.price: # todo: cancel condition does not work
-          #   statuses.append(OrderStatus.cancel(order.id, trade.timestamp))
-          #   to_remove[order.price].append(idx)
-          #   del self.simulated_orders_id[order.id]
 
       for price, idxs in to_remove.items():
         self.simulated_orders[(trade.symbol, order_side)][price] = [v for i, v in enumerate(orders[price]) if i not in idxs]
+        if len(self.simulated_orders[(trade.symbol, order_side)][price]) == 0:
+          del self.simulated_orders[(trade.symbol, order_side)][price]
 
     return statuses
 
