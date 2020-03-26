@@ -1,14 +1,14 @@
 import unittest
 from typing import List
 
-from backtesting.readers import Reader, SnapshotReader, OrderbookReader
+from backtesting.readers import Reader, OrderbookReader
 from utils.data import OrderBook, Trade
 
 
 class ReaderTest(unittest.TestCase):
   def test_read_csv(self):
     stop_after = 100
-    snapshotReader = SnapshotReader('resources/snapshots.csv', stop_after=stop_after)
+    snapshotReader = OrderbookReader('resources/orderbook/orderbooks.csv.gz', stop_after=stop_after)
 
     snapshots = []
     for row in snapshotReader:
@@ -17,23 +17,24 @@ class ReaderTest(unittest.TestCase):
     self.assertEqual(len(snapshots), stop_after)
 
     self.assertEqual(snapshots[0].symbol, 'XBTUSD')
-    self.assertTrue(26773 in snapshots[0].ask_volumes)
+    self.assertTrue(56320 in snapshots[0].ask_volumes)
 
-    self.assertEqual(snapshots[-1].symbol, 'ETHUSD')
-    self.assertTrue(16030 in snapshots[-1].ask_volumes)
+    self.assertEqual(snapshots[-1].symbol, 'XBTUSD')
+    self.assertTrue(15081 in snapshots[-1].ask_volumes)
 
   def test_read_csv_gz(self):
     stop_after = 100
-    snapshotReader: Reader = SnapshotReader('resources/snapshots.csv.gz', stop_after=stop_after)
+    reader = OrderbookReader('resources/orderbook/orderbooks.csv.gz', stop_after=stop_after)
 
     snapshots = []
-    for row in snapshotReader:
+    for row in reader:
       snapshots.append(row)
 
     self.assertEqual(len(snapshots), stop_after)
 
   def test_paired_snapshot_trade(self):
-    reader: Reader = SnapshotReader('resources/trade/snapshots.csv.gz', trades_file='resources/trade/trades.csv.gz', stop_after=1000)
+    reader: Reader = OrderbookReader('resources/orderbook/orderbooks.csv.gz',
+                                     trades_file='resources/orderbook/trades.csv.gz', stop_after=1000)
 
     snapshots: List[OrderBook] = []
     trades: List[Trade] = []
@@ -55,8 +56,8 @@ class ReaderTest(unittest.TestCase):
     print('yes')
 
   def test_orderbook_reader(self):
-    reader: Reader = OrderbookReader('resources/orderbook10/orderbook.csv.gz',
-                                     trades_file='resources/orderbook10/trades.csv.gz',
+    reader: Reader = OrderbookReader('resources/orderbook/orderbooks.csv.gz',
+                                     trades_file='resources/orderbook/trades.csv.gz',
                                      stop_after=10000, depth_to_load=5)
 
     trades: List[Trade] = []

@@ -7,23 +7,6 @@ from utils.data import OrderBook
 
 
 class FilterTest(unittest.TestCase):
-  def test_one_snapshot(self):
-    filter = Filters.DepthFilter(3)
-
-    snapshot = test_utils.get_snapshots(1)[0]
-
-    option = filter.process(snapshot)
-    self.assertIsNotNone(option)
-
-  def test_filter_memory(self):
-    filter = Filters.DepthFilter(3)
-
-    snapshots = test_utils.get_snapshots(5)
-
-    filtered = list(map(filter.process, snapshots))
-
-    self.assertEqual(len(filter.snapshots), 2)
-
   def test_filter_update(self):
     _filter = Filters.DepthFilter(4)
     snapshots = test_utils.get_snapshots(30, 'resources/snapshots_filter.csv')

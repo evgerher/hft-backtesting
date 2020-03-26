@@ -7,6 +7,7 @@ from strategies.gatling import GatlingMM
 
 
 class GatlingTest(unittest.TestCase):
+  @unittest.skip("Skip as it is manual run")
   def test_gatling(self):
     reader = OrderbookReader('resources/huge_dataset/orderbook_10_03_20.csv.gz',
                              'resources/huge_dataset/trades_10_03_20.csv.gz',

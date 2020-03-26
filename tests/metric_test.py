@@ -6,7 +6,7 @@ import numpy as np
 import test_utils
 import utils
 from backtesting import backtest
-from backtesting.readers import SnapshotReader, OrderbookReader
+from backtesting.readers import OrderbookReader
 from backtesting.strategy import CalmStrategy
 from metrics.metrics import VWAP_volume, DeltaMetric, Lipton
 from utils.data import OrderBook
@@ -58,13 +58,13 @@ class MetricTest(unittest.TestCase):
     vwap = VWAP_volume(volumes)
     self.assertListEqual(volumes, vwap.subitems())
 
-    snapshot = test_utils.get_orderbooks(1, src='resources/orderbook10/orderbook.csv')[0]
+    snapshot = test_utils.get_orderbooks(1, src='resources/orderbook/orderbooks.csv.gz')[0]
     values = vwap.evaluate(snapshot)
     latest = vwap.latest
     self.assertEqual(values, tuple([latest[v] for v in volumes]))
 
   def test_delta_lipton_metric(self):
-    reader = OrderbookReader(snapshot_file='resources/orderbook_fixed/orderbooks.csv.gz', stop_after=5000, depth_to_load=5)
+    reader = OrderbookReader(snapshot_file='resources/orderbook/orderbooks.csv.gz', stop_after=5000, depth_to_load=8)
 
     delta10 = DeltaMetric(seconds=60)
     lipton = Lipton('delta-60')
