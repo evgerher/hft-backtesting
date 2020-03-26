@@ -16,6 +16,9 @@ class Trade:
   price: float
   volume: int
 
+  def __str__(self):
+    return f'<trade, symbol={self.symbol}, timestamp:{self.timestamp}, side={self.side}, price={self.price}, volume={self.volume}>'
+
   def to_list(self):
     return [self.symbol, self.timestamp, self.side, self.price, self.volume]
 

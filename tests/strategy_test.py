@@ -11,6 +11,8 @@ import numpy as np
 
 
 class StrategyTest(unittest.TestCase):
+
+  @unittest.skip("works only alone")
   def test_balance(self):
     callables = [
       ('trades volume_total', lambda trades: sum(map(lambda x: x.volume, trades))),

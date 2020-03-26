@@ -69,10 +69,10 @@ class SnapshotReader(Reader):
 
     self.__finished_trades = self._trades_file is None
     if self._trades_file is not None:
-      self.__trades_df: pd.DataFrame = self.__read_csv(self._trades_file)
-      self._limit_trades = len(self.__trades_df)
+      self._trades_df: pd.DataFrame = self.__read_csv(self._trades_file)
+      self._limit_trades = len(self._trades_df)
       self._trade = self.__load_trade()
-      initial_trade = helper.convert_to_datetime(self.__trades_df.iloc[0, 1])
+      initial_trade = helper.convert_to_datetime(self._trades_df.iloc[0, 1])
     else:
       initial_trade = None
       self._limit_trades = 0
@@ -105,8 +105,8 @@ class SnapshotReader(Reader):
 
     # checks on files' reloads
     if self._snapshot_idx + 1 >= self._nrows:
-      self._total_snapshots += self._snapshot_idx
-      self._snapshots_df, self.__limit_snapshot = self.__update_df(self._snapshot_file, self._snapshot_idx)
+      self._total_snapshots += self._snapshot_idx + 1
+      self._snapshots_df, self.__limit_snapshot = self.__update_df(self._snapshot_file, self._total_snapshots)
       self._snapshot_idx = 0
 
     if (self._limit_trades != self._nrows and self._trades_idx == self._limit_trades):
@@ -115,8 +115,8 @@ class SnapshotReader(Reader):
       self.__finished_trades = True
 
     if self._trades_idx + 1 >= self._nrows:
-      self._total_trades += self._trades_idx
-      self.__trades_df, self._limit_trades = self.__update_df(self._trades_file, self._trades_idx)
+      self._total_trades += self._trades_idx + 1
+      self._trades_df, self._limit_trades = self.__update_df(self._trades_file, self._total_trades)
       self._trades_idx = 0
 
     # select whom to return
@@ -139,7 +139,7 @@ class SnapshotReader(Reader):
 
   def __load_trade(self) -> Trade:
     if not self.__finished_trades:
-      row: pd.Series = self.__trades_df.iloc[self._trades_idx, :]
+      row: pd.Series = self._trades_df.iloc[self._trades_idx, :]
       self._trades_idx += 1
       return helper.trade_line_parser(row)
     return self._trade

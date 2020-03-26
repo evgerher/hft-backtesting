@@ -134,12 +134,12 @@ class Strategy(ABC):
                memory: Dict[str, Union[Trade, OrderBook]]):
     self._balance_update_by_status(statuses)
     orders = self.define_orders(row, statuses, memory)
-    self.__validate_orders(orders, memory) # todo: reduce multiple new orders of same type into one
+    self.__validate_orders(orders, memory)
     self._balance_update_new_order(orders)
     self.__remove_finished_orders(statuses)
 
     # balance updated, notify listener
-    if self.balance_listener is not None and len(orders) > 0 or len(statuses) > 0:
+    if self.balance_listener is not None and (len(orders) > 0 or len(statuses) > 0):
       self.balance_listener(self.balance, row.timestamp)
     return orders
 

@@ -51,7 +51,8 @@ class Backtest:
     # id -> request
     self.simulated_orders_id: Dict[int, OrderRequest] = {}
     self._notify_partial = notify_partial
-    self.price_step: Dict[str, float] = {'XBTUSD': 0.5, 'ETHUSD': 0.05}
+    self.price_step: Dict[str, float] = {'XBTUSD': 0.5, 'ETHUSD': 0.05, 'test': 5}
+    self.__last_is_trade = defaultdict(lambda: False)
 
     if order_position_policy == 'top':
       policy = lambda: 1.0
@@ -71,10 +72,10 @@ class Backtest:
 
   def _process_event(self, event: Union[Trade, OrderBook]):
     statuses = []
-    option = None
+    delta = None
     if isinstance(event, OrderBook):
-      option = self.simulation.filter.process(event)
-      if option is None:
+      delta = self.simulation.filter.process(event)
+      if delta is None:
         return
 
       if self.delay != 0: # todo: may be remove it? It will make slight performance lowerance
@@ -82,12 +83,16 @@ class Backtest:
         pend_orders = self.__update_pending_objects(event.timestamp, self.pending_orders)
         for ord in pend_orders:
           self.__move_order_to_active(ord)
-      self._update_snapshots(event, option)
-      if 'alter' in option[2]:
-        statuses = self._price_step_status(event, option)
+      self._update_snapshots(event, delta)
+      if 'alter' in delta[2]:
+        statuses = self._price_step_cancel_order(event, delta)
+      if delta[-1].size > 0 and delta[-1][1, 0] < 0 and not self.__last_is_trade[event.symbol]:
+        self.__cancel_quote_levels_update((event.symbol, delta[2][:3]), delta[-1])
+      self.__last_is_trade[event.symbol] = False
     elif isinstance(event, Trade):
       self._update_trades(event)
       statuses = self._evaluate_statuses(event)
+      self.__last_is_trade[event.symbol] = True
 
     if self.delay != 0: # if delay, statuses are also queued
       for status in statuses:
@@ -95,12 +100,20 @@ class Backtest:
       statuses = self.__update_pending_objects(event.timestamp, self.pending_statuses)
     actions = self.simulation.trigger(event, statuses, self.memory)
 
-    self._update_composite_metrics(event, option)
+    self._update_composite_metrics(event, delta)
     if len(actions) > 0:
       self._process_actions(actions)
 
+  def __cancel_quote_levels_update(self, symbol_side: SymbolSide,  price_volume: np.array):
+    for i in range(price_volume.shape[-1]):
+      price = float(price_volume[0, i])
+      volume = int(price_volume[1, i])
+      items = self.simulated_orders[symbol_side][price]
+      for i in range(len(items)):
+        items[i] = (items[i][0], max(0, items[i][1] + volume), items[i][2])
 
-  def _price_step_status(self, event: OrderBook, option: Delta) -> List[OrderStatus]:
+
+  def _price_step_cancel_order(self, event: OrderBook, option: Delta) -> List[OrderStatus]:
     statuses = []
 
     side = option[2][:3]
@@ -156,9 +169,6 @@ class Backtest:
           order: OrderRequest = self.simulated_orders_id[order_id]
           if (order.side == 'bid' and order.price >= trade.price) or \
               (order.side == 'ask' and order.price <= trade.price):
-            if order.side == 'ask':
-              # print('alog')
-              a = 10
           # if order.price >= trade.price or order.price <= trade.price:
 
             volume_for_order = trade.volume - volume_level_old
@@ -271,7 +281,7 @@ class Backtest:
       values = instant_metric.evaluate(row)
       self._flush_output(['instant-metric', 'snapshot', row.symbol, instant_metric.name], row.timestamp, values)
 
-    if option[-1] != 0: # if volume_total altered on best level
+    if option[-1].size > 0: # if volume_total altered on best level
       for time_metric in self.simulation.time_metrics['orderbook']:
         values = time_metric.evaluate(option)
         self._flush_output(['delta', 'snapshot', row.symbol, time_metric.name], row.timestamp, values)
