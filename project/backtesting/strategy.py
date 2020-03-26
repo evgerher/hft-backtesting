@@ -18,7 +18,7 @@ class Strategy(ABC):
   # delay = 1e-3  # 1 msec delay from my laptop
 
   def __init__(self, instant_metrics: List[InstantMetric] = [],
-               depth_filter: Filters.DepthFilter = Filters.DepthFilter(3),
+               depth_filter: Filters.DepthFilter = Filters.DepthFilter(4),
                time_metrics_trade: List[TradeMetric] = [],
                time_metrics_snapshot: List[DeltaMetric] = [],
                composite_metrics: List[CompositeMetric] = [],
