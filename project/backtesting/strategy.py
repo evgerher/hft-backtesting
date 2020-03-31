@@ -114,37 +114,32 @@ class Strategy(ABC):
     # }
 
     for status in statuses:
-      # logger.debug(f'Received status: {status}')
-      order = self.active_orders[status.id]
-      if status.status != Statuses.PARTIAL: # finished and cancel
-        volume = order.volume - order.volume_filled
-      else: # todo: reminder - partial else always
-        volume = status.volume_total
-        order.volume_filled += status.volume
+      if status.status != Statuses.CANCEL: # finished and partial
+        logger.debug(f'Received status: {status}')
+        order = self.active_orders[status.id]
 
-      ### action positive update balance
+        if status.status != Statuses.PARTIAL: # finished and cancel
+          volume = order.volume - order.volume_filled
+        else: # todo: reminder - partial else always
+          volume = status.volume_total
+          order.volume_filled += status.volume
 
-      if status.status == Statuses.CANCEL:
-        logger.info(f'Cancel order: {status}')
-        if order.side == QuoteSides.BID:
-          self.balance['USD'] += volume
-        else: # ask
-          self.balance[order.symbol] += volume / order.price
-      else:
         if order.side == QuoteSides.ASK:
           self.balance['USD'] += volume
-        elif order.side: # bid
+          self.balance[order.symbol] -= volume / order.price
+        else: # bid
           self.balance[order.symbol] += volume / order.price
+          self.balance['USD'] -= volume
 
-  def _balance_update_new_order(self, orders: Tuple[OrderRequest]):
+  def _balance_update_new_order(self, orders: List[OrderRequest]):
     for order in orders:
       logger.info(f'New order: {order}')
       ### action negative update balance
       self.active_orders[order.id] = order
       if order.side == QuoteSides.ASK:
-        self.balance[order.symbol] -= order.volume / order.price + order.volume * (self.fee[order.symbol].settlement  + self.fee[order.symbol].maker)
+        self.balance[order.symbol] -= order.volume / order.price * (self.fee[order.symbol].settlement  + self.fee[order.symbol].maker)
       elif order.side == QuoteSides.BID:
-        self.balance['USD'] -= order.volume + order.volume * (self.fee[order.symbol].settlement + self.fee[order.symbol].maker)
+        self.balance['USD'] -= order.volume * (self.fee[order.symbol].settlement + self.fee[order.symbol].maker)
 
   def _get_allowed_volume(self, symbol, memory, side):
     latest: OrderBook = memory[('orderbook', symbol)]
@@ -166,7 +161,7 @@ class Strategy(ABC):
   @abstractmethod
   def define_orders(self, row: Union[Trade, OrderBook],
                     statuses: List[OrderStatus],
-                    memory: Dict[str, Union[Trade, OrderBook]]) -> Tuple[OrderRequest]:
+                    memory: Dict[str, Union[Trade, OrderBook]]) -> List[OrderRequest]:
     raise NotImplementedError
 
   def trigger(self, row: Union[Trade, OrderBook],

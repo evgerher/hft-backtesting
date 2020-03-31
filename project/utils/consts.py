@@ -11,6 +11,8 @@ class QuoteSides:
   ASK = 1
   BID_ALTER = 2
   ASK_ALTER = 3
+  BID_ALTER_CRITICAL = 4
+  ASK_ALTER_CRITICAL = 5
   INIT=-1
 
 

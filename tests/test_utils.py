@@ -32,6 +32,7 @@ def get_snapshots(limit: int = None, src: str = 'resources/orderbook/orderbooks.
 
 def get_orderbooks(limit: int = None, src='resouces/orderbook10/orderbook.csv') -> List[OrderBook]:
   df = pd.read_csv(src, nrows=limit, header=None)
+  df = helper.fix_timestamp(df, 0, 1)
   items = []
   for idx in range(limit):
     items.append(helper.orderbook_line_parse(df.iloc[idx, :]))

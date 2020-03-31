@@ -6,6 +6,7 @@ from backtesting.output import StorageOutput
 from backtesting.readers import ListReader
 from metrics.metrics import VWAP_volume, TradeMetric
 from test_utils import TestStrategy
+from utils.consts import TradeSides
 from utils.data import OrderBook, Trade
 import numpy as np
 
@@ -27,18 +28,18 @@ class StrategyTest(unittest.TestCase):
       OrderBook('test', datetime.datetime(2020, 3, 10, 8, 10, 30, 200),
                 np.array([9.5, 9.0, 8.5, 8,0]), np.array([1000, 100, 100, 100]),
                 np.array([10.0, 10.5, 11.0, 12.0]), np.array([100, 100, 100, 100])),
-      Trade('test', datetime.datetime(2020, 3, 10, 8, 10, 30, 300), 'Sell', 9.5, 100),
+      Trade('test', datetime.datetime(2020, 3, 10, 8, 10, 30, 300), TradeSides.SELL, 9.5, 100),
       OrderBook('test', datetime.datetime(2020, 3, 10, 8, 10, 30, 300),
                 np.array([9.5, 9.0, 8.5, 8.0]), np.array([900, 100, 100, 100]),
                 np.array([10.0, 10.5, 11.0, 12.0]), np.array([100, 100, 100, 100])),
-      Trade('test', datetime.datetime(2020, 3, 10, 8, 10, 30, 400), 'Sell', 9.5, 400),
-      Trade('test', datetime.datetime(2020, 3, 10, 8, 10, 30, 400), 'Sell', 9.5, 500),
+      Trade('test', datetime.datetime(2020, 3, 10, 8, 10, 30, 400), TradeSides.SELL, 9.5, 400),
+      Trade('test', datetime.datetime(2020, 3, 10, 8, 10, 30, 400), TradeSides.SELL, 9.5, 500),
       OrderBook('test', datetime.datetime(2020, 3, 10, 8, 10, 30, 400),
                 np.array([9.0, 8.5, 8.0, 7.0]), np.array([100, 100, 100, 200]),
                 np.array([10.0, 10.5, 11.0, 12.0]), np.array([100, 100, 100, 100])),
-      Trade('test', datetime.datetime(2020, 3, 10, 8, 10, 30, 500), 'Sell', 9.0, 550),
-      Trade('test', datetime.datetime(2020, 3, 10, 8, 10, 30, 500), 'Sell', 9.0, 200),
-      Trade('test', datetime.datetime(2020, 3, 10, 8, 10, 30, 500), 'Sell', 9.0, 1300),
+      Trade('test', datetime.datetime(2020, 3, 10, 8, 10, 30, 500), TradeSides.SELL, 9.0, 550),
+      Trade('test', datetime.datetime(2020, 3, 10, 8, 10, 30, 500), TradeSides.SELL, 9.0, 200),
+      Trade('test', datetime.datetime(2020, 3, 10, 8, 10, 30, 500), TradeSides.SELL, 9.0, 1300),
     ])
 
     time_metrics = [TradeMetric(callables, 60), TradeMetric(callables, 30)]
@@ -53,17 +54,16 @@ class StrategyTest(unittest.TestCase):
 
     initial_balance = dict(simulation.balance)
 
-    backtester._process_event(reader[0])
-    self.assertEqual(initial_balance['USD'] - 450, simulation.balance['USD'])
+    backtester._process_event(reader[0], type(reader[0]) == OrderBook)
 
-    for event in reader[1:7]:
-      backtester._process_event(event)
-
-    self.assertEqual(initial_balance['USD'] - 650, simulation.balance['USD'])
+    for event in reader[:-2]:
+      backtester._process_event(event, type(event) == OrderBook)
+    self.assertEqual(initial_balance['USD'] - 550, simulation.balance['USD'])
     self.assertAlmostEqual((450 + 100) / 9.5, simulation.balance['test'], delta=1e-3)
 
-    for event in reader[7:]:
-      backtester._process_event(event)
+    for event in reader[-2:]:
+      backtester._process_event(event, type(event) == OrderBook)
+    self.assertEqual(initial_balance['USD'] - 650, simulation.balance['USD'])
     self.assertAlmostEqual(650.0 / 9.5, simulation.balance['test'], delta=1e-3)
 
 

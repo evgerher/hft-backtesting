@@ -5,7 +5,7 @@ from backtesting.output import StorageOutput
 from backtesting.readers import ListReader
 from backtesting.strategy import CalmStrategy
 from backtesting.data import OrderStatus, OrderRequest
-from utils.consts import TradeSides
+from utils.consts import TradeSides, Statuses
 from metrics.metrics import *
 
 
@@ -196,7 +196,7 @@ class BacktestTest(unittest.TestCase):
     statuses: List[OrderStatus] = trigged[-1][1]
     status = statuses[0]
     self.assertEqual(status.at, reader[-1].timestamp)
-    self.assertEqual(status.status, 'finished')
+    self.assertEqual(status.status, Statuses.FINISHED)
 
     second_order = backtester.simulated_orders_id[1]
     symbol, side, price = second_order.label()

@@ -1,10 +1,11 @@
 import datetime
-# import pandas
 from typing import List, Union
 
-import OrderBook as OrderBook
 import numpy as np
 import pandas as pd
+
+from utils.consts import TradeSides
+from utils.data import OrderBook, Trade
 
 
 def snapshot_line_parser(line: Union[List], length:int=100):
@@ -53,4 +54,6 @@ def fix_trades(df, timestamp_index, millis_index):
   df = fix_timestamp(df, timestamp_index, millis_index)
   df = df.drop(columns=[5])  # remove `action`
   df.columns = ['symbol', 'timestamp', 'price', 'volume', 'side']
+  df.loc[df.side == 'Sell', "side"] = TradeSides.SELL
+  df.loc[df.side == 'Buy', "side"] = TradeSides.BUY
   return df

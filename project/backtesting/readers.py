@@ -128,7 +128,7 @@ class SnapshotReader(Reader):
       self._snapshots_df = fix_timestamp(self._snapshots_df, 0, 1)
       self._snapshot_idx = 0
 
-    if (self._limit_trades != self._nrows and self._trades_idx == self._limit_trades):
+    if self._trades_file is not None and (self._limit_trades != self._nrows and self._trades_idx == self._limit_trades):
       self._total_trades += self._trades_idx
       logger.critical(f"Finished trades_file {self._trades_file}, read {self._total_trades} rows")
       self._finished_trades = True

@@ -1,8 +1,7 @@
 import unittest
 from typing import List
 
-from backtesting.readers import Reader, OrderbookReader
-from utils.data import OrderBook, Trade
+from backtesting.readers import OrderbookReader
 
 
 class ReaderTest(unittest.TestCase):
@@ -11,7 +10,7 @@ class ReaderTest(unittest.TestCase):
     snapshotReader = OrderbookReader('resources/orderbook/orderbooks.csv.gz', stop_after=stop_after)
 
     snapshots = []
-    for row in snapshotReader:
+    for row, isorderbook in snapshotReader:
       snapshots.append(row)
 
     self.assertEqual(len(snapshots), stop_after)

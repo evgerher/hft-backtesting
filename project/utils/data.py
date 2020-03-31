@@ -4,7 +4,6 @@ from typing import Tuple, List
 
 import numpy as np
 
-from utils.consts import QuoteSides, TradeSides
 from utils.logger import setup_logger
 
 logger = setup_logger('<data>', 'INFO')
@@ -13,8 +12,8 @@ logger = setup_logger('<data>', 'INFO')
 @dataclass
 class Trade:
   symbol: str
-  timestamp: datetimeп.datetime
-  side: str
+  timestamp: datetime.datetime
+  side: int
   price: float
   volume: int
 
