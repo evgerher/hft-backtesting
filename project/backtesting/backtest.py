@@ -1,7 +1,8 @@
 from backtesting.output import Output
-from backtesting.readers import Reader
+from backtesting.readers import Reader, OrderbookReader
 from backtesting.strategy import Strategy
 from backtesting.data import OrderStatus, OrderRequest
+from utils.consts import Statuses, QuoteSides, TradeSides
 from utils.types import Delta
 from utils.data import OrderBook, Trade
 from utils.logger import setup_logger
@@ -19,10 +20,10 @@ logger = setup_logger('<backtest>', 'INFO')
 
 class Backtest:
 
-  def __init__(self, reader: Reader,
+  def __init__(self, reader: OrderbookReader,
                simulation: Strategy,
                output: Optional[Output] = None,
-               order_position_policy: str = 'top', # 'random' or 'bottom'
+               order_position_policy: str = 'tail', # 'random' or 'head'
                time_horizon:int=120,
                seed=1337,
                notify_partial = True,
@@ -37,7 +38,7 @@ class Backtest:
     :param seed:
     :param delay: delay in microseconds !
     """
-    self.reader: Reader = reader
+    self.reader: OrderbookReader = reader
     self.simulation: Strategy = simulation
     self.time_horizon: int = time_horizon
 
@@ -51,11 +52,12 @@ class Backtest:
     # id -> request
     self.simulated_orders_id: Dict[int, OrderRequest] = {}
     self._notify_partial = notify_partial
-    self.price_step: Dict[str, float] = {'XBTUSD': 0.5, 'ETHUSD': 0.05}
+    self.price_step: Dict[str, float] = {'XBTUSD': 0.5, 'ETHUSD': 0.05, 'test': 5}
+    self.__last_is_trade = defaultdict(lambda: False)
 
-    if order_position_policy == 'top':
+    if order_position_policy == 'tail':
       policy = lambda: 1.0
-    elif order_position_policy == 'bottom':
+    elif order_position_policy == 'head':
       policy = lambda: 0.0
     elif order_position_policy == 'random':
       r = random.Random()
@@ -69,12 +71,12 @@ class Backtest:
     self.delay = delay
     logger.info(f"Initialized {self}")
 
-  def _process_event(self, event: Union[Trade, OrderBook]):
+  def _process_event(self, event: Union[Trade, OrderBook], isorderbook: bool):
     statuses = []
-    option = None
-    if isinstance(event, OrderBook):
-      option = self.simulation.filter.process(event)
-      if option is None:
+    delta = None
+    if isorderbook:
+      delta = self.simulation.filter.process(event)
+      if delta is None:
         return
 
       if self.delay != 0: # todo: may be remove it? It will make slight performance lowerance
@@ -82,12 +84,16 @@ class Backtest:
         pend_orders = self.__update_pending_objects(event.timestamp, self.pending_orders)
         for ord in pend_orders:
           self.__move_order_to_active(ord)
-      self._update_snapshots(event, option)
-      if 'alter' in option[2]:
-        statuses = self._price_step_status(event, option)
-    elif isinstance(event, Trade):
+      self._update_snapshots(event, delta)
+      if delta[2] > 2: # BID-ALTER or ASK-ALTER
+        statuses = self._price_step_cancel_order(event, delta)
+      if delta[-1].size > 0 and delta[-1][1, 0] < 0 and not self.__last_is_trade[event.symbol]:
+        self.__cancel_quote_levels_update((event.symbol, delta[2] % 2), delta[-1])
+      self.__last_is_trade[event.symbol] = False
+    else:
       self._update_trades(event)
       statuses = self._evaluate_statuses(event)
+      self.__last_is_trade[event.symbol] = True
 
     if self.delay != 0: # if delay, statuses are also queued
       for status in statuses:
@@ -95,22 +101,32 @@ class Backtest:
       statuses = self.__update_pending_objects(event.timestamp, self.pending_statuses)
     actions = self.simulation.trigger(event, statuses, self.memory)
 
-    self._update_composite_metrics(event, option)
+    self._update_composite_metrics(event, delta)
     if len(actions) > 0:
       self._process_actions(actions)
+      for action in actions:
+        self._flush_output(['order-request', action.symbol, action.side], action.created, action)
+
+  def __cancel_quote_levels_update(self, symbol_side: SymbolSide,  price_volume: np.array):
+    for i in range(price_volume.shape[-1]):
+      price = float(price_volume[0, i])
+      volume = int(price_volume[1, i])
+      items = self.simulated_orders[symbol_side][price]
+      for i in range(len(items)):
+        items[i] = (items[i][0], max(0, items[i][1] + volume), items[i][2])
 
 
-  def _price_step_status(self, event: OrderBook, option: Delta) -> List[OrderStatus]:
+  def _price_step_cancel_order(self, event: OrderBook, option: Delta) -> List[OrderStatus]:
     statuses = []
 
-    side = option[2][:3]
+    side = option[2] % 2 # % 2 is to transform BID-ALTER -> BID and ASK-ALTER -> ASK
     orders = self.simulated_orders[(event.symbol, side)]
-    altered_side_price = event.bid_prices[0] if side == 'bid' else event.ask_prices[0]
+    altered_side_price = event.bid_prices[0] if side == QuoteSides.BID else event.ask_prices[0]
     price_to_del = []
 
     for price, suborders in orders.items():
-      if (side == 'bid' and altered_side_price - 2 * self.price_step[event.symbol] >= price) or \
-          (side == 'ask' and altered_side_price + 2 * self.price_step[event.symbol] <= price):
+      if (side == QuoteSides.BID and altered_side_price - 2 * self.price_step[event.symbol] >= price) or \
+          (side == QuoteSides.ASK and altered_side_price + 2 * self.price_step[event.symbol] <= price):
         for sub in suborders:
           statuses.append(OrderStatus.cancel(sub[0], event.timestamp))
           del self.simulated_orders_id[sub[0]]
@@ -123,8 +139,8 @@ class Backtest:
 
   def run(self):
     logger.info(f'Backtest initialize run')
-    for row in self.reader:
-      self._process_event(row)
+    for row, isorderbook in self.reader:
+      self._process_event(row, isorderbook)
     logger.info(f'Backtest finished run')
     statuses = self._return_unfinished_orders(row.timestamp)
     self.simulation.return_unfinished(statuses, self.memory)
@@ -143,7 +159,7 @@ class Backtest:
     """
     statuses = []
 
-    order_side = 'bid' if trade.side == 'Sell' else 'ask' # todo: do I understand it correct?
+    order_side = QuoteSides.BID if trade.side == TradeSides.SELL else QuoteSides.ASK # todo: do I understand it correct?
     # todo: what about aggressive orders?
     orders = self.simulated_orders[(trade.symbol, order_side)]
 
@@ -154,11 +170,8 @@ class Backtest:
       for price, order_requests in sorted_orders:
         for idx, (order_id, volume_level_old, consumption) in enumerate(order_requests):
           order: OrderRequest = self.simulated_orders_id[order_id]
-          if (order.side == 'bid' and order.price >= trade.price) or \
-              (order.side == 'ask' and order.price <= trade.price):
-            if order.side == 'ask':
-              # print('alog')
-              a = 10
+          if (order.side == QuoteSides.BID and order.price >= trade.price) or \
+              (order.side == QuoteSides.ASK and order.price <= trade.price):
           # if order.price >= trade.price or order.price <= trade.price:
 
             volume_for_order = trade.volume - volume_level_old
@@ -169,6 +182,7 @@ class Backtest:
               consumption += float(volume_for_order) / order.volume
               if consumption >= 1.0:  # order is executed
                 finished = OrderStatus.finish(order_id, trade.timestamp)
+                logger.info(f"Order finished: {finished}")
                 statuses.append(finished)
                 to_remove[order.price].append(idx)
                 del self.simulated_orders_id[order.id]
@@ -177,24 +191,21 @@ class Backtest:
                 if self._notify_partial and consumption > 0:
                   partial = OrderStatus.partial(order_id, trade.timestamp, int(consumption * order.volume), volume_for_order)
                   statuses.append(partial)
-          # elif trade.price - 2 * self.price_step[trade.symbol] >= order.price or \
-          #     trade.price + 2 * self.price_step[trade.symbol] <= order.price: # todo: cancel condition does not work
-          #   statuses.append(OrderStatus.cancel(order.id, trade.timestamp))
-          #   to_remove[order.price].append(idx)
-          #   del self.simulated_orders_id[order.id]
 
       for price, idxs in to_remove.items():
         self.simulated_orders[(trade.symbol, order_side)][price] = [v for i, v in enumerate(orders[price]) if i not in idxs]
+        if len(self.simulated_orders[(trade.symbol, order_side)][price]) == 0:
+          del self.simulated_orders[(trade.symbol, order_side)][price]
 
     return statuses
 
   def __move_order_to_active(self, action: OrderRequest):
     symbol, side, price = action.symbol, action.side, action.price
     orderbook = self.memory[('orderbook', symbol)]  # get most recent (datetime, orderbook) and return orderbook
-    if side == 'bid':
+    if side == QuoteSides.BID:
       prices = orderbook.bid_prices
       volumes = orderbook.bid_volumes
-    elif side == 'ask':
+    elif side == QuoteSides.ASK:
       prices = orderbook.ask_prices
       volumes = orderbook.ask_volumes
     else:
@@ -220,12 +231,12 @@ class Backtest:
 
   def _process_actions(self, actions: List[OrderRequest]):
     for action in actions:
-      if action.command == 'new':
+      if action.command == Statuses.NEW:
         if self.delay == 0:
           self.__move_order_to_active(action)
         else:
           self.pending_orders.append((action.created, action))
-      elif action.command == 'delete':
+      elif action.command == Statuses.CANCEL:
         order = self.simulated_orders_id.pop(action.id)
         symbol, side, price = order.label()
         self.simulated_orders[(symbol, side)][price].remove(order)
@@ -257,8 +268,8 @@ class Backtest:
   def _update_composite_metrics(self, data: Union[Trade, OrderBook], option: Optional[Delta]):
     logger.debug('Update composite metrics')
 
-    if isinstance(data, OrderBook):
-      for composite_metric in self.simulation.composite_metrics:
+    for composite_metric in self.simulation.composite_metrics:
+      if type(data) == OrderBook:
         value = composite_metric.evaluate(data)
         self._flush_output(['composite-metric', 'snapshot', data.symbol, composite_metric.name], data.timestamp, [value])
 
@@ -271,7 +282,7 @@ class Backtest:
       values = instant_metric.evaluate(row)
       self._flush_output(['instant-metric', 'snapshot', row.symbol, instant_metric.name], row.timestamp, values)
 
-    if option[-1] != 0: # if volume_total altered on best level
+    if option[-1].size > 0: # if volume_total altered on best level
       for time_metric in self.simulation.time_metrics['orderbook']:
         values = time_metric.evaluate(option)
         self._flush_output(['delta', 'snapshot', row.symbol, time_metric.name], row.timestamp, values)

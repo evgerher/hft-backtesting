@@ -6,7 +6,8 @@ import numpy as np
 import test_utils
 import utils
 from backtesting import backtest
-from backtesting.readers import SnapshotReader, OrderbookReader
+from utils.consts import QuoteSides
+from backtesting.readers import OrderbookReader
 from backtesting.strategy import CalmStrategy
 from metrics.metrics import VWAP_volume, DeltaMetric, Lipton
 from utils.data import OrderBook
@@ -58,13 +59,13 @@ class MetricTest(unittest.TestCase):
     vwap = VWAP_volume(volumes)
     self.assertListEqual(volumes, vwap.subitems())
 
-    snapshot = test_utils.get_orderbooks(1, src='resources/orderbook10/orderbook.csv')[0]
+    snapshot = test_utils.get_orderbooks(1, src='resources/orderbook/orderbooks.csv.gz')[0]
     values = vwap.evaluate(snapshot)
     latest = vwap.latest
     self.assertEqual(values, tuple([latest[v] for v in volumes]))
 
   def test_delta_lipton_metric(self):
-    reader = OrderbookReader(snapshot_file='resources/orderbook_fixed/orderbooks.csv.gz', stop_after=5000, depth_to_load=5)
+    reader = OrderbookReader(snapshot_file='resources/orderbook/orderbooks.csv.gz', stop_after=5000, depth_to_load=8)
 
     delta10 = DeltaMetric(seconds=60)
     lipton = Lipton('delta-60')
@@ -81,23 +82,23 @@ class MetricTest(unittest.TestCase):
     # self.assertTrue((last.timestamp - first.timestamp).seconds > 60)
     # TODO: REFACTOR DELTA TO QUANTITY LIMITED METRIC (NOT TIME LIMITED)
     storage = metric_map['delta-60'].storage
-    ask_pos_xbtusd = storage[('XBTUSD', 'ask', 'pos')]
-    ask_neg_xbtusd = storage[('XBTUSD', 'ask', 'neg')]
-    bid_pos_xbtusd = storage[('XBTUSD', 'bid', 'pos')]
+    ask_pos_xbtusd = storage[('XBTUSD', QuoteSides.ASK, 'pos')]
+    ask_neg_xbtusd = storage[('XBTUSD', QuoteSides.ASK, 'neg')]
+    bid_pos_xbtusd = storage[('XBTUSD', QuoteSides.BID, 'pos')]
 
     latest = metric_map['delta-60'].latest
-    quantity_ask_pos = latest['quantity', 'XBTUSD', 'ask', 'pos']
-    quantity_ask_neg = latest['quantity', 'XBTUSD', 'ask', 'neg']
-    volume_ask_pos = latest['volume_total', 'XBTUSD', 'ask', 'pos']
-    volume_ask_neg = latest['volume_total', 'XBTUSD', 'ask', 'neg']
+    quantity_ask_pos = latest['quantity', 'XBTUSD',   QuoteSides.ASK, 'pos']
+    quantity_ask_neg = latest['quantity', 'XBTUSD',   QuoteSides.ASK, 'neg']
+    volume_ask_pos = latest['volume_total', 'XBTUSD', QuoteSides.ASK, 'pos']
+    volume_ask_neg = latest['volume_total', 'XBTUSD', QuoteSides.ASK, 'neg']
 
     self.assertEqual(volume_ask_neg, np.sum(ask_neg_xbtusd))
     self.assertEqual(volume_ask_pos, np.sum(ask_pos_xbtusd))
     self.assertEqual(quantity_ask_pos, len(ask_pos_xbtusd))
     self.assertEqual(quantity_ask_neg, len(ask_neg_xbtusd))
 
-    replenishment = storage[(last.symbol, 'ask', 'pos')]
-    depletion = storage[(last.symbol, 'bid', 'neg')]
+    replenishment = storage[(last.symbol, QuoteSides.ASK, 'pos')]
+    depletion = storage[(last.symbol, QuoteSides.BID, 'neg')]
     length = min(len(depletion), len(replenishment))
     lipton_latest = metric_map['lipton'].latest[last.symbol]
     p_xy = np.corrcoef(list(depletion)[-length:], list(replenishment)[-length:])[0, 1]

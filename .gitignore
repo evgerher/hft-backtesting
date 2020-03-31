@@ -10,3 +10,5 @@ tests/resources/logs.txt
 tests/tmp.py
 .pytest_cache
 project/clickhouse_storage/
+*.ipynb
+*.log

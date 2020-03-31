@@ -18,9 +18,9 @@ class Output(ABC):
     :return:
     """
 
-    if isinstance(object, Trade):
+    if type(object) == Trade:
       self.trade_action(timestamp, object)
-    elif isinstance(object, OrderBook):
+    elif type(object) == OrderBook:
       self.snapshot_action(timestamp, object)
     elif 'instant-metric' in labels:
       self.instant_metric_action(timestamp, labels, object)
