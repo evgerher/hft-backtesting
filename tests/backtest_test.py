@@ -3,8 +3,9 @@ import unittest
 from backtesting import readers, backtest
 from backtesting.output import StorageOutput
 from backtesting.readers import ListReader
-from backtesting.strategy import Strategy, CalmStrategy
+from backtesting.strategy import CalmStrategy
 from backtesting.data import OrderStatus, OrderRequest
+from utils.consts import TradeSides
 from metrics.metrics import *
 
 
@@ -28,9 +29,9 @@ class BacktestTest(unittest.TestCase):
     simulation = CalmStrategy([], time_metrics_trade=[TradeMetric(callables, 60)])
     backtester = backtest.Backtest(reader, simulation)
 
-    row = reader.__next__()
+    obj, boolean = reader.__next__()
 
-    self.assertEqual((row.timestamp - simulation.time_metrics['trade'][0]._from).seconds, 0)
+    self.assertEqual((obj.timestamp - simulation.time_metrics['trade'][0]._from).seconds, 0)
 
   def test_trades_volume_minute_metric(self):
     reader = readers.OrderbookReader('resources/orderbook/orderbooks.csv.gz',
@@ -122,17 +123,17 @@ class BacktestTest(unittest.TestCase):
       OrderBook('test', datetime.datetime(2020, 3, 10, 8, 10, 30, 200),
                 np.array([9.5, 9.0, 8.5]), np.array([1100, 100, 100]),
                 np.array([10.0, 10.5, 11.0]), np.array([100, 100, 100])),
-      Trade('test', datetime.datetime(2020, 3, 10, 8, 10, 30, 300), 'Sell', 9.5, 100),
+      Trade('test', datetime.datetime(2020, 3, 10, 8, 10, 30, 300), TradeSides.SELL, 9.5, 100),
       OrderBook('test', datetime.datetime(2020, 3, 10, 8, 10, 30, 300),
                 np.array([9.5, 9.0, 8.5]), np.array([1000, 100, 100]),
                 np.array([10.0, 10.5, 11.0]), np.array([100, 100, 100])),
-      Trade('test', datetime.datetime(2020, 3, 10, 8, 10, 30, 400), 'Sell', 9.5, 400),
-      Trade('test', datetime.datetime(2020, 3, 10, 8, 10, 30, 400), 'Sell', 9.5, 500),
+      Trade('test', datetime.datetime(2020, 3, 10, 8, 10, 30, 400), TradeSides.SELL, 9.5, 400),
+      Trade('test', datetime.datetime(2020, 3, 10, 8, 10, 30, 400), TradeSides.SELL, 9.5, 500),
       OrderBook('test', datetime.datetime(2020, 3, 10, 8, 10, 30, 400),
                 np.array([9.5, 9.0, 8.5]), np.array([100, 100, 100]),
                 np.array([10.0, 10.5, 11.0]), np.array([100, 100, 100])),
-      Trade('test', datetime.datetime(2020, 3, 10, 8, 10, 30, 500), 'Sell', 9.0, 325),
-      Trade('test', datetime.datetime(2020, 3, 10, 8, 10, 30, 500), 'Sell', 9.0, 400),
+      Trade('test', datetime.datetime(2020, 3, 10, 8, 10, 30, 500), TradeSides.SELL, 9.0, 325),
+      Trade('test', datetime.datetime(2020, 3, 10, 8, 10, 30, 500), TradeSides.SELL, 9.0, 400),
     ])
 
     trigged = []
@@ -148,7 +149,7 @@ class BacktestTest(unittest.TestCase):
 
     backtester = backtest.Backtest(reader, simulation, output)
 
-    backtester._process_event(reader[0])
+    backtester._process_event(reader[0], True)
 
 
     # Sell это bid
@@ -156,42 +157,42 @@ class BacktestTest(unittest.TestCase):
     # add order request
     backtester._process_actions([OrderRequest.create_bid(9.5, 450, 'test', reader[0].timestamp)])
     # monitor request
-    order_requests = backtester.simulated_orders[('test', 'bid')][9.5]
+    order_requests = backtester.simulated_orders[('test', QuoteSides.BID)][9.5]
     id, volume_left, consumed = order_requests[0]
     self.assertEqual(id, 0)
     self.assertEqual(volume_left, 1100)
     self.assertEqual(consumed, 0.0)
 
     # Check after trade event
-    backtester._process_event(reader[1])
+    backtester._process_event(reader[1], False)
     id, volume_left, consumed = order_requests[0]
     self.assertEqual(volume_left, 1000)
     self.assertEqual(consumed, 0.0)
 
 
     for event in reader[2:4]:
-      backtester._process_event(event)
+      backtester._process_event(event, type(event) == OrderBook)
     id, volume_left, consumed = order_requests[0]
     self.assertEqual(volume_left, 600)
     self.assertEqual(consumed, 0.0)
 
 
-    backtester._process_event(reader[4])
+    backtester._process_event(reader[4], type(reader[4]) == OrderBook)
     id, volume_left, consumed = order_requests[0]
     self.assertEqual(volume_left, 100)
     self.assertEqual(consumed, 0.0)
 
-    backtester._process_event(reader[5])
+    backtester._process_event(reader[5], type(reader[5]) == OrderBook)
     backtester._process_actions([OrderRequest.create_bid(9.5, 200, 'test', reader[3].timestamp)])
-    second_order = backtester.simulated_orders[('test', 'bid')][9.5][1]
+    second_order = backtester.simulated_orders[('test', QuoteSides.BID)][9.5][1]
     self.assertEqual(550, second_order[1])
 
-    backtester._process_event(reader[6])
+    backtester._process_event(reader[6], type(reader[6]) == OrderBook)
     id, volume_left, consumed = order_requests[0]
     self.assertEqual(volume_left, 0)
     self.assertAlmostEqual(consumed, 0.5, delta=1e-3)
 
-    backtester._process_event(reader[7])
+    backtester._process_event(reader[7], type(reader[7]) == OrderBook)
     statuses: List[OrderStatus] = trigged[-1][1]
     status = statuses[0]
     self.assertEqual(status.at, reader[-1].timestamp)
@@ -212,12 +213,12 @@ class BacktestTest(unittest.TestCase):
       OrderBook('test', datetime.datetime(2020, 3, 10, 8, 10, 30, microsecond=200000),
                 np.array([9.5, 9.0, 8.5]), np.array([1100, 100, 100]),
                 np.array([10.0, 10.5, 11.0]), np.array([100, 100, 100])),
-      Trade('test', datetime.datetime(2020, 3, 10, 8, 10, 30, microsecond=300000), 'Sell', 9.5, 100),
+      Trade('test', datetime.datetime(2020, 3, 10, 8, 10, 30, microsecond=300000), TradeSides.SELL, 9.5, 100),
       OrderBook('test', datetime.datetime(2020, 3, 10, 8, 10, 30, microsecond=300000),
                 np.array([9.5, 9.0, 8.5]), np.array([1000, 100, 100]),
                 np.array([10.0, 10.5, 11.0]), np.array([100, 100, 100])),
-      Trade('test', datetime.datetime(2020, 3, 10, 8, 10, 30, microsecond=350000), 'Sell', 9.5, 1150),
-      Trade('test', datetime.datetime(2020, 3, 10, 8, 10, 30, microsecond=350000), 'Sell', 9.5, 500),
+      Trade('test', datetime.datetime(2020, 3, 10, 8, 10, 30, microsecond=350000), TradeSides.SELL, 9.5, 1150),
+      Trade('test', datetime.datetime(2020, 3, 10, 8, 10, 30, microsecond=350000), TradeSides.SELL, 9.5, 500),
       OrderBook('test', datetime.datetime(2020, 3, 10, 8, 10, 30, microsecond=350000),
                 np.array([9.5, 9.0, 8.5]), np.array([1000, 100, 100]),
                 np.array([10.0, 10.5, 11.0]), np.array([100, 100, 500])),
@@ -229,32 +230,32 @@ class BacktestTest(unittest.TestCase):
     simulation.trigger = lambda *args: [] # disable inner logic for simulation
     backtester = backtest.Backtest(reader, simulation, output, delay=100)
 
-    backtester._process_event(reader[0])
+    backtester._process_event(reader[0], type(reader[0]) == OrderBook)
     backtester._process_actions([OrderRequest.create_bid(9.5, 450, 'test', reader[0].timestamp)])
     self.assertEqual(len(backtester.simulated_orders), 0)
     self.assertEqual(len(backtester.simulated_orders_id), 0)
     self.assertEqual(len(backtester.pending_orders), 1)
 
 
-    backtester._process_event(reader[1])
-    backtester._process_event(reader[2])
-    self.assertEqual(len(backtester.simulated_orders[('test', 'bid')][9.5]), 1)
+    backtester._process_event(reader[1], type(reader[1]) == OrderBook)
+    backtester._process_event(reader[2], type(reader[2]) == OrderBook)
+    self.assertEqual(len(backtester.simulated_orders[('test', QuoteSides.BID)][9.5]), 1)
     self.assertEqual(len(backtester.simulated_orders_id), 1)
     self.assertEqual(len(backtester.pending_orders), 0)
     self.assertEqual(len(backtester.pending_statuses), 0)
 
-    backtester._process_event(reader[3])
-    self.assertEqual(len(backtester.simulated_orders[('test', 'bid')][9.5]), 1)
+    backtester._process_event(reader[3], type(reader[3]) == OrderBook)
+    self.assertEqual(len(backtester.simulated_orders[('test', QuoteSides.BID)][9.5]), 1)
     self.assertEqual(len(backtester.simulated_orders_id), 1)
     self.assertEqual(len(backtester.pending_statuses), 1)
 
-    backtester._process_event(reader[4])
-    self.assertEqual(len(backtester.simulated_orders[('test', 'bid')][9.5]), 0)
+    backtester._process_event(reader[4], type(reader[4]) == OrderBook)
+    self.assertEqual(len(backtester.simulated_orders[('test', QuoteSides.BID)][9.5]), 0)
     self.assertEqual(len(backtester.simulated_orders_id), 0)
     self.assertEqual(len(backtester.pending_statuses), 2)
 
-    backtester._process_event(reader[5])
-    backtester._process_event(reader[6])
+    backtester._process_event(reader[5], type(reader[5]) == OrderBook)
+    backtester._process_event(reader[6], type(reader[6]) == OrderBook)
     self.assertEqual(len(backtester.pending_statuses), 0)
 
   @unittest.skip("Works only alone")
@@ -280,18 +281,18 @@ class BacktestTest(unittest.TestCase):
 
     backtester = backtest.Backtest(reader, simulation, output, delay=0)
 
-    backtester._process_event(reader[0])
+    backtester._process_event(reader[0], type(reader[0]) == OrderBook)
     backtester._process_actions([OrderRequest.create_bid(9.5, 200, 'XBTUSD', reader[0].timestamp)])
     backtester._process_actions([OrderRequest.create_ask(10.0, 200, 'XBTUSD', reader[0].timestamp)])
     self.assertEqual(len(backtester.simulated_orders_id), 2)
 
-    backtester._process_event(reader[1])
+    backtester._process_event(reader[1], type(reader[1]) == OrderBook)
     self.assertEqual(len(backtester.simulated_orders_id), 2)
 
-    backtester._process_event(reader[2])
+    backtester._process_event(reader[2], type(reader[2]) == OrderBook)
     self.assertEqual(len(backtester.simulated_orders_id), 1)
 
-    backtester._process_event(reader[3])
+    backtester._process_event(reader[3], type(reader[3]) == OrderBook)
     self.assertEqual(len(backtester.simulated_orders_id), 0)
 
 

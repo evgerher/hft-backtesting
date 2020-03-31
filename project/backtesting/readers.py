@@ -1,8 +1,9 @@
 import datetime
-from typing import Optional, Tuple, List, Union
+from typing import Optional, List, Union, Tuple
 
 from utils import helper
 from utils.data import OrderBook, Trade
+from utils.helper import fix_timestamp, fix_trades
 from utils.logger import setup_logger
 import pandas as pd
 from abc import ABC, abstractmethod
@@ -42,9 +43,6 @@ class ListReader(Reader):
   def __getitem__(self, idx):
     return self.items[idx]
 
-
-
-
 class SnapshotReader(Reader):
 
   def __init__(self, snapshot_file: str, trades_file: Optional[str] = None, nrows: int = 10000, stop_after: int = None, depth_to_load:int=10):
@@ -63,16 +61,19 @@ class SnapshotReader(Reader):
     self._nrows = nrows
     self._pairs_to_load =  depth_to_load
     self._snapshots_df: pd.DataFrame = self.__read_csv(self._snapshot_file)
+    self._snapshots_df = fix_timestamp(self._snapshots_df, 0, 1)
+
     self.__limit_snapshot = len(self._snapshots_df)
     self._snapshot = self._load_snapshot()
-
 
     self._finished_trades = self._trades_file is None
     if self._trades_file is not None:
       self._trades_df: pd.DataFrame = self.__read_csv(self._trades_file)
+      self._trades_df = fix_trades(self._trades_df, 1, 2)
+
       self._limit_trades = len(self._trades_df)
       self._trade = self.__load_trade()
-      initial_trade = helper.convert_to_datetime(self._trades_df.iloc[0, 1])
+      initial_trade = self._trades_df.iloc[0, 1]
     else:
       initial_trade = None
       self._limit_trades = 0
@@ -80,7 +81,7 @@ class SnapshotReader(Reader):
     self._read_first_trades = True
     self.__stop_after = stop_after
 
-    initial_snapshot = helper.convert_to_datetime(self._snapshots_df.iloc[0, 0])
+    initial_snapshot = self._snapshots_df.iloc[0, 0]
     initial_trade = initial_trade or initial_snapshot
     super().__init__(min(initial_trade, initial_snapshot))
 
@@ -94,7 +95,7 @@ class SnapshotReader(Reader):
     limit = len(df)
     return df, limit
 
-  def __next__(self):  # snapshot or trade
+  def __next__(self) -> Tuple[Union[Trade, OrderBook], bool]:  # snapshot or trade
 
     # end condition
     if (self.__limit_snapshot != self._nrows and self._snapshot_idx == self.__limit_snapshot) or \
@@ -113,16 +114,18 @@ class SnapshotReader(Reader):
       if self._read_first_trades and self._trade.timestamp >= self._snapshot.timestamp:
         self._read_first_trades = False
 
-      obj = trade
+      obj = (trade, False)
     else:
       snapshot = self._snapshot
       self._snapshot = self._load_snapshot()
-      obj = snapshot
+      obj = (snapshot, True)
 
     # checks on files' reloads
     if self._snapshot_idx >= self._nrows:
       self._total_snapshots += self._snapshot_idx
+      logger.info(f"Reload snapshot file: total-snapshots={self._total_snapshots}")
       self._snapshots_df, self.__limit_snapshot = self.__update_df(self._snapshot_file, self._total_snapshots)
+      self._snapshots_df = fix_timestamp(self._snapshots_df, 0, 1)
       self._snapshot_idx = 0
 
     if (self._limit_trades != self._nrows and self._trades_idx == self._limit_trades):
@@ -132,7 +135,9 @@ class SnapshotReader(Reader):
 
     if self._trades_idx >= self._nrows:
       self._total_trades += self._trades_idx
+      logger.info(f"Reload trades file: total-trades={self._total_trades}")
       self._trades_df, self._limit_trades = self.__update_df(self._trades_file, self._total_trades)
+      self._trades_df = fix_trades(self._trades_df, 1, 2)
       self._trades_idx = 0
 
     return obj
@@ -141,7 +146,7 @@ class SnapshotReader(Reader):
     if not self._finished_trades:
       row: pd.Series = self._trades_df.iloc[self._trades_idx, :]
       self._trades_idx += 1
-      return helper.trade_line_parser(row)
+      return Trade(row['symbol'], row['timestamp'], row['side'], row['price'], row['volume'])
     return self._trade
 
   def _load_snapshot(self) -> OrderBook:

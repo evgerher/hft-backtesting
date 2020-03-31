@@ -3,6 +3,7 @@ from typing import List, Deque, Dict, Callable, Tuple, Union, Sequence, TypeVar
 import datetime
 from collections import deque, defaultdict
 
+from utils.consts import QuoteSides
 from utils.types import Delta, NamedExecutable, DeltaExecutable, TradeExecutable
 from utils.data import OrderBook, Trade
 import numpy as np
@@ -265,7 +266,7 @@ class DeltaMetric(TimeMetric):
   def _get_update_deque(self, event: Delta):
     timestamp = event[0]
     symbol = event[1]
-    side = event[2][:3]  # first three symbols `ask-alter` -> `ask`
+    side = event[2] % 2  # Transform ASK-ALTER -> ASK, BID-ALTER -> BID
     volume = np.sum(event[3][1, :]) # get first (price, volume) pair and take volume only
     sign = 'pos' if volume > 0 else 'neg' if volume < 0 else None
     volume = volume if volume > 0 else -volume
@@ -296,8 +297,8 @@ class Lipton(CompositeMetric):
   def _evaluate(self, snapshot: OrderBook):
     assert self._metric_map is not None
     delta_storage = self._metric_map[self.delta_name].storage
-    replenishment_ask: List[int] = delta_storage[(snapshot.symbol, 'ask', 'pos')]
-    depletion_bid: List[int] = delta_storage[(snapshot.symbol, 'bid', 'neg')]
+    replenishment_ask: List[int] = delta_storage[(snapshot.symbol, QuoteSides.ASK, 'pos')]
+    depletion_bid: List[int] = delta_storage[(snapshot.symbol, QuoteSides.BID, 'neg')]
 
     if self._first_time:
       if len(replenishment_ask) > 5 and len(depletion_bid) > 5:

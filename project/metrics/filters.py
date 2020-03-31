@@ -1,3 +1,4 @@
+from utils.consts import QuoteSides
 from utils.types import Delta
 from utils.data import OrderBook
 from typing import Dict, List, Optional
@@ -29,14 +30,13 @@ class Filters:
 
     def __init__(self, levels: int):
       self.levels: int = levels
-      self.snapshots: Dict[str, OrderBook] = {}
       self.stored_bid_price : Dict[str, List] = {}
       self.stored_ask_price : Dict[str, List] = {}
       self.stored_bid_volume: Dict[str, List] = {}
       self.stored_ask_volume: Dict[str, List] = {}
 
     def __str__(self):
-      return f'<Depth filter for n={self.level}>'
+      return f'<Depth filter for n={self.levels}>'
 
     def _store_levels(self, snapshot: OrderBook):
       self.stored_bid_price[snapshot.symbol] = snapshot.bid_prices
@@ -59,16 +59,14 @@ class Filters:
         return np.stack((prices[selector], volume_delta[selector]))
       else:
         logger.critical(f'Critical prices: {price_new}; {price_old}')
-        return np.stack((price_old, volume_old))
+        return np.stack((price_old, -volume_old))
 
     def process(self, snapshot: OrderBook) -> Optional[Delta]:
-      symbol: str = snapshot.symbol
-      stored_snapshot: OrderBook = self.snapshots.get(symbol, None)
+      stored_memory = self.stored_bid_price.get(snapshot.symbol, None)
       
-      if stored_snapshot is None:
-        self.snapshots[symbol] = snapshot # todo: refactor
+      if stored_memory is None:
         self._store_levels(snapshot)
-        return (snapshot.timestamp, snapshot.symbol, 'init', np.empty((0,)))
+        return (snapshot.timestamp, snapshot.symbol, QuoteSides.INIT, np.empty((0,)))
       else:
         bid_price = snapshot.bid_prices[0]
         blp = bid_price != self.stored_bid_price[snapshot.symbol][0]
@@ -80,7 +78,7 @@ class Filters:
             logger.debug(f'Bid price descreased, level=0')
             answer = self.__delta_level_consumed(snapshot.bid_prices, self.stored_bid_price[snapshot.symbol],
                                                  snapshot.bid_volumes, self.stored_bid_volume[snapshot.symbol])
-          result = (snapshot.timestamp, snapshot.symbol, 'bid-alter', answer)
+          result = (snapshot.timestamp, snapshot.symbol, QuoteSides.BID_ALTER, answer)
           self._store_levels(snapshot)
           return result
 
@@ -94,7 +92,7 @@ class Filters:
           else: # new level is added
             logger.debug(f'Ask price descreased, level=0')
             answer = np.stack(([snapshot.ask_prices[0]], [snapshot.ask_volumes[0]]))
-          result = (snapshot.timestamp, snapshot.symbol, 'ask-alter', answer)
+          result = (snapshot.timestamp, snapshot.symbol, QuoteSides.ASK_ALTER, answer)
           self._store_levels(snapshot)
           return result
 
@@ -104,7 +102,7 @@ class Filters:
         if selector.any():
           logger.debug(f'Bid volume altered, level={np.where(blv == True)[0]}')
           self._store_levels(snapshot)
-          return (snapshot.timestamp, snapshot.symbol, 'bid', np.stack((snapshot.bid_prices[:self.levels][selector], blv[selector])))
+          return (snapshot.timestamp, snapshot.symbol, QuoteSides.BID, np.stack((snapshot.bid_prices[:self.levels][selector], blv[selector])))
 
         ask_volume = snapshot.ask_volumes[:self.levels]
         alv = ask_volume - self.stored_ask_volume[snapshot.symbol][:self.levels]
@@ -112,6 +110,6 @@ class Filters:
         if selector.any():
           logger.debug(f'Ask volume altered, level={np.where(alv == True)[0]}')
           self._store_levels(snapshot)
-          return (snapshot.timestamp, snapshot.symbol, 'ask', np.stack((snapshot.ask_prices[:self.levels][selector], alv[selector])))
+          return (snapshot.timestamp, snapshot.symbol, QuoteSides.ASK, np.stack((snapshot.ask_prices[:self.levels][selector], alv[selector])))
 
       return None
