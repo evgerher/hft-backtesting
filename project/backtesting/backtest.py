@@ -55,14 +55,15 @@ class Backtest:
     self.price_step: Dict[str, float] = {'XBTUSD': 0.5, 'ETHUSD': 0.05, 'test': 5}
     self.__last_is_trade = defaultdict(lambda: False)
 
+    self.random = random.Random()
+    self.random.seed(seed)
+
     if order_position_policy == 'tail':
       policy = lambda: 1.0
     elif order_position_policy == 'head':
       policy = lambda: 0.0
     elif order_position_policy == 'random':
-      r = random.Random()
-      r.seed(seed)
-      policy = lambda: r.uniform(0.0, 1.0)
+      policy = lambda: self.random.uniform(0.0, 1.0)
     else:
       policy = lambda: 1.0
 
@@ -79,17 +80,17 @@ class Backtest:
       if delta is None:
         return
 
-      if self.delay != 0: # todo: may be remove it? It will make slight performance lowerance
+      if self.delay != 0:
         # update pending orders, if delay passed
         pend_orders = self.__update_pending_objects(event.timestamp, self.pending_orders)
         for ord in pend_orders:
           self.__move_order_to_active(ord)
-      self._update_snapshots(event, delta)
       if delta[2] > 2: # BID-ALTER or ASK-ALTER
         statuses = self._price_step_cancel_order(event, delta)
       if delta[-1].size > 0 and delta[-1][1, 0] < 0 and not self.__last_is_trade[event.symbol]:
         self.__cancel_quote_levels_update((event.symbol, delta[2] % 2), delta[-1])
       self.__last_is_trade[event.symbol] = False
+      self._update_snapshots(event, delta)
     else:
       self._update_trades(event)
       statuses = self._evaluate_statuses(event)
@@ -108,12 +109,31 @@ class Backtest:
         self._flush_output(['order-request', action.symbol, action.side], action.created, action)
 
   def __cancel_quote_levels_update(self, symbol_side: SymbolSide,  price_volume: np.array):
+    snapshot: OrderBook = self.memory[(('orderbook', symbol_side[0]))]
+    target_price = snapshot.bid_prices if symbol_side[1] == QuoteSides.BID else snapshot.ask_prices
+    target_volume = snapshot.bid_volumes if symbol_side[1] == QuoteSides.BID else snapshot.ask_volumes
+
     for i in range(price_volume.shape[-1]):
       price = float(price_volume[0, i])
-      volume = int(price_volume[1, i])
+      depletion = int(price_volume[1, i]) # negative value
       items = self.simulated_orders[symbol_side][price]
+      
+      # todo: refactor this solution
+      volume_idx = np.where(target_price == price)[0][0]
+      level_volume = target_volume[volume_idx]
+      # todo: refactor this solution
+      
       for i in range(len(items)):
-        items[i] = (items[i][0], max(0, items[i][1] + volume), items[i][2])
+        order_volume_before = items[i][1]
+        order_volume_after = level_volume - order_volume_before
+
+        if order_volume_before < -depletion:
+          pass
+        elif order_volume_after < -depletion:
+          items[i] = (items[i][0], max(0, order_volume_before + depletion), items[i][2])
+        else: # randomly delete this item
+          if self.random.uniform() <= order_volume_before / level_volume:
+            items[i] = (items[i][0], max(0, order_volume_before + depletion), items[i][2])
 
 
   def _price_step_cancel_order(self, event: OrderBook, option: Delta) -> List[OrderStatus]:
