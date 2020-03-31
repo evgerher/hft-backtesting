@@ -104,7 +104,7 @@ class Data_Preprocessor(ABC):
       for orderbook in orderbooks:
         self.connector.store_orderbook(orderbook)
     else: # process snapshot action
-      if meta.action in 'partial':
+      if meta.action == 'partial':
         state = self._preprocess_partial(msg)
         snapshot: SnapshotBuilder = SnapshotBuilder(meta.symbol, state)
         self.snapshots[meta.symbol] = snapshot

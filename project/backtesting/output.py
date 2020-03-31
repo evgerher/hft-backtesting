@@ -18,9 +18,9 @@ class Output(ABC):
     :return:
     """
 
-    if isinstance(object, Trade):
+    if type(object) == Trade:
       self.trade_action(timestamp, object)
-    elif isinstance(object, OrderBook):
+    elif type(object) == OrderBook:
       self.snapshot_action(timestamp, object)
     elif 'instant-metric' in labels:
       self.instant_metric_action(timestamp, labels, object)
@@ -54,7 +54,8 @@ class Output(ABC):
     raise NotImplementedError
 
 
-class TestOutput(Output):
+class StorageOutput(Output):
+  # todo: make it return list of accessible fields, like model.describe()
   def __init__(self, instant_metric_names, time_metric_names):
     super().__init__(instant_metric_names, time_metric_names)
     self.snapshots = []
