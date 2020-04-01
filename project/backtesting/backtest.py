@@ -85,8 +85,11 @@ class Backtest:
         pend_orders = self.__update_pending_objects(event.timestamp, self.pending_orders)
         for ord in pend_orders:
           self.__move_order_to_active(ord)
-      if delta[2] > 2: # BID-ALTER or ASK-ALTER
+      if delta[2] >= 4: # is critical
+        statuses = self.__critical_price_change(event.symbol, delta[2] % 2, event.timestamp, delta[-1])
+      elif delta[2] >= 2: # BID-ALTER or ASK-ALTER
         statuses = self._price_step_cancel_order(event, delta)
+
       if delta[-1].size > 0 and delta[-1][1, 0] < 0 and not self.__last_is_trade[event.symbol]:
         self.__cancel_quote_levels_update((event.symbol, delta[2] % 2), delta[-1])
       self.__last_is_trade[event.symbol] = False
@@ -108,6 +111,31 @@ class Backtest:
       for action in actions:
         self._flush_output(['order-request', action.symbol, action.side], action.created, action)
 
+  def __critical_price_change(self, symbol: str, side: int, timestamp: datetime.datetime, price_volume: np.array):
+    prices = price_volume[0, :]
+    orders = self.simulated_orders[(symbol, side)]
+    statuses = []
+    # DELETE ALL ORDERS
+    # for price in prices:
+    #   suborders = orders.get(price, None)
+    #   if suborders is not None:
+    #     for sub in suborders:
+    #       statuses.append(OrderStatus.cancel(sub[0], timestamp))
+    #       del self.simulated_orders_id[sub[0]]
+    #     del self.simulated_orders[(symbol, side)][price]
+
+    # FINISH ALL ORDERS
+    for price in prices:
+      suborders = orders.get(price, None)
+      if suborders is not None:
+        for sub in suborders:
+          statuses.append(OrderStatus.finish(sub[0], timestamp))
+          del self.simulated_orders_id[sub[0]]
+        del self.simulated_orders[(symbol, side)][price]
+
+
+    return statuses
+
   def __cancel_quote_levels_update(self, symbol_side: SymbolSide,  price_volume: np.array):
     snapshot: OrderBook = self.memory[(('orderbook', symbol_side[0]))]
     target_price = snapshot.bid_prices if symbol_side[1] == QuoteSides.BID else snapshot.ask_prices
@@ -119,21 +147,23 @@ class Backtest:
       items = self.simulated_orders[symbol_side][price]
       
       # todo: refactor this solution
-      volume_idx = np.where(target_price == price)[0][0]
-      level_volume = target_volume[volume_idx]
-      # todo: refactor this solution
-      
-      for i in range(len(items)):
-        order_volume_before = items[i][1]
-        order_volume_after = level_volume - order_volume_before
+      volume_idx = np.where(target_price == price)[0]
+      if volume_idx.size > 0:
+        volume_idx = volume_idx[0]
+        level_volume = target_volume[volume_idx]
+        # todo: refactor this solution
 
-        if order_volume_before < -depletion:
-          pass
-        elif order_volume_after < -depletion:
-          items[i] = (items[i][0], max(0, order_volume_before + depletion), items[i][2])
-        else: # randomly delete this item
-          if self.random.uniform() <= order_volume_before / level_volume:
+        for i in range(len(items)):
+          order_volume_before = items[i][1]
+          order_volume_after = level_volume - order_volume_before
+
+          if order_volume_before < -depletion:
+            pass
+          elif order_volume_after < -depletion:
             items[i] = (items[i][0], max(0, order_volume_before + depletion), items[i][2])
+          else: # randomly delete this item
+            if self.random.uniform(0.0, 1.0) <= order_volume_before / level_volume:
+              items[i] = (items[i][0], max(0, order_volume_before + depletion), items[i][2])
 
 
   def _price_step_cancel_order(self, event: OrderBook, option: Delta) -> List[OrderStatus]:
@@ -242,7 +272,7 @@ class Backtest:
     self.simulated_orders_id[action.id] = action
 
   def __update_pending_objects(self, timestamp: datetime.datetime, objects_deque: Deque) -> List[Union[OrderRequest, OrderStatus]]:
-    t = timestamp - datetime.timedelta(microseconds=self.delay * 1000)
+    t = timestamp - datetime.timedelta(milliseconds=self.delay)
     objs = []
     while len(objects_deque) > 0 and t >= objects_deque[0][0]:
       objs.append(objects_deque.popleft()[1])

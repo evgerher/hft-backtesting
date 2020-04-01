@@ -1,7 +1,7 @@
 from utils.consts import QuoteSides
 from utils.types import Delta
 from utils.data import OrderBook
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 from utils.logger import  setup_logger
 import numpy as np
 from abc import ABC, abstractmethod
@@ -47,7 +47,7 @@ class Filters:
     def __delta_level_added(self, price_new, price_old, volume_new, volume_old) -> np.array:
       return np.stack((price_new[0], volume_new[0]))
 
-    def __delta_level_consumed(self, price_new, price_old, volume_new, volume_old) -> np.array:
+    def __delta_level_consumed(self, price_new, price_old, volume_new, volume_old) -> Tuple[np.array, bool]:
       # in most cases it will be 1, but multiple levels may be consumed
       shift = np.where(price_old == price_new[0])[0] # get single item
       if shift.size > 0:
@@ -56,10 +56,10 @@ class Filters:
         volume_delta = np.concatenate((-volume_old[:shift], [volume_delta]))
         prices = price_old[:shift + 1]
         selector = volume_delta != 0
-        return np.stack((prices[selector], volume_delta[selector]))
+        return np.stack((prices[selector], volume_delta[selector])), False
       else:
         logger.critical(f'Critical prices: {price_new}; {price_old}')
-        return np.stack((price_old, -volume_old))
+        return np.stack((price_old, -volume_old)), True
 
     def process(self, snapshot: OrderBook) -> Optional[Delta]:
       stored_memory = self.stored_bid_price.get(snapshot.symbol, None)
@@ -73,12 +73,15 @@ class Filters:
         if blp:
           if bid_price > self.stored_bid_price[snapshot.symbol][0]: # new level is added
             logger.debug(f'Bid price increased, level=0')
+            is_critical = False
             answer = np.stack(([snapshot.bid_prices[0]], [snapshot.bid_volumes[0]]))
           else: # level is eaten
             logger.debug(f'Bid price descreased, level=0')
-            answer = self.__delta_level_consumed(snapshot.bid_prices, self.stored_bid_price[snapshot.symbol],
+            answer, is_critical = self.__delta_level_consumed(snapshot.bid_prices, self.stored_bid_price[snapshot.symbol],
                                                  snapshot.bid_volumes, self.stored_bid_volume[snapshot.symbol])
-          result = (snapshot.timestamp, snapshot.symbol, QuoteSides.BID_ALTER, answer)
+
+          result = (snapshot.timestamp, snapshot.symbol,
+                    QuoteSides.BID_ALTER_CRITICAL if is_critical else QuoteSides.BID_ALTER, answer)
           self._store_levels(snapshot)
           return result
 
@@ -87,12 +90,14 @@ class Filters:
         if alp:
           if ask_price > self.stored_ask_price[snapshot.symbol][0]: # level is consumed
             logger.debug(f'Ask price increased, level=0')
-            answer = self.__delta_level_consumed(snapshot.ask_prices, self.stored_ask_price[snapshot.symbol],
+            answer, is_critical = self.__delta_level_consumed(snapshot.ask_prices, self.stored_ask_price[snapshot.symbol],
                                                  snapshot.ask_volumes, self.stored_ask_volume[snapshot.symbol])
           else: # new level is added
             logger.debug(f'Ask price descreased, level=0')
+            is_critical = False
             answer = np.stack(([snapshot.ask_prices[0]], [snapshot.ask_volumes[0]]))
-          result = (snapshot.timestamp, snapshot.symbol, QuoteSides.ASK_ALTER, answer)
+          result = (snapshot.timestamp, snapshot.symbol,
+                    QuoteSides.ASK_ALTER_CRITICAL if is_critical else QuoteSides.ASK_ALTER, answer)
           self._store_levels(snapshot)
           return result
 

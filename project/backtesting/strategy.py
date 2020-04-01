@@ -61,7 +61,7 @@ class Strategy(ABC):
                time_metrics_snapshot: List[DeltaMetric] = [],
                composite_metrics: List[CompositeMetric] = [],
                initial_balance: int = int(1e6),
-               balance_listener: Callable[[float, datetime.datetime], None] = None):
+               balance_listener: Callable[[Tuple], None] = None):
     """
 
     :param instant_metrics:
@@ -77,8 +77,10 @@ class Strategy(ABC):
 
     self.active_orders: Dict[int, OrderRequest] = {}
 
-    self.balance: Dict[str, int] = defaultdict(lambda: 0)
+    self.balance: Dict[str, float] = defaultdict(lambda: 0)
     self.balance['USD'] = initial_balance
+    self.position: Dict[str, Tuple[float, float]] = defaultdict(lambda: (0.0, 0.0))
+
     self.balance_listener = balance_listener
     self.fee: Dict[str, TraditionalFee] = defaultdict(lambda: TraditionalFee.zero())
     self.fee['XBTUSD'] = TraditionalFee.Bitmex_XBT()
@@ -124,12 +126,40 @@ class Strategy(ABC):
           volume = status.volume_total
           order.volume_filled += status.volume
 
+        converted_volume = volume / order.price
+        avg_price, vol = self.position[order.symbol]
+
         if order.side == QuoteSides.ASK:
           self.balance['USD'] += volume
-          self.balance[order.symbol] -= volume / order.price
+          self.balance[order.symbol] -= converted_volume
+          # Contracts * Multiplier * (1/Entry Price - 1/Exit Price)
+
+          if vol <= 0:
+            total_volume = vol - converted_volume
+            ratio = converted_volume / total_volume
+            self.position[order.symbol] = ((avg_price * (1.0 - ratio) + order.price * ratio), total_volume)
+          else:
+            total_volume = vol - converted_volume
+            if total_volume <= 0:
+              self.position[order.symbol] = (order.price, total_volume)
+            else:
+              self.position[order.symbol] = (avg_price, total_volume)
+
+
         else: # bid
-          self.balance[order.symbol] += volume / order.price
+          self.balance[order.symbol] += converted_volume
           self.balance['USD'] -= volume
+
+          if vol >= 0:
+            total_volume = vol + converted_volume
+            ratio = converted_volume / total_volume
+            self.position[order.symbol] = ((avg_price * (1.0 - ratio) + order.price * ratio), total_volume)
+          else:
+            total_volume = vol + converted_volume
+            if total_volume >= 0:
+              self.position[order.symbol] = (order.price, total_volume)
+            else:
+              self.position[order.symbol] = (avg_price, total_volume)
 
   def _balance_update_new_order(self, orders: List[OrderRequest]):
     for order in orders:
@@ -137,9 +167,9 @@ class Strategy(ABC):
       ### action negative update balance
       self.active_orders[order.id] = order
       if order.side == QuoteSides.ASK:
-        self.balance[order.symbol] -= order.volume / order.price * (self.fee[order.symbol].settlement  + self.fee[order.symbol].maker)
+        self.balance[order.symbol] += order.volume / order.price * (self.fee[order.symbol].settlement  + self.fee[order.symbol].maker)
       elif order.side == QuoteSides.BID:
-        self.balance['USD'] -= order.volume * (self.fee[order.symbol].settlement + self.fee[order.symbol].maker)
+        self.balance['USD'] += order.volume * (self.fee[order.symbol].settlement + self.fee[order.symbol].maker)
 
   def _get_allowed_volume(self, symbol, memory, side):
     latest: OrderBook = memory[('orderbook', symbol)]
@@ -175,22 +205,28 @@ class Strategy(ABC):
 
     # balance updated, notify listener
     if self.balance_listener is not None and (len(orders) > 0 or len(statuses) > 0) and len(memory) >= 4:
-      balance = memory[('orderbook', 'XBTUSD')].bid_prices[0] * self.balance['XBTUSD'] + \
-        memory[('orderbook', 'ETHUSD')].bid_prices[0] * self.balance['ETHUSD'] + \
-        self.balance['USD']
+      # balance = memory[('orderbook', 'XBTUSD')].bid_prices[0] * self.balance['XBTUSD'] + \
+      #   memory[('orderbook', 'ETHUSD')].bid_prices[0] * self.balance['ETHUSD'] + \
+      #   self.balance['USD']
+
+      midpoint_eth = (memory[('orderbook', 'ETHUSD')].bid_prices[0] + memory[('orderbook', 'ETHUSD')].ask_prices[0]) / 2
+      midpoint_xbt = (memory[('orderbook', 'XBTUSD')].bid_prices[0] + memory[('orderbook', 'XBTUSD')].ask_prices[0]) / 2
+
+      state = (self.balance['USD'], self.balance['XBTUSD'], self.balance['ETHUSD'], *self.position['XBTUSD'], *self.position['ETHUSD'], midpoint_xbt, midpoint_eth, row.timestamp)
       # self.balance_listener(self.balance['USD'], row.timestamp)
-      self.balance_listener(balance, row.timestamp)
+      self.balance_listener(state)
     return orders
 
   def return_unfinished(self, statuses: List[OrderStatus], memory: Dict[str, Union[Trade, OrderBook]]):
     logger.info('Update balance with unfinished tasks')
     self._balance_update_by_status(statuses)
-    if self.balance_listener is not None:
-      balance = memory[('orderbook', 'XBTUSD')].bid_prices[0] * self.balance['XBTUSD'] + \
-                memory[('orderbook', 'ETHUSD')].bid_prices[0] * self.balance['ETHUSD'] + \
-                self.balance['USD']
-      # self.balance_listener(self.balance['USD'], statuses[0].at)
-      self.balance_listener(balance, statuses[0].at)
+    if self.balance_listener is not None and len(statuses) > 0:
+      midpoint_eth = (memory[('orderbook', 'ETHUSD')].bid_prices[0] + memory[('orderbook', 'ETHUSD')].ask_prices[0]) / 2
+      midpoint_xbt = (memory[('orderbook', 'XBTUSD')].bid_prices[0] + memory[('orderbook', 'XBTUSD')].ask_prices[0]) / 2
+
+      state = (self.balance['USD'], self.balance['XBTUSD'], self.balance['ETHUSD'], *self.position['XBTUSD'], *self.position['ETHUSD'], midpoint_xbt, midpoint_eth, statuses[0].at)
+      # self.balance_listener(self.balance['USD'], row.timestamp)
+      self.balance_listener(state)
 
 
 class CalmStrategy(Strategy):
