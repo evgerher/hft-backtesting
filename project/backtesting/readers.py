@@ -14,6 +14,7 @@ class Reader(ABC):
 
   def __init__(self, moment: datetime.datetime):
     self.initial_moment = moment
+    self.current_timestamp = moment
 
   class Row:
     pass
@@ -79,7 +80,7 @@ class SnapshotReader(Reader):
       self._limit_trades = 0
 
     self._read_first_trades = True
-    self.__stop_after = stop_after
+    self.stop_after = stop_after
 
     initial_snapshot = self._snapshots_df.iloc[0, 0]
     initial_trade = initial_trade or initial_snapshot
@@ -99,15 +100,14 @@ class SnapshotReader(Reader):
 
     # end condition
     if (self.__limit_snapshot != self._nrows and self._snapshot_idx == self.__limit_snapshot) or \
-        (self.__stop_after is not None and self._total_snapshots + self._snapshot_idx == self.__stop_after + 1):
+        (self.stop_after is not None and self._total_snapshots + self._snapshot_idx == self.stop_after + 1):
       self._total_snapshots += self._snapshot_idx
       logger.debug(f"Finished snapshot_file {self._snapshot_file}, read {self._total_snapshots} rows")
       raise StopIteration
 
     if self._limit_trades != 0 and self._read_first_trades or (
         not self._finished_trades
-        and self._trade.timestamp == self._snapshot.timestamp
-        and self._trade.symbol == self._snapshot.symbol): # todo: here I loose the last trade in buffer
+        and self._trade.timestamp <= self._snapshot.timestamp):
       trade = self._trade
       self._trade = self.__load_trade()
 
@@ -115,10 +115,12 @@ class SnapshotReader(Reader):
         self._read_first_trades = False
 
       obj = (trade, False)
+      self.current_timestamp = trade.timestamp
     else:
       snapshot = self._snapshot
       self._snapshot = self._load_snapshot()
       obj = (snapshot, True)
+      self.current_timestamp = snapshot.timestamp
 
     # checks on files' reloads
     if self._snapshot_idx >= self._nrows:
