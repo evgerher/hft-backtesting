@@ -6,6 +6,7 @@ from utils.consts import Statuses, QuoteSides, TradeSides
 from utils.types import Delta
 from utils.data import OrderBook, Trade
 from utils.logger import setup_logger
+from tqdm import tqdm
 
 import datetime
 from typing import Dict, List, Optional, Tuple, Union, Deque
@@ -187,10 +188,20 @@ class Backtest:
     return statuses
 
 
-  def run(self):
+  def run(self, tqdm_enabled=False, notify_each=3000):
     logger.info(f'Backtest initialize run')
-    for row, isorderbook in self.reader:
-      self._process_event(row, isorderbook)
+
+    if tqdm_enabled and self.reader.stop_after is not None:
+      total = self.reader.stop_after
+      pbar = tqdm(self.reader, total=total)
+      for idx, (row, isorderbook) in enumerate(pbar):
+        self._process_event(row, isorderbook)
+        if idx % notify_each == 0:
+          pbar.set_description(f"Current time: {row.timestamp}")
+
+    else:
+      for row, isorderbook in self.reader:
+        self._process_event(row, isorderbook)
     logger.info(f'Backtest finished run')
     statuses = self._return_unfinished_orders(row.timestamp)
     self.simulation.return_unfinished(statuses, self.memory)

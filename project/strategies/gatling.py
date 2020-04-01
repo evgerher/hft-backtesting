@@ -7,8 +7,8 @@ from utils.data import Trade, OrderBook
 
 
 class GatlingMM(Strategy):
-  def __init__(self, side_volume):
-    super().__init__()
+  def __init__(self, side_volume, filter_depth=3):
+    super().__init__(filter_depth=filter_depth)
     self.side_volume = side_volume
     self.volumes_left = {} # add cancellation policy
 

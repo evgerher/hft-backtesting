@@ -61,14 +61,18 @@ class Strategy(ABC):
                time_metrics_snapshot: List[DeltaMetric] = [],
                composite_metrics: List[CompositeMetric] = [],
                initial_balance: int = int(1e6),
-               balance_listener: Callable[[Tuple], None] = None):
+               balance_listener: Callable[[Tuple], None] = None,
+               filter_depth: int = None):
     """
 
     :param instant_metrics:
     :param depth_filter:
     """
     self.instant_metrics: List[InstantMetric] = instant_metrics
-    self.filter: Filters.DepthFilter = depth_filter
+    if filter_depth is not None:
+      self.filter = Filters.DepthFilter(filter_depth)
+    else:
+      self.filter: Filters.DepthFilter = depth_filter
     self.time_metrics: Dict[str, List[TimeMetric]] = {
       'trade': time_metrics_trade,
       'orderbook': time_metrics_snapshot
