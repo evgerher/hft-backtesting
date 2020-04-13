@@ -1,10 +1,10 @@
 import datetime
 from dataclasses import dataclass
-from typing import Tuple, List
+from typing import List
 
 import numpy as np
 
-from utils.logger import setup_logger
+from hft.utils.logger import setup_logger
 
 logger = setup_logger('<data>', 'INFO')
 

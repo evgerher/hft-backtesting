@@ -1,6 +1,6 @@
 import datetime
-from dataloader.callbacks.message import TradeMessage
-from utils.data import OrderBook
+from hft.dataloader import TradeMessage
+from hft.utils.data import OrderBook
 from abc import ABC, abstractmethod
 
 

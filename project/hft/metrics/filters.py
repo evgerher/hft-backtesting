@@ -1,8 +1,8 @@
-from utils.consts import QuoteSides
-from utils.types import Delta
-from utils.data import OrderBook
+from hft.utils.consts import QuoteSides
+from hft.utils.types import Delta
+from hft.utils.data import OrderBook
 from typing import Dict, List, Optional, Tuple
-from utils.logger import  setup_logger
+from hft.utils.logger import  setup_logger
 import numpy as np
 from abc import ABC, abstractmethod
 

@@ -1,7 +1,6 @@
 import unittest
-from typing import List
 
-from backtesting.readers import OrderbookReader
+from hft.backtesting.readers import OrderbookReader
 
 
 class ReaderTest(unittest.TestCase):

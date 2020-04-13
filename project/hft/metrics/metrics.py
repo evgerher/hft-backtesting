@@ -1,11 +1,11 @@
 from dataclasses import dataclass
-from typing import List, Deque, Dict, Callable, Tuple, Union, Sequence, TypeVar
+from typing import List, Deque, Dict, Callable, Tuple, Union
 import datetime
 from collections import deque, defaultdict
 
-from utils.consts import QuoteSides
-from utils.types import Delta, NamedExecutable, DeltaExecutable, TradeExecutable
-from utils.data import OrderBook, Trade
+from hft.utils.consts import QuoteSides
+from hft.utils.types import Delta, NamedExecutable, DeltaExecutable, TradeExecutable
+from hft.utils.data import OrderBook, Trade
 import numpy as np
 import math
 from abc import ABC, abstractmethod

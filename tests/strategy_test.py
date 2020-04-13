@@ -1,13 +1,13 @@
 import datetime
 import unittest
 
-from backtesting import backtest
-from backtesting.output import StorageOutput
-from backtesting.readers import ListReader
-from metrics.metrics import VWAP_volume, TradeMetric
+from hft.backtesting import backtest
+from hft.backtesting.output import StorageOutput
+from hft.backtesting.readers import ListReader
+from hft.metrics.metrics import VWAP_volume, TradeMetric
 from test_utils import TestStrategy
-from utils.consts import TradeSides
-from utils.data import OrderBook, Trade
+from hft.utils.consts import TradeSides
+from hft.utils.data import OrderBook, Trade
 import numpy as np
 
 

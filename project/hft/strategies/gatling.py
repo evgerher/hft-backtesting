@@ -1,9 +1,9 @@
 from typing import Union, List, Dict
 
-from backtesting.data import OrderStatus, OrderRequest
-from utils.consts import Statuses, QuoteSides
-from backtesting.strategy import Strategy
-from utils.data import Trade, OrderBook
+from hft.backtesting.data import OrderStatus, OrderRequest
+from hft.utils.consts import Statuses, QuoteSides
+from hft.backtesting.strategy import Strategy
+from hft.utils.data import Trade, OrderBook
 
 
 class GatlingMM(Strategy):

@@ -1,10 +1,9 @@
 from setuptools import setup
 
 setup(
-  name='backtesting-hft',
+  name='backtesting-hft-platform',
   version='1.0.0',
-  packages=['utils', 'metrics', 'dataloader', 'dataloader.callbacks', 'dataloader.callbacks.kdb',
-            'dataloader.callbacks.clickhouse', 'strategies', 'backtesting'],
+  packages=['hft'],
   package_dir={'': 'project'},
   url='',
   license='',

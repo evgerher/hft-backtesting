@@ -1,13 +1,11 @@
 import datetime
 
-from dataloader.callbacks.clickhouse import clickhouse_cmds
-from dataloader.callbacks.connectors import Connector
+from hft.dataloader.callbacks.clickhouse import clickhouse_cmds
+from hft.dataloader import Connector
 from clickhouse_driver import Client
-from dataloader.callbacks.message import TradeMessage
-from utils.data import OrderBook
-from utils.logger import setup_logger
-import numpy as np
-from typing import List
+from hft.dataloader import TradeMessage
+from hft.utils.data import OrderBook
+from hft.utils.logger import setup_logger
 
 logger = setup_logger("<clickhouse>", "INFO")
 

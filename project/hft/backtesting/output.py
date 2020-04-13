@@ -1,7 +1,7 @@
 import datetime
 from collections import defaultdict
 
-from utils.data import OrderBook, Trade
+from hft.utils.data import OrderBook, Trade
 from abc import ABC, abstractmethod
 
 

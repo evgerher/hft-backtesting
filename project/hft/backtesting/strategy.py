@@ -1,14 +1,13 @@
-import datetime
 from collections import defaultdict
 from dataclasses import dataclass
 from typing import List, Dict, Tuple, Union, Callable
 
-from backtesting.data import OrderStatus, OrderRequest
-from utils.consts import Statuses, QuoteSides
-from utils.data import OrderBook, Trade
-from metrics.metrics import InstantMetric, TradeMetric, TimeMetric, DeltaMetric, CompositeMetric
-from metrics.filters import Filters
-from utils.logger import setup_logger
+from hft.backtesting.data import OrderStatus, OrderRequest
+from hft.utils.consts import Statuses, QuoteSides
+from hft.utils.data import OrderBook, Trade
+from hft.metrics.metrics import InstantMetric, TradeMetric, TimeMetric, DeltaMetric, CompositeMetric
+from hft.metrics.filters import Filters
+from hft.utils.logger import setup_logger
 
 from abc import ABC, abstractmethod
 logger = setup_logger('<Strategy>')

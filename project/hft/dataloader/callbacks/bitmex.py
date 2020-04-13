@@ -1,7 +1,7 @@
 import websocket
 import threading
 import json
-from utils.logger import setup_logger
+from hft.utils.logger import setup_logger
 
 logger = setup_logger('<orderbook10 initializer>')
 

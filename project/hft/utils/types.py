@@ -2,7 +2,7 @@ import datetime
 from typing import Tuple, Callable, List
 import numpy as np
 
-from utils.data import Trade
+from hft.utils.data import Trade
 
 NamedExecutable =  Tuple[str, Callable[[List], float]]
 TradeExecutable = Tuple[str, Callable[[List[Trade]], float]]

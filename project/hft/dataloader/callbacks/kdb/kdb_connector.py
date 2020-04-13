@@ -1,4 +1,4 @@
-from dataloader.callbacks.connectors import Connector
+from hft.dataloader import Connector
 import time
 import logging
 import datetime

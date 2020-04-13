@@ -1,12 +1,12 @@
 import unittest
 
-from backtesting import readers, backtest
-from backtesting.output import StorageOutput
-from backtesting.readers import ListReader
-from backtesting.strategy import CalmStrategy
-from backtesting.data import OrderStatus, OrderRequest
-from utils.consts import TradeSides, Statuses
-from metrics.metrics import *
+from hft.backtesting import readers, backtest
+from hft.backtesting.output import StorageOutput
+from hft.backtesting.readers import ListReader
+from hft.backtesting.strategy import CalmStrategy
+from hft.backtesting.data import OrderStatus, OrderRequest
+from hft.utils.consts import TradeSides, Statuses
+from hft.metrics.metrics import *
 
 
 class BacktestTest(unittest.TestCase):

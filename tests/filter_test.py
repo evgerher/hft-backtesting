@@ -1,10 +1,10 @@
 import unittest
 import numpy as np
 import test_utils
-from utils.consts import QuoteSides
+from hft.utils.consts import QuoteSides
 
-from metrics.filters import Filters
-from utils.data import OrderBook
+from hft.metrics import Filters
+from hft.utils.data import OrderBook
 
 
 class FilterTest(unittest.TestCase):

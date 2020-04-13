@@ -2,7 +2,7 @@ import datetime
 from dataclasses import dataclass
 from typing import Tuple
 
-from utils.consts import Statuses, QuoteSides
+from hft.utils.consts import Statuses, QuoteSides
 
 initial_id = 0
 

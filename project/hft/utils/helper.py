@@ -4,8 +4,8 @@ from typing import List, Union
 import numpy as np
 import pandas as pd
 
-from utils.consts import TradeSides
-from utils.data import OrderBook, Trade
+from hft.utils.consts import TradeSides
+from hft.utils.data import OrderBook, Trade
 
 
 def snapshot_line_parser(line: Union[List], length:int=100):

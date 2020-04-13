@@ -1,10 +1,10 @@
 import logging.config
 import time
 
-from dataloader.callbacks.clickhouse.clickhouse_connector import ClickHouse
-from dataloader.data_processor import Bitmex_Data
-from utils.logger import setup_logger
-from dataloader.callbacks.bitmex import BitmexWS
+from hft.dataloader.callbacks.clickhouse.clickhouse_connector import ClickHouse
+from hft.dataloader import Bitmex_Data
+from hft.utils.logger import setup_logger
+from hft.dataloader import BitmexWS
 
 import sys
 import getopt
