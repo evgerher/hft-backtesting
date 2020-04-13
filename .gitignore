@@ -12,3 +12,6 @@ tests/tmp.py
 project/clickhouse_storage/
 *.ipynb
 *.log
+project/build/
+project/*.egg-info/
+project/dist/

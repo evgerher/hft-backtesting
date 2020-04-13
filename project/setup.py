@@ -1,10 +1,10 @@
 from setuptools import setup
 
 setup(
-  name='backtesting-hft-platform',
+  name='backtesting-hft',
   version='1.0.0',
   packages=['hft'],
-  package_dir={'': 'project'},
+  package_dir={'': '.'},
   url='',
   license='',
   author='Evgeny Sorokin',
