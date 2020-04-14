@@ -323,19 +323,20 @@ class Backtest:
     self._flush_output(['trade'], row.timestamp, row)  # todo: fix
 
     for time_metric in self.simulation.time_metrics['trade']:
-      values = time_metric.evaluate(row)
-      self._flush_output(['time-metric', 'trade', row.symbol, time_metric.name], row.timestamp, values)
+      if time_metric.filter(row):
+        values = time_metric.evaluate(row)
+        self._flush_output(['time-metric', 'trade', row.symbol, time_metric.name], row.timestamp, values)
 
   def _update_composite_metrics(self, data: Union[Trade, OrderBook], option: Optional[Delta]):
-    logger.debug('Update composite metrics')
+    logger.debug('Update composite units')
 
     for composite_metric in self.simulation.composite_metrics:
-      if type(data) == OrderBook:
+      if composite_metric.filter(data):
         value = composite_metric.evaluate(data)
         self._flush_output(['composite-metric', 'snapshot', data.symbol, composite_metric.name], data.timestamp, [value])
 
-  def _update_snapshots(self, row: OrderBook, option: Delta):
-    logger.debug(f'Update metrics with snapshot symbol={row.symbol} @ {row.timestamp}')
+  def _update_snapshots(self, row: OrderBook, delta: Delta):
+    logger.debug(f'Update units with snapshot symbol={row.symbol} @ {row.timestamp}')
     self.memory[('orderbook', row.symbol)] = row
     self._flush_output(['snapshot'], row.timestamp, row)  # todo: fix
 
@@ -343,10 +344,11 @@ class Backtest:
       values = instant_metric.evaluate(row)
       self._flush_output(['instant-metric', 'snapshot', row.symbol, instant_metric.name], row.timestamp, values)
 
-    if option[-1].size > 0: # if volume_total altered on best level
-      for time_metric in self.simulation.time_metrics['orderbook']:
-        values = time_metric.evaluate(option)
-        self._flush_output(['delta', 'snapshot', row.symbol, time_metric.name], row.timestamp, values)
+    if delta[-1].size > 0: # If any update occured
+      for delta_metric in self.simulation.delta_metrics:
+        if delta_metric.filter(delta):
+          values = delta_metric.evaluate(delta)
+          self._flush_output(['delta', 'snapshot', row.symbol, delta_metric.name], row.timestamp, values)
 
   def __str__(self):
     return '<Backtest with reader={}>'.format(self.reader)

@@ -1,11 +1,12 @@
 import unittest
 import traces
 from datetime import datetime
+from datetime import timedelta
 import matplotlib.pyplot as plt
 import numpy as np
 from pandas.plotting import register_matplotlib_converters
 register_matplotlib_converters()
-from hft.backtesting.readers import OrderbookReader
+from hft.backtesting.readers import OrderbookReader, TimeLimitedReader
 from hft.units.filters import Filters
 import time
 
@@ -38,13 +39,29 @@ class TracesTest(unittest.TestCase):
     # a, b= hist.items()
     # plt.hist(hist.items())
     # plt.show()
+
     self.assertEqual(count[datetime(2042, 2, 1, 7, 50)], 20)
     self.assertEqual(count[datetime(2042, 2, 1, 8)], 100)
+
+  def test_timelimited_reader(self):
+    reader = TimeLimitedReader('resources/orderbook/orderbooks.csv.gz', limit_time='5 min', trades_file='resources/orderbook/trades.csv.gz')
+    snapshot_df = reader._snapshots_df
+    trades_df = reader._trades_df
+    initial_moment = reader.initial_moment
+
+    last_trade_ts = trades_df.iloc[-1]['timestamp']
+    last_snapshot_ts = snapshot_df.iloc[-1][0]
+
+    delta = timedelta(minutes=5)
+
+
+    self.assertTrue(initial_moment + delta >= last_trade_ts)
+    self.assertTrue(initial_moment + delta >= last_snapshot_ts)
 
 
   def test_deltas(self):
     filter = Filters.DepthFilter(3)
-    reader = OrderbookReader('resources/orderbook/orderbooks.csv.gz', stop_after=3000)
+    reader = TimeLimitedReader('resources/orderbook/orderbooks.csv.gz', skip_time='530 sec', limit_time='10 sec')
 
     bids = []
     asks = []
@@ -70,23 +87,65 @@ class TracesTest(unittest.TestCase):
     # bids = zip(bid_ts, np.log(bid_deltas))
     # asks = zip(ask_ts, np.log(ask_deltas))
 
-    bids = zip(bid_ts[1:], np.clip(bid_deltas[1:], -1000., 1000.))
-    asks = zip(ask_ts[1:], np.clip(ask_deltas[1:], -1000., 1000.))
-    # bids = zip(bid_ts[1:], bid_deltas[1:])
-    # asks = zip(ask_ts[1:], ask_deltas[1:])
-    print(len(bid_ts), len(ask_ts))
+    # bids = zip(bid_ts[1:], np.clip(bid_deltas[1:], -1000., 1000.))
+    # asks = zip(ask_ts[1:], np.clip(ask_deltas[1:], -1000., 1000.))
+    bids = zip(bid_ts[1:], bid_deltas[1:])
+    asks = zip(ask_ts[1:], ask_deltas[1:])
+    print(f'bid deltas (neg) {len(bid_ts)}, ask deltas (pos) = {len(ask_ts)}')
 
-    t1 =time.time()
+    t1 = time.time()
     ts_bid = traces.TimeSeries(bids, default=0)
     ts_ask = traces.TimeSeries(asks, default=0)
-    t2 = time.time() - t1
-    print(t2)
-
     ts = ts_ask * ts_bid
+    t2 = time.time() - t1
+    print(f'Time to compute timeseries {t2}')
 
-    # plt.ylim(-100000, 100000)
-    fig, ax = ts.plot()
-    ax.set_ylim([-3000, 3000])
-    ax.figure.set_size_inches(12, 10, forward=True)
+    ts.plot()
+    plt.show()
 
+    t1 = time.time()
+    sq1 = np.sqrt(np.sum(np.square(ask_deltas[1:])))
+    sq2 = np.sqrt(np.sum(np.square(bid_deltas[1:])))
+    values = sum(list(ts._d.values()))
+    hy = values / sq1 / sq2
+    t2 = time.time() - t1
+    print(f'Time to compute Hoyashi-Yoshido cor {t2}')
+    print(hy)
+
+  def test_traces_am(self):
+    ts = traces.TimeSeries(default=0)
+    ts2 = traces.TimeSeries(default=0)
+    ts.set_interval(start=datetime(year=2000, month=1, day=1, hour=4), end=datetime(year=2000, month=1, day=1, hour=5), value=5)
+    ts.set_interval(start=datetime(year=2000, month=1, day=1, hour=5), end=datetime(year=2000, month=1, day=1, hour=6), value=10)
+    ts.set_interval(start=datetime(year=2000, month=1, day=1, hour=6), end=datetime(year=2000, month=1, day=1, hour=7), value=3)
+
+
+    ts2.set_interval(start=datetime(year=2000, month=1, day=1, hour=3, minute=30), end=datetime(year=2000, month=1, day=1, hour=4, minute=30), value=8)
+    ts2.set_interval(start=datetime(year=2000, month=1, day=1, hour=4, minute=30), end=datetime(year=2000, month=1, day=1, hour=5, minute=30), value=5)
+    ts2.set_interval(start=datetime(year=2000, month=1, day=1, hour=5, minute=30), end=datetime(year=2000, month=1, day=1, hour=6, minute=30), value=3)
+    ts2.set_interval(start=datetime(year=2000, month=1, day=1, hour=6, minute=30), end=datetime(year=2000, month=1, day=1, hour=7, minute=30), value=5)
+
+    # ts.plot()
+    # ts2.plot()
+    ts3 = ts * ts2
+    # ts3.plot()
+    # plt.show()
+
+    self.assertEqual(ts3[datetime(year=2000, month=1, day=1, hour=3, minute=50)], 0)
+    self.assertEqual(ts3[datetime(year=2000, month=1, day=1, hour=4, minute=10)], 40)
+    self.assertEqual(ts3[datetime(year=2000, month=1, day=1, hour=4, minute=40)], 25)
+    self.assertEqual(ts3[datetime(year=2000, month=1, day=1, hour=5, minute=10)], 50)
+    self.assertEqual(ts3[datetime(year=2000, month=1, day=1, hour=5, minute=40)], 30)
+    self.assertEqual(ts3[datetime(year=2000, month=1, day=1, hour=6, minute=10)], 9)
+    self.assertEqual(ts3[datetime(year=2000, month=1, day=1, hour=6, minute=40)], 15)
+    self.assertEqual(ts3[datetime(year=2000, month=1, day=1, hour=7, minute=10)], 0)
+
+  def test_point(self):
+    ts = traces.TimeSeries(default=0)
+
+    ts[2.0] = 10
+    ts[3.0] = 20
+    ts[4.0] = 2
+
+    ts.plot()
     plt.show()

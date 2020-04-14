@@ -1,3 +1,4 @@
+import time
 import unittest
 from typing import List
 
@@ -5,10 +6,11 @@ import numpy as np
 
 import test_utils
 from hft.backtesting import backtest
+from hft.backtesting.output import StorageOutput
 from hft.utils.consts import QuoteSides
-from hft.backtesting.readers import OrderbookReader
+from hft.backtesting.readers import OrderbookReader, TimeLimitedReader
 from hft.backtesting.strategy import CalmStrategy
-from hft.units.metrics import VWAP_volume, DeltaMetric, Lipton
+from hft.units.metrics import VWAP_volume, DeltaTimeMetric, Lipton, HoyashiYoshido
 from hft.utils.data import OrderBook
 
 
@@ -66,7 +68,7 @@ class MetricTest(unittest.TestCase):
   def test_delta_lipton_metric(self):
     reader = OrderbookReader(snapshot_file='resources/orderbook/orderbooks.csv.gz', stop_after=5000, depth_to_load=8)
 
-    delta10 = DeltaMetric(seconds=60)
+    delta10 = DeltaTimeMetric(seconds=60)
     lipton = Lipton('delta-60')
     simulation = CalmStrategy(time_metrics_snapshot=[delta10], composite_metrics=[lipton])
     metric_map = simulation.metrics_map
@@ -108,6 +110,23 @@ class MetricTest(unittest.TestCase):
     p = 0.5 * (1. - np.arctan(sqrt_corr * (y - x) / (y + x)) / np.arctan(sqrt_corr))
     self.assertAlmostEqual(p, lipton_latest, delta=1e-2) # todo: fix it later
     print(p)
+
+  def test_hoyashi_yoshido(self):
+    hy_values = []
+    def store_only_yoshido(labels, ts, object):
+      if 'hoyashi-yoshido' in labels:
+        hy_values.append((ts, object))
+
+    reader = TimeLimitedReader(snapshot_file='resources/orderbook/orderbooks.csv.gz', limit_time='5 min')
+    hy = HoyashiYoshido(seconds=60)
+    simulation = CalmStrategy(delta_metrics=[hy])
+    storage = StorageOutput(instant_metric_names=[hy.name], time_metric_names=[])
+    storage.consume = store_only_yoshido
+    t1 = time.time()
+    backtester = backtest.Backtest(reader, simulation, storage)
+    backtester.run()
+    t2 = time.time() - t1
+    print(f'ok, {t2} seconds')
 
 if __name__ == '__main__':
   unittest.main()

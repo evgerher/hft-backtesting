@@ -5,8 +5,8 @@ from typing import List, Dict, Tuple, Union, Callable
 from hft.backtesting.data import OrderStatus, OrderRequest
 from hft.utils.consts import Statuses, QuoteSides
 from hft.utils.data import OrderBook, Trade
-from hft.metrics.metrics import InstantMetric, TradeMetric, TimeMetric, DeltaMetric, CompositeMetric
-from hft.metrics.filters import Filters
+from hft.units.metrics import InstantMetric, TradeMetric, TimeMetric, DeltaTimeMetric, CompositeMetric, DeltaMetric
+from hft.units.filters import Filters
 from hft.utils.logger import setup_logger
 
 from abc import ABC, abstractmethod
@@ -56,8 +56,9 @@ class Strategy(ABC):
 
   def __init__(self, instant_metrics: List[InstantMetric] = [],
                depth_filter: Filters.DepthFilter = Filters.DepthFilter(4),
+               delta_metrics: List[DeltaMetric] = [],
                time_metrics_trade: List[TradeMetric] = [],
-               time_metrics_snapshot: List[DeltaMetric] = [],
+               time_metrics_snapshot: List[TimeMetric] = [],
                composite_metrics: List[CompositeMetric] = [],
                initial_balance: int = int(1e6),
                balance_listener: Callable[[Tuple], None] = None,
@@ -77,6 +78,7 @@ class Strategy(ABC):
       'orderbook': time_metrics_snapshot
     }
     self.composite_metrics: List[CompositeMetric] = composite_metrics
+    self.delta_metrics = delta_metrics
 
     self.active_orders: Dict[int, OrderRequest] = {}
 

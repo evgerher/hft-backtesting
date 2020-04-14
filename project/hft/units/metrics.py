@@ -160,6 +160,9 @@ class TimeMetric(Metric):
     self._from: datetime.datetime = starting_moment
     self._skip_from = False
 
+  def filter(self, event) -> bool:
+    return True
+
   def _skip(self, event):
 
     if isinstance(event, Trade):
@@ -227,12 +230,24 @@ class TradeMetric(TimeMetric):
     return f'trade-time-metric:{self.seconds}'
 
 
-class DeltaMetric(TimeMetric):
+class DeltaMetric(InstantMetric, ABC):
+  def filter(self, event: Delta):
+    # if event[-1].size > 0:
+    #   return True
+    # return False
+    return True
+
+  def evaluate(self, delta: Delta)  -> float:
+    latest = self._evaluate(delta)
+    self.latest[delta[1]] = latest
+    return latest
+
+class DeltaTimeMetric(DeltaMetric, TimeMetric):
   def __init__(self,
                seconds=60,
+               callables: List[DeltaExecutable] = (('quantity', lambda x: len(x)), ('volume_total', lambda x: sum(x))),
                starting_moment: datetime.datetime = None):
 
-    callables: List[DeltaExecutable] = [('quantity', lambda x: len(x)), ('volume_total', lambda x: sum(x))]
     super().__init__(f'delta-{seconds}', callables, seconds, starting_moment)
     self._time_storage = defaultdict(deque)
 
@@ -279,6 +294,81 @@ class DeltaMetric(TimeMetric):
 
   def __str__(self):
     return f'delta-time-metric:{self.seconds}'
+
+class HoyashiYoshido(DeltaMetric):
+  '''
+  Implements Hoyashi-Yoshido UHF volatility estimator
+  Accumulates updates on each step and automatically adjusts values of equation without need of reevaluation of whole sequence
+  Denominator is `current_sum`, delimeters are `current_sq`
+
+  Old values are removed via `sum_deque` and `sq_deque`, which keep track of affect on removal of old values.
+
+  This Time metric does not provide `storage` field
+  '''
+  def __init__(self, seconds=60, **kwargs):
+    super().__init__(name='hoyashi-yoshido', **kwargs)
+    self.seconds = seconds
+    self.current_sum = defaultdict(lambda: 0.0)
+    self.current_sq = defaultdict(lambda: {True: 0.0, False: 0.0})
+
+    self.current_p = defaultdict(lambda: {True: None, False: None})
+    self.last_diff = defaultdict(lambda: {True: None, False: None})
+
+    self.sum_deque = defaultdict(lambda: deque())
+    self.sq_deque = defaultdict(lambda: {True: deque(), False: deque()})
+
+    ## Main and Aux axes
+    self.p1 = True
+    self.p2 = False
+
+  def _remove_old_values(self, symbol, timestamp):
+    while len(self.sum_deque[symbol]) > 0 and (timestamp - self.sum_deque[symbol][0][0]).seconds > self.seconds:
+      _, value = self.sum_deque[symbol].popleft()
+      self.current_sum[symbol] -= value
+
+    for p in [self.p1, self.p2]:
+      coll = self.sq_deque[symbol][p]
+      while len(coll) > 0 and (timestamp - coll[0][0]).seconds > self.seconds:
+        _, value = coll.popleft()
+        self.current_sq[symbol][p] -= value
+
+  def filter(self, event: Delta):
+    sign, quote_side = np.sum(event[-1][1, :]), event[2] # get first volume from `price-volume` np array
+    if sign > 0 and quote_side % 2 == QuoteSides.ASK:
+      return True
+    elif sign < 0 and quote_side % 2 == QuoteSides.BID:
+      return True
+    return False
+
+  def __str__(self):
+    return f'hoyashi-yoshido-vol:{self.seconds}'
+
+  def _evaluate(self, event:Delta) -> float:
+    ts, symbol = event[0], event[1]
+    self._remove_old_values(symbol, ts)
+
+    value = np.sum(event[-1][1, :])
+    p = value > 0
+    value = abs(value)
+
+    if self.current_p[symbol][p] is None:
+      self.current_p[symbol][p] = value
+    else:
+      diff = value - self.current_p[symbol][p]
+      self.last_diff[symbol][p] = diff
+      self.current_p[symbol][p] = value
+
+      sq_update = diff ** 2
+      self.current_sq[symbol][p] += sq_update
+      self.sq_deque[symbol][p].append((ts, sq_update))
+
+      if self.last_diff[symbol][not p] is not None and self.current_sq[symbol][not p] > 0:
+        sum_update = diff * self.last_diff[symbol][not p]
+        self.current_sum[symbol] += sum_update
+        self.sum_deque[symbol].append((ts, sum_update))
+
+        return self.current_sum[symbol] / np.sqrt(self.current_sq[symbol][p]) / np.sqrt(self.current_sq[symbol][not p])
+    return None
 
 class CompositeMetric(InstantMetric):
   def __init__(self, name: str):
