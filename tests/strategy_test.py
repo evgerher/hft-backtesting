@@ -4,7 +4,7 @@ import unittest
 from hft.backtesting import backtest
 from hft.backtesting.output import StorageOutput
 from hft.backtesting.readers import ListReader
-from hft.metrics.metrics import VWAP_volume, TradeMetric
+from hft.units.metrics import VWAP_volume, TradeMetric
 from test_utils import TestStrategy
 from hft.utils.consts import TradeSides
 from hft.utils.data import OrderBook, Trade

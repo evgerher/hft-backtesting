@@ -4,7 +4,7 @@ from typing import List, Union, Dict
 from hft.backtesting.data import OrderRequest
 from hft.backtesting.readers import ListReader
 from hft.backtesting.strategy import Strategy
-from hft.metrics.metrics import InstantMetric
+from hft.units.metrics import InstantMetric
 from hft.utils import helper
 from hft.utils.data import OrderBook, Trade
 import pandas as pd

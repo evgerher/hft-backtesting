@@ -8,7 +8,7 @@ from hft.backtesting import backtest
 from hft.utils.consts import QuoteSides
 from hft.backtesting.readers import OrderbookReader
 from hft.backtesting.strategy import CalmStrategy
-from hft.metrics.metrics import VWAP_volume, DeltaMetric, Lipton
+from hft.units.metrics import VWAP_volume, DeltaMetric, Lipton
 from hft.utils.data import OrderBook
 
 

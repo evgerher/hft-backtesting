@@ -6,7 +6,7 @@ from hft.backtesting.readers import ListReader
 from hft.backtesting.strategy import CalmStrategy
 from hft.backtesting.data import OrderStatus, OrderRequest
 from hft.utils.consts import TradeSides, Statuses
-from hft.metrics.metrics import *
+from hft.units.metrics import *
 
 
 class BacktestTest(unittest.TestCase):
@@ -21,7 +21,7 @@ class BacktestTest(unittest.TestCase):
     backtester.run()
     self.assertIsNotNone(backtester.memory.get(('orderbook','XBTUSD'), None))
 
-    # self.assertTrue(len(backtester.metrics["('XBTUSD', 'VWAP (Depth): 3 bid')"]) > 2)
+    # self.assertTrue(len(backtester.units["('XBTUSD', 'VWAP (Depth): 3 bid')"]) > 2)
 
   def test_init_moment(self):
     reader = readers.OrderbookReader('resources/orderbook/orderbooks.csv.gz')
