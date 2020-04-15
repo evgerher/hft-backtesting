@@ -113,14 +113,19 @@ class MetricTest(unittest.TestCase):
 
   def test_hoyashi_yoshido(self):
     hy_values = []
+    lipton_values = []
     def store_only_yoshido(labels, ts, object):
       if 'hoyashi-yoshido' in labels:
         hy_values.append((ts, object))
+      elif 'lipton' in labels:
+        lipton_values.append((ts, object))
 
     reader = TimeLimitedReader(snapshot_file='resources/orderbook/orderbooks.csv.gz', limit_time='5 min')
-    hy = HoyashiYoshido(seconds=60)
-    simulation = CalmStrategy(delta_metrics=[hy])
-    storage = StorageOutput(instant_metric_names=[hy.name], time_metric_names=[])
+    hy = HoyashiYoshido(seconds=20)
+    lipton= Lipton(hy.name)
+
+    simulation = CalmStrategy(delta_metrics=[hy], composite_metrics=[lipton])
+    storage = StorageOutput([hy.name], [])
     storage.consume = store_only_yoshido
     t1 = time.time()
     backtester = backtest.Backtest(reader, simulation, storage)

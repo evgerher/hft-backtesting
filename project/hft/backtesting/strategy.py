@@ -102,6 +102,9 @@ class Strategy(ABC):
       for item in sublist:
         metrics_map[item.name] = item
 
+    for m in self.delta_metrics:
+      metrics_map[m.name] = m
+
     for item in self.composite_metrics:
       metrics_map[item.name] = item
 

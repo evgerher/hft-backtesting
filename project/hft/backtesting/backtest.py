@@ -191,8 +191,8 @@ class Backtest:
   def run(self, tqdm_enabled=False, notify_each=3000):
     logger.info(f'Backtest initialize run')
 
-    if tqdm_enabled and self.reader.stop_after is not None:
-      total = self.reader.stop_after
+    if tqdm_enabled:
+      total = self.reader.total()
       pbar = tqdm(self.reader, total=total)
       for idx, (row, isorderbook) in enumerate(pbar):
         self._process_event(row, isorderbook)
@@ -333,7 +333,7 @@ class Backtest:
     for composite_metric in self.simulation.composite_metrics:
       if composite_metric.filter(data):
         value = composite_metric.evaluate(data)
-        self._flush_output(['composite-metric', 'snapshot', data.symbol, composite_metric.name], data.timestamp, [value])
+        self._flush_output(['composite-metric', 'snapshot', data.symbol, composite_metric.name], data.timestamp, value)
 
   def _update_snapshots(self, row: OrderBook, delta: Delta):
     logger.debug(f'Update units with snapshot symbol={row.symbol} @ {row.timestamp}')

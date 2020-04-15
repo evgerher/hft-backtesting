@@ -32,6 +32,9 @@ class Metric(ABC):
   def label(self):
     raise NotImplementedError
 
+  def filter(self, arg):
+    return True
+
 class InstantMetric(Metric):
   def evaluate(self, arg: Union[Trade, OrderBook])  -> Union[np.array, float]:
     latest = self._evaluate(arg)
@@ -379,31 +382,36 @@ class CompositeMetric(InstantMetric):
     self._metric_map = metric_map
 
 class Lipton(CompositeMetric):
-  def __init__(self, delta_name: str, metric_map: Dict[str, Metric] = None):
+  def __init__(self, vol_name: str, volume_levels=1):
+    '''
+    Lipton metric, evaluvates probability of Upward movement  | #todo: implement downward movement
+
+    :param vol_name: name of metric where to take p_xy (UHF vol estimator, ex.: Hoyashi-Yoshido
+    :param volume_levels: to consider when taking `x` & `y`
+    If levels = 1, metric becomes very unstable, maybe more levels will give stability
+    '''
     super().__init__('lipton')
-    self.delta_name = delta_name
+    self.vol_metric = vol_name
     self._first_time = True
+    self.volume_levels = volume_levels
+
+    self.__n_clip = -1 + 1e-5
+    self.__p_clip = 1 - 1e-5
+    assert self._metric_map is not None
 
   def _evaluate(self, snapshot: OrderBook):
-    assert self._metric_map is not None
-    delta_storage = self._metric_map[self.delta_name].storage
-    replenishment_ask: List[int] = delta_storage[(snapshot.symbol, QuoteSides.ASK, 'pos')]
-    depletion_bid: List[int] = delta_storage[(snapshot.symbol, QuoteSides.BID, 'neg')]
+    vol_latest = self._metric_map[self.vol_metric].latest
 
-    if self._first_time:
-      if len(replenishment_ask) > 5 and len(depletion_bid) > 5:
-        self._first_time = False
-      return 0.0
-
-    length = min(len(depletion_bid), len(replenishment_ask)) # todo: here I need NOT TIME LIMITED, BUT QUANTITY LIMITED
-    # TODO: UPDATE STORAGE METHOD
-    p_xy = np.corrcoef(list(depletion_bid)[-length:], list(replenishment_ask)[-length:])[0, 1]
-
-    x = float(snapshot.bid_volumes[0])
-    y = float(snapshot.ask_volumes[0])
-    sqrt_corr = np.sqrt((1 + p_xy) / (1 - p_xy))
-    p = 0.5 * (1. - np.arctan(sqrt_corr * (y - x) / (y + x)) / np.arctan(sqrt_corr))
-    return p
+    p_xy = vol_latest[snapshot.symbol]
+    if p_xy is not None:
+      p_xy = np.clip(p_xy, self.__n_clip, self.__p_clip)
+      x = np.sum(snapshot.bid_volumes[:self.volume_levels])
+      y = np.sum(snapshot.ask_volumes[:self.volume_levels])
+      sqrt_corr = np.sqrt((1 + p_xy) / (1 - p_xy))
+      p = 0.5 * (1. - np.arctan(sqrt_corr * (y - x) / (y + x)) / np.arctan(sqrt_corr))
+      return p
+    else:
+      return None
 
   def bidask_imbalance(self, snapshot: OrderBook):
     q_b = snapshot.bid_volumes[0]

@@ -182,6 +182,12 @@ class OrderbookReader(SnapshotReader):
            f'trades_file={self._trades_file}, ' \
            f'batch_nrows={self._nrows}>'
 
+  def total(self):
+    if self.stop_after is not None:
+      return self.stop_after
+    return None
+
+
 class TimeLimitedReader(OrderbookReader):
   def __init__(self, snapshot_file: str, limit_time: str, skip_time: str = None, **kwargs): # todo: add warm-up run
     self.initial_moment = self.read_initial_moment(snapshot_file)
@@ -192,6 +198,12 @@ class TimeLimitedReader(OrderbookReader):
 
     self.end_moment = self.initial_moment + limit_time
     super().__init__(snapshot_file, **kwargs)
+
+  def total(self):
+    total = len(self._snapshots_df)
+    if self._trades_file is not None:
+      total += len(self._trades_df)
+    return total
 
   def read_initial_moment(self, snapshot_file:str) -> datetime.datetime:
     df = pd.read_csv(snapshot_file, header=None, nrows=1)
