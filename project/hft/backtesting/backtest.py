@@ -338,7 +338,7 @@ class Backtest:
   def _update_snapshots(self, row: OrderBook, delta: Delta):
     logger.debug(f'Update units with snapshot symbol={row.symbol} @ {row.timestamp}')
     self.memory[('orderbook', row.symbol)] = row
-    self._flush_output(['snapshot'], row.timestamp, row)  # todo: fix
+    self._flush_output(['snapshot', row.symbol], row.timestamp, row)
 
     for instant_metric in self.simulation.instant_metrics:
       values = instant_metric.evaluate(row)
@@ -348,7 +348,9 @@ class Backtest:
       for delta_metric in self.simulation.delta_metrics:
         if delta_metric.filter(delta):
           values = delta_metric.evaluate(delta)
-          self._flush_output(['delta', 'snapshot', row.symbol, delta_metric.name], row.timestamp, values)
+          # self._flush_output(['delta', 'snapshot', row.symbol, delta_metric.name], row.timestamp, values)
+          self._flush_output([delta_metric.name, row.symbol], row.timestamp, values)
+      self._flush_output(['delta', row.symbol], row.timestamp, delta)
 
   def __str__(self):
     return '<Backtest with reader={}>'.format(self.reader)
