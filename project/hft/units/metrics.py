@@ -397,9 +397,9 @@ class Lipton(CompositeMetric):
 
     self.__n_clip = -1 + 1e-5
     self.__p_clip = 1 - 1e-5
-    assert self._metric_map is not None
 
   def _evaluate(self, snapshot: OrderBook):
+    assert self._metric_map is not None
     vol_latest = self._metric_map[self.vol_metric].latest
 
     p_xy = vol_latest[snapshot.symbol]
