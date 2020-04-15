@@ -23,12 +23,12 @@ def snapshot_line_parser(line: Union[List], length:int=100):
 
 
 def orderbook_line_parse(line: pd.Series, depth:int=10) -> OrderBook:
-  target = line[2:].to_numpy()
+  target = np.array(line[2:])
   ap = target[:depth]
   av = target[10:10+depth]
   bp = target[20:20+depth]
   bv = target[30:30+depth]
-  return OrderBook(line[2], line[0], bp, bv, ap, av)
+  return OrderBook(line[1], line[0], bp, bv, ap, av)
 
 def trade_line_parser(line: pd.Series) -> Trade:
   # input: pandas.Series

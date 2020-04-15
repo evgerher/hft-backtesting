@@ -2,7 +2,7 @@ import unittest
 
 from hft.backtesting import backtest
 from hft.backtesting.output import StorageOutput
-from hft.backtesting.readers import OrderbookReader
+from hft.backtesting.readers import OrderbookReader, TimeLimitedReader
 from hft.strategies.gatling import GatlingMM
 
 
@@ -20,5 +20,17 @@ class GatlingTest(unittest.TestCase):
     strategy = GatlingMM(10000)
     strategy.balance_listener = output.balances.append
 
+    backtester = backtest.Backtest(reader, strategy, delay=300)
+    backtester.run()
+
+  # @unittest.skip("Skip as it is manual run")
+  def test_timelimited_gatling(self):
+    reader = TimeLimitedReader('resources/huge_dataset/orderbook_10_03_20.csv.gz',
+                             limit_time='100 min',
+                              skip_time='92 min',
+                             trades_file='resources/huge_dataset/trades_10_03_20.csv.gz',
+                             nrows=100000)
+
+    strategy = GatlingMM(10000)
     backtester = backtest.Backtest(reader, strategy, delay=300)
     backtester.run()

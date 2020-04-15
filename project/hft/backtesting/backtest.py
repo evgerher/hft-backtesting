@@ -189,19 +189,36 @@ class Backtest:
 
 
   def run(self, tqdm_enabled=False, notify_each=3000):
-    logger.info(f'Backtest initialize run')
 
-    if tqdm_enabled:
+    def reader_iterate():
+      print('reader iterate')
+      for row, isorderbook in self.reader:
+        self._process_event(row, isorderbook)
+      else:
+        if self.reader.try_reset():
+          row = reader_iterate()
+      return row
+
+    def tqdm_iterate():
       total = self.reader.total()
-      pbar = tqdm(self.reader, total=total)
+      pbar = tqdm(iter(self.reader), total=total)
+
       for idx, (row, isorderbook) in enumerate(pbar):
         self._process_event(row, isorderbook)
         if idx % notify_each == 0:
           pbar.set_description(f"Current time: {row.timestamp}")
+      else:
+        if self.reader.try_reset():
+          row = tqdm_iterate()
+      return row
 
+    logger.info(f'Backtest initialize run')
+
+    if tqdm_enabled:
+      row = tqdm_iterate()
     else:
-      for row, isorderbook in self.reader:
-        self._process_event(row, isorderbook)
+      row = reader_iterate()
+
     logger.info(f'Backtest finished run')
     statuses = self._return_unfinished_orders(row.timestamp)
     self.simulation.return_unfinished(statuses, self.memory)
