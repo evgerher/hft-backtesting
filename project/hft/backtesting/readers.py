@@ -46,7 +46,11 @@ class ListReader(Reader):
 
 class SnapshotReader(Reader):
 
-  def __init__(self, snapshot_file: str, trades_file: Optional[str] = None, nrows: int = 10000, stop_after: int = None, depth_to_load:int=10):
+  def __init__(self, snapshot_file: str,
+               trades_file: Optional[str] = None,
+               nrows: int = 50000,
+               stop_after: int = None,
+               depth_to_load:int=10):
     """
     :param snapshot_file: to read
     :param trades_file: to read
@@ -60,19 +64,13 @@ class SnapshotReader(Reader):
     self._total_snapshots, self._total_trades = 0, 0
 
     self._nrows = nrows
-    self._pairs_to_load =  depth_to_load
-    self._snapshots_df: pd.DataFrame = self.__read_csv(self._snapshot_file)
-    self._snapshots_df = fix_timestamp(self._snapshots_df, 0, 1)
-
-    self.__limit_snapshot = len(self._snapshots_df)
+    self._pairs_to_load = depth_to_load
+    self._snapshots_df, self.__limit_snapshot = self._read_snapshots(self._snapshot_file, 0)
     self._snapshot = self._load_snapshot()
 
     self._finished_trades = self._trades_file is None
     if self._trades_file is not None:
-      self._trades_df: pd.DataFrame = self.__read_csv(self._trades_file)
-      self._trades_df = fix_trades(self._trades_df, 1, 2)
-
-      self._limit_trades = len(self._trades_df)
+      self._trades_df, self._limit_trades = self._read_trades(self._trades_file, 0)
       self._trade = self.__load_trade()
       initial_trade = self._trades_df.iloc[0, 1]
     else:
@@ -86,13 +84,13 @@ class SnapshotReader(Reader):
     initial_trade = initial_trade or initial_snapshot
     super().__init__(min(initial_trade, initial_snapshot))
 
-  def __read_csv(self, fname, skiprows=0):
+  def _read_csv(self, fname, skiprows=0):
     return pd.read_csv(fname, header=None, sep=',',
                        quotechar='"', error_bad_lines=False,
                        skiprows=skiprows, nrows=self._nrows)
 
   def __update_df(self, file, skiprows=0):
-    df = self.__read_csv(file, skiprows)
+    df = self._read_csv(file, skiprows)
     limit = len(df)
     return df, limit
 
@@ -126,8 +124,7 @@ class SnapshotReader(Reader):
     if self._snapshot_idx >= self._nrows:
       self._total_snapshots += self._snapshot_idx
       logger.info(f"Reload snapshot file: total-snapshots={self._total_snapshots}")
-      self._snapshots_df, self.__limit_snapshot = self.__update_df(self._snapshot_file, self._total_snapshots)
-      self._snapshots_df = fix_timestamp(self._snapshots_df, 0, 1)
+      self._snapshots_df, self.__limit_snapshot = self._read_snapshots(self._snapshot_file, 0)
       self._snapshot_idx = 0
 
     if self._trades_file is not None and (self._limit_trades != self._nrows and self._trades_idx == self._limit_trades):
@@ -138,8 +135,7 @@ class SnapshotReader(Reader):
     if self._trades_idx >= self._nrows:
       self._total_trades += self._trades_idx
       logger.info(f"Reload trades file: total-trades={self._total_trades}")
-      self._trades_df, self._limit_trades = self.__update_df(self._trades_file, self._total_trades)
-      self._trades_df = fix_trades(self._trades_df, 1, 2)
+      self._trades_df, self._limit_trades = self._read_trades(self._trades_file, self._total_trades)
       self._trades_idx = 0
 
     return obj
@@ -164,6 +160,16 @@ class SnapshotReader(Reader):
            f'trades_file={self._trades_file}, ' \
            f'batch_nrows={self._nrows}>'
 
+  def _read_trades(self, trades_file: str, skiprows: int):
+    df, limit = self.__update_df(trades_file, skiprows)
+    df = fix_trades(df, 1, 2)
+    return df, limit
+
+  def _read_snapshots(self, snapshot_file, skiprows:int):
+    df, limit = self.__update_df(snapshot_file, skiprows)
+    df = fix_timestamp(df, 0, 1)
+    return df, limit
+
 
 class OrderbookReader(SnapshotReader):
   def _load_snapshot(self) -> OrderBook:
@@ -175,3 +181,50 @@ class OrderbookReader(SnapshotReader):
     return f'<orderbook-reader on orderbook_file={self._snapshot_file}, ' \
            f'trades_file={self._trades_file}, ' \
            f'batch_nrows={self._nrows}>'
+
+  def total(self):
+    if self.stop_after is not None:
+      return self.stop_after
+    return None
+
+
+class TimeLimitedReader(OrderbookReader):
+  def __init__(self, snapshot_file: str, limit_time: str, skip_time: str = None, **kwargs): # todo: add warm-up run
+    self.initial_moment = self.read_initial_moment(snapshot_file)
+    limit_time: datetime.timedelta = helper.convert_to_timedelta(limit_time)
+    if skip_time is not None:
+      skip_time: datetime.timedelta = helper.convert_to_timedelta(skip_time)
+      self.initial_moment = self.initial_moment + skip_time
+
+    self.end_moment = self.initial_moment + limit_time
+    super().__init__(snapshot_file, **kwargs)
+
+  def total(self):
+    total = len(self._snapshots_df)
+    if self._trades_file is not None:
+      total += len(self._trades_df)
+    return total
+
+  def read_initial_moment(self, snapshot_file:str) -> datetime.datetime:
+    df = pd.read_csv(snapshot_file, header=None, nrows=1)
+    df = fix_timestamp(df, 0, 1)
+    return df.loc[0, 0]
+
+  def _read_snapshots(self, snapshot_file: str, skiprows:int) -> Tuple[pd.DataFrame, int]:
+    df, length = super()._read_snapshots(snapshot_file, skiprows)
+    df.index = pd.DatetimeIndex(df[0])
+
+    df = df[(df.index >= self.initial_moment) & (df.index <=self.end_moment)]
+    if len(df) == 0:
+      return self._read_snapshots(snapshot_file, skiprows + length)
+
+    return df, len(df)
+
+  def _read_trades(self, trades_file: str, skiprows: int) -> Tuple[pd.DataFrame, int]:
+    df, length = super()._read_trades(trades_file, skiprows)
+    df.index = pd.DatetimeIndex(df.timestamp)
+    df = df[(df.index >= self.initial_moment) & (df.index <=self.end_moment)]
+    if len(df) == 0:
+      return self._read_trades(trades_file, skiprows + length)
+
+    return df, len(df)

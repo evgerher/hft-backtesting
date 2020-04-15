@@ -1,5 +1,5 @@
 import datetime
-from typing import List, Union
+from typing import List, Union, Optional
 
 import numpy as np
 import pandas as pd
@@ -57,3 +57,20 @@ def fix_trades(df, timestamp_index, millis_index):
   df.loc[df.side == 'Sell', "side"] = TradeSides.SELL
   df.loc[df.side == 'Buy', "side"] = TradeSides.BUY
   return df
+
+
+def convert_to_timedelta(time_symbol: str) -> Optional[datetime.timedelta]:
+  q, symbol = time_symbol.split()
+  q = int(q)
+  assert q > 0
+
+  if symbol == 'sec':
+    return datetime.timedelta(seconds=q)
+  elif symbol == 'msec':
+    return datetime.timedelta(milliseconds=q)
+  elif symbol == 'min':
+    return datetime.timedelta(minutes=q)
+  elif symbol == 'h':
+    return datetime.timedelta(hours=q)
+
+  return None
