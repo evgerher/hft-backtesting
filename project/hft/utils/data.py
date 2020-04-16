@@ -13,9 +13,9 @@ logger = setup_logger('<data>', 'INFO')
 class Trade:
   symbol: str
   timestamp: datetime.datetime
-  side: int
   price: float
   volume: int
+  side: int
 
   def __str__(self):
     return f'<trade, symbol={self.symbol}, timestamp:{self.timestamp}, side={self.side}, price={self.price}, volume={self.volume}>'

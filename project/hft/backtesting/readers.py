@@ -123,20 +123,19 @@ class SnapshotReader(Reader):
 
   def try_reset(self) -> bool:
     self._reload_snapshot_df()
-    self._trade_end_condition()
+    # self._trade_end_condition()
     self._reload_trades_df()
     return self._end_condition()
 
   def __load_trade(self) -> Generator[Trade, None, None]:
-    for row in self._trades_df.itertuples(index=False):
-      self._trades_idx += 1 # todo: itertuples(name=None)
-      yield Trade(row.symbol, row.timestamp, row.side, row.price, row.volume)
+    for row in self._trades_df.itertuples(index=False, name=None):
+      self._trades_idx += 1
+      yield Trade(*row)
 
   def _load_snapshot(self) -> Generator[OrderBook, None, None]: 
-    for row in self._snapshots_df.itertuples(index=False):
+    for row in self._snapshots_df.itertuples(index=False, name=None):
       timestamp, market, bids, asks = helper.snapshot_line_parser(row)
       self._snapshot_idx += 1
-      # todo: itertuples(name=None)
       yield OrderBook.from_sides(timestamp, market, bids, asks, self._pairs_to_load)
 
 
@@ -190,8 +189,7 @@ class SnapshotReader(Reader):
 
 class OrderbookReader(SnapshotReader):
   def _load_snapshot(self) -> Generator[OrderBook, None, None]:
-    for row in self._snapshots_df.itertuples(index=False):
-    # row: pd.Series = self._snapshots_df.iloc[self._snapshot_idx, :]
+    for row in self._snapshots_df.itertuples(index=False, name=None):
       self._snapshot_idx += 1
       yield helper.orderbook_line_parse(row, self._pairs_to_load)
 
@@ -216,37 +214,44 @@ class TimeLimitedReader(OrderbookReader):
 
     self.end_moment = self.initial_moment + limit_time
     super().__init__(snapshot_file, **kwargs)
+    self._finished_snapshots = False
 
     if self._trades_df is not None:
       self.current_last_trade_ts = self._trades_df.iloc[-1].timestamp
     self.current_last_snapshot_ts = self._snapshots_df.iloc[-1][0]
 
   def _end_condition(self) -> bool:
-    if self.current_timestamp >= self.end_moment:
+    if self.current_timestamp >= self.end_moment or (self._finished_trades and self._finished_snapshots):
       self._total_snapshots += self._snapshot_idx
       logger.debug(f"Finished snapshot_file {self._snapshot_file}, read {self._total_snapshots} rows")
       return False
     return True
 
   def _reload_snapshot_df(self):
-    if self.current_timestamp >= self.current_last_snapshot_ts:
+    if self.current_timestamp >= self.current_last_snapshot_ts and self.current_timestamp < self.end_moment:
       self._total_snapshots += self._snapshot_idx
-      logger.info(f"Reload snapshot file: total-snapshots={self._total_snapshots}")
-      self._snapshots_df, self.__limit_snapshot = self._read_snapshots(self._snapshot_file, self._total_snapshots)
-      self._snapshot_idx = 0
-      self.current_last_snapshot_ts = self._snapshots_df.iloc[-1][0]
+      if self._end_cutted_snapshots:
+        self._finished_snapshots = True
+      else:
+        logger.info(f"Reload snapshot file: total-snapshots={self._total_snapshots}")
+        self._snapshots_df, self.__limit_snapshot = self._read_snapshots(self._snapshot_file, self._total_snapshots)
+        self._snapshot_idx = 0
+        self.current_last_snapshot_ts = self._snapshots_df.iloc[-1][0]
 
-      self._snapshot_generator = self._load_snapshot()
+        self._snapshot_generator = self._load_snapshot()
 
   def _reload_trades_df(self):
-    if self.current_timestamp >= self.current_last_trade_ts:
+    if self.current_timestamp >= self.current_last_trade_ts and self.current_timestamp < self.end_moment:
       self._total_trades += self._trades_idx
-      logger.info(f"Reload trades file: total-trades={self._total_trades}")
-      self._trades_df, self._limit_trades = self._read_trades(self._trades_file, self._total_trades)
-      self._trades_idx = 0
-      self.current_last_trade_ts = self._trades_df.iloc[-1].timestamp
+      if self._end_cutted_trades:
+        self._finished_trades = True
+      else:
+        logger.info(f"Reload trades file: total-trades={self._total_trades}")
+        self._trades_df, self._limit_trades = self._read_trades(self._trades_file, self._total_trades)
+        self._trades_idx = 0
+        self.current_last_trade_ts = self._trades_df.iloc[-1].timestamp
 
-      self._trade_iterator = self.__load_trade()
+        self._trade_generator = self.__load_trade()
 
   def total(self):
     total = len(self._snapshots_df)
@@ -264,7 +269,9 @@ class TimeLimitedReader(OrderbookReader):
     df.index = pd.DatetimeIndex(df[0])
     df2 = df[(df.index >= self.initial_moment) & (df.index <=self.end_moment)]
 
+    self._end_cutted_snapshots = df2.index[-1] < df.index[-1]
     if len(df2) == 0:
+      self._total_snapshots += length
       return self._read_snapshots(snapshot_file, skiprows + length)
     else:
       idx = df.index.get_loc(df2.index[0])  # adjust future skiprows
@@ -278,7 +285,9 @@ class TimeLimitedReader(OrderbookReader):
     df, length = super()._read_trades(trades_file, skiprows)
     df.index = pd.DatetimeIndex(df.timestamp)
     df2 = df[(df.index >= self.initial_moment) & (df.index <=self.end_moment)]
+    self._end_cutted_trades = df2.index[-1] < df.index[-1]
     if len(df2) == 0:
+      self._total_trades += length
       return self._read_trades(trades_file, skiprows + length)
     else:
       idx = df.index.get_loc(df2.index[0]) # adjust future skiprows
