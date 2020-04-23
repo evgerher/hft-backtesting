@@ -1,6 +1,5 @@
 import datetime
 from typing import Optional, List, Union, Tuple, Generator
-import itertools
 
 from hft.utils import helper
 from hft.utils.data import OrderBook, Trade
@@ -41,7 +40,10 @@ class ListReader(Reader):
   def __getitem__(self, idx):
     return self.items[idx]
 
-class SnapshotReader(Reader):
+class OrderbookReader(Reader):
+  # todo: separate reader with and without trades file
+  # todo: move readers into separate class
+  # todo: implement parallel async file read during simulation
 
   def __init__(self, snapshot_file: str,
                trades_file: Optional[str] = None,
@@ -82,7 +84,6 @@ class SnapshotReader(Reader):
     initial_snapshot = self._snapshots_df.iloc[0, 0]
     initial_trade = initial_trade or initial_snapshot
     super().__init__(min(initial_trade, initial_snapshot))
-    # self.gen = self._create_generator(self._trade_generator, self._snapshot_generator)
 
   def _read_csv(self, fname, skiprows=0):
     return pd.read_csv(fname, header=None, sep=',',
@@ -95,8 +96,6 @@ class SnapshotReader(Reader):
     return df, limit
 
   def __iter__(self):
-    # self.gen, gen = itertools.tee(self.gen)
-    # return gen
     return self
 
   def __next__(self) -> Tuple[Union[Trade, OrderBook], bool]:  # snapshot or trade
@@ -120,7 +119,6 @@ class SnapshotReader(Reader):
 
       return obj
 
-
   def try_reset(self) -> bool:
     self._reload_snapshot_df()
     # self._trade_end_condition()
@@ -133,15 +131,13 @@ class SnapshotReader(Reader):
       self._trades_idx += 1
       yield Trade(*row)
 
-  def _load_snapshot(self) -> Generator[OrderBook, None, None]: 
+  def _load_snapshot(self) -> Generator[OrderBook, None, None]:
     for row in self._snapshots_df.itertuples(index=False, name=None):
-      timestamp, market, bids, asks = helper.snapshot_line_parser(row)
       self._snapshot_idx += 1
-      yield OrderBook.from_sides(timestamp, market, bids, asks, self._pairs_to_load)
-
+      yield helper.orderbook_line_parse(row, self._pairs_to_load)
 
   def __str__(self):
-    return f'<snapshot-reader on snapshot_file={self._snapshot_file}, ' \
+    return f'<orderbook-reader on orderbook_file={self._snapshot_file}, ' \
            f'trades_file={self._trades_file}, ' \
            f'batch_nrows={self._nrows}>'
 
@@ -186,18 +182,6 @@ class SnapshotReader(Reader):
       self._total_trades += self._trades_idx
       logger.critical(f"Finished trades_file {self._trades_file}, read {self._total_trades} rows")
       self._finished_trades = True
-
-
-class OrderbookReader(SnapshotReader):
-  def _load_snapshot(self) -> Generator[OrderBook, None, None]:
-    for row in self._snapshots_df.itertuples(index=False, name=None):
-      self._snapshot_idx += 1
-      yield helper.orderbook_line_parse(row, self._pairs_to_load)
-
-  def __str__(self):
-    return f'<orderbook-reader on orderbook_file={self._snapshot_file}, ' \
-           f'trades_file={self._trades_file}, ' \
-           f'batch_nrows={self._nrows}>'
 
   def total(self):
     if self.stop_after is not None:
@@ -295,6 +279,5 @@ class TimeLimitedReader(OrderbookReader):
       idx = idx.start if isinstance(idx, slice) else idx
       self._total_trades += idx
       del df
-
 
     return df2, len(df2)
