@@ -4,3 +4,14 @@ __pycache__/
 .idea/
 .DS_Store
 dataloader/config.py
+*.ipynb_checkpoints/
+tests/resources/huge_dataset/
+tests/resources/logs.txt
+tests/tmp.py
+.pytest_cache
+project/clickhouse_storage/
+*.ipynb
+*.log
+project/build/
+project/*.egg-info/
+project/dist/

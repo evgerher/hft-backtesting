@@ -6,16 +6,10 @@ services:
     ports:
       - "8123:8123"
       - "9000:9000"
-#    volumes:
-#      - $HOME/clickhouse_storage/:/var/lib/clickhouse
-#  client:
-#    image: yandex/clickhouse-client
-#    depends_on:
-#      - server
-#    ports:
-#      - "10000:10000"
+    volumes:
+      - ./clickhouse_storage/:/var/lib/clickhouse
   dataloader:
-    image: evgerher/thesis-dataloader:0.1.0
+    image: evgerher/thesis-dataloader:0.1.3
     depends_on:
       - server
     environment:
