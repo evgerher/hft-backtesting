@@ -36,7 +36,7 @@ class Metric(ABC):
     return True
 
 class InstantMetric(Metric):
-  def evaluate(self, arg: Union[Trade, OrderBook])  -> Union[np.array, float]:
+  def evaluate(self, arg: Union[Trade, OrderBook]) -> Union[np.array, float]:
     latest = self._evaluate(arg)
     self.latest[arg.symbol] = latest
     return latest
@@ -148,6 +148,28 @@ class VWAP_volume(_VWAP):
       i -= 1
     return values
 
+
+class LiquiditySpectrum(InstantMetric):
+  '''
+  Implements Liquidity Spectrum features.
+  Provides stregthed values of level volumes by summing up several of them. Another smoothing metric
+
+  ls1 = sum(volumes[:3])
+  ls2 = sum(volumes[3:6])
+  ls3 = sum(volumes[6:])
+  result = [ls1, ls2, ls3]
+  '''
+  def __init__(self):
+    super().__init__(name='liquidity-spectrum')
+
+  def _evaluate(self, orderbook: OrderBook) -> np.array:
+    volumes = np.stack([orderbook.ask_volumes, orderbook.bid_volumes])
+    ls1 = np.sum(volumes[:, :3], axis=1)
+    ls2 = np.sum(volumes[:, 3:6], axis=1)
+    ls3 = np.sum(volumes[:, 6:], axis=1)
+    return np.stack([ls1, ls2, ls3])
+
+
 class TimeMetric(Metric):
   def __init__(self, name,
                callables: List[NamedExecutable],
@@ -245,62 +267,10 @@ class DeltaMetric(InstantMetric, ABC):
     self.latest[delta[1]] = latest
     return latest
 
-class DeltaTimeMetric(DeltaMetric, TimeMetric):
-  def __init__(self,
-               seconds=60,
-               callables: List[DeltaExecutable] = (('quantity', lambda x: len(x)), ('volume_total', lambda x: sum(x))),
-               starting_moment: datetime.datetime = None):
 
-    super().__init__(f'delta-{seconds}', callables, seconds, starting_moment)
-    self._time_storage = defaultdict(deque)
-
-  def _remove_old_values(self, event: Delta, storage: Deque[Delta]):
-    timestamp = event[0]
-    symbol = event[1]
-    side = event[2]
-    volume = event[3][1, 0] # get first (price, volume) pair and take volume only
-    sign = 'pos' if volume > 0 else 'neg' if volume < 0 else None
-    key = (symbol, side, sign)
-
-    time_storage = self._time_storage[key] # TODO: REFACTOR TO ANOTHER TYPE
-    while len(time_storage) > 50:
-      time_storage.popleft()
-      storage.popleft()
-    # while (event[0] - time_storage[0]).seconds > self.seconds:
-    #   time_storage.popleft()
-    #   storage.popleft()
-
-  def _skip(self, event):
-    timestamp = event[0]
-    symbol = event[1]
-    side = event[2]
-    volume = event[3][1, 0] # get first (price, volume) pair and take volume only
-    sign = 'pos' if volume > 0 else 'neg' if volume < 0 else None
-
-    if len(self.storage[(symbol, side, sign)]) > 50:
-      self._skip_from = True
-    return [-1.0] * len(self._callables)
-
-  def _get_update_deque(self, event: Delta):
-    timestamp = event[0]
-    symbol = event[1]
-    side = event[2] % 2  # Transform ASK-ALTER -> ASK, BID-ALTER -> BID
-    volume = np.sum(event[3][1, :]) # get first (price, volume) pair and take volume only
-    sign = 'pos' if volume > 0 else 'neg' if volume < 0 else None
-    volume = volume if volume > 0 else -volume
-
-    key = (symbol, side, sign)
-    target: Deque[int] = self.storage[key]
-    self._time_storage[key].append(timestamp)
-    target.append(volume)
-    return key, target
-
-  def __str__(self):
-    return f'delta-time-metric:{self.seconds}'
-
-class HoyashiYoshido(DeltaMetric):
+class HayashiYoshido(DeltaMetric):
   '''
-  Implements Hoyashi-Yoshido UHF volatility estimator
+  Implements Hayashi-Yoshido UHF volatility estimator
   Accumulates updates on each step and automatically adjusts values of equation without need of reevaluation of whole sequence
   Denominator is `current_sum`, delimeters are `current_sq`
 
@@ -372,6 +342,62 @@ class HoyashiYoshido(DeltaMetric):
 
         return self.current_sum[symbol] / np.sqrt(self.current_sq[symbol][p]) / np.sqrt(self.current_sq[symbol][not p])
     return None
+
+
+class DeltaTimeMetric(DeltaMetric, TimeMetric):
+  def __init__(self,
+               seconds=60,
+               callables: List[DeltaExecutable] = (('quantity', lambda x: len(x)), ('volume_total', lambda x: sum(x))),
+               starting_moment: datetime.datetime = None):
+
+    super().__init__(f'delta-{seconds}', callables, seconds, starting_moment)
+    self._time_storage = defaultdict(deque)
+
+  def _remove_old_values(self, event: Delta, storage: Deque[Delta]):
+    timestamp = event[0]
+    symbol = event[1]
+    side = event[2]
+    volume = event[3][1, 0] # get first (price, volume) pair and take volume only
+    sign = 'pos' if volume > 0 else 'neg' if volume < 0 else None
+    key = (symbol, side, sign)
+
+    time_storage = self._time_storage[key] # TODO: REFACTOR TO ANOTHER TYPE
+    while len(time_storage) > 50:
+      time_storage.popleft()
+      storage.popleft()
+    # while (event[0] - time_storage[0]).seconds > self.seconds:
+    #   time_storage.popleft()
+    #   storage.popleft()
+
+  def _skip(self, event):
+    timestamp = event[0]
+    symbol = event[1]
+    side = event[2]
+    volume = event[3][1, 0] # get first (price, volume) pair and take volume only
+    sign = 'pos' if volume > 0 else 'neg' if volume < 0 else None
+
+    if len(self.storage[(symbol, side, sign)]) > 50:
+      self._skip_from = True
+    return [-1.0] * len(self._callables)
+
+  def _get_update_deque(self, event: Delta):
+    timestamp = event[0]
+    symbol = event[1]
+    side = event[2] % 2  # Transform ASK-ALTER -> ASK, BID-ALTER -> BID
+    volume = np.sum(event[3][1, :]) # get first (price, volume) pair and take volume only
+    sign = 'pos' if volume > 0 else 'neg' if volume < 0 else None
+    volume = volume if volume > 0 else -volume
+
+    key = (symbol, side, sign)
+    target: Deque[int] = self.storage[key]
+    self._time_storage[key].append(timestamp)
+    target.append(volume)
+    return key, target
+
+  def __str__(self):
+    return f'delta-time-metric:{self.seconds}'
+
+
 
 class CompositeMetric(InstantMetric):
   def __init__(self, name: str):

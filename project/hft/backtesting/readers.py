@@ -124,7 +124,8 @@ class SnapshotReader(Reader):
   def try_reset(self) -> bool:
     self._reload_snapshot_df()
     # self._trade_end_condition()
-    self._reload_trades_df()
+    if self._trades_file is not None:
+      self._reload_trades_df()
     return self._end_condition()
 
   def __load_trade(self) -> Generator[Trade, None, None]:
@@ -216,7 +217,7 @@ class TimeLimitedReader(OrderbookReader):
     super().__init__(snapshot_file, **kwargs)
     self._finished_snapshots = False
 
-    if self._trades_df is not None:
+    if self._trades_file is not None:
       self.current_last_trade_ts = self._trades_df.iloc[-1].timestamp
     self.current_last_snapshot_ts = self._snapshots_df.iloc[-1][0]
 
@@ -269,11 +270,11 @@ class TimeLimitedReader(OrderbookReader):
     df.index = pd.DatetimeIndex(df[0])
     df2 = df[(df.index >= self.initial_moment) & (df.index <=self.end_moment)]
 
-    self._end_cutted_snapshots = df2.index[-1] < df.index[-1]
     if len(df2) == 0:
       self._total_snapshots += length
       return self._read_snapshots(snapshot_file, skiprows + length)
     else:
+      self._end_cutted_snapshots = df2.index[-1] < df.index[-1]
       idx = df.index.get_loc(df2.index[0])  # adjust future skiprows
       idx = idx.start if isinstance(idx, slice) else idx
       self._total_snapshots += idx
@@ -285,11 +286,11 @@ class TimeLimitedReader(OrderbookReader):
     df, length = super()._read_trades(trades_file, skiprows)
     df.index = pd.DatetimeIndex(df.timestamp)
     df2 = df[(df.index >= self.initial_moment) & (df.index <=self.end_moment)]
-    self._end_cutted_trades = df2.index[-1] < df.index[-1]
     if len(df2) == 0:
       self._total_trades += length
       return self._read_trades(trades_file, skiprows + length)
     else:
+      self._end_cutted_trades = df2.index[-1] < df.index[-1]
       idx = df.index.get_loc(df2.index[0]) # adjust future skiprows
       idx = idx.start if isinstance(idx, slice) else idx
       self._total_trades += idx
