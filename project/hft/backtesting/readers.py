@@ -47,7 +47,7 @@ class OrderbookReader(Reader):
 
   def __init__(self, snapshot_file: str,
                trades_file: Optional[str] = None,
-               nrows: int = 50000,
+               nrows: int = 300000,
                stop_after: int = None,
                depth_to_load:int=10):
     """

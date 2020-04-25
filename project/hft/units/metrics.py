@@ -269,6 +269,7 @@ class DeltaMetric(InstantMetric, ABC):
 
 
 class HayashiYoshido(DeltaMetric):
+  # todo: check twice implementation
   '''
   Implements Hayashi-Yoshido UHF volatility estimator
   Accumulates updates on each step and automatically adjusts values of equation without need of reevaluation of whole sequence
