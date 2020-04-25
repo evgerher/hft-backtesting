@@ -21,6 +21,7 @@ jobs:
       run: |
         python -m pip install --upgrade pip
         pip install -r requirements.txt
+        echo "::set-env name=PYTHONPATH::home/runner/work/thesis"
 #        export $PYTHONPATH={{ GITHUB_WORKSPACE }}:project/
     - name: Test with pytest
       run: |
