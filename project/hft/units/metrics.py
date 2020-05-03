@@ -256,10 +256,7 @@ class TradeMetric(TimeMetric):
 
 class DeltaMetric(InstantMetric, ABC):
   def filter(self, event: Delta):
-    # if event[-1].size > 0:
-    #   return True
-    # return False
-    return True
+    return np.sum(event[-1][1, :]) != 0.0
 
   def evaluate(self, delta: Delta)  -> float:
     latest = self._evaluate(delta)
@@ -348,7 +345,7 @@ class HayashiYoshido(DeltaMetric):
     ts, symbol = event[0], event[1]
     value = np.sum(event[-1][1, :])
     p = value > 0
-    value = abs(value)
+    value = np.log(abs(value))
 
     queues: DepleshionReplenishmentSide = DepleshionReplenishmentSide.eval(sign, quote_side)
     current_p = self.current_p[queues]
