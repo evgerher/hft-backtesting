@@ -10,7 +10,7 @@ from hft.backtesting.output import StorageOutput
 from hft.utils.consts import QuoteSides
 from hft.backtesting.readers import OrderbookReader, TimeLimitedReader
 from hft.backtesting.strategy import CalmStrategy
-from hft.units.metrics import VWAP_volume, DeltaTimeMetric, Lipton, HoyashiYoshido
+from hft.units.metrics import VWAP_volume, DeltaTimeMetric, Lipton, HayashiYoshido, LiquiditySpectrum
 from hft.utils.data import OrderBook
 
 
@@ -121,7 +121,7 @@ class MetricTest(unittest.TestCase):
         lipton_values.append((ts, object))
 
     reader = TimeLimitedReader(snapshot_file='resources/orderbook/orderbooks.csv.gz', limit_time='5 min')
-    hy = HoyashiYoshido(seconds=20)
+    hy = HayashiYoshido(seconds=20)
     lipton= Lipton(hy.name)
 
     simulation = CalmStrategy(delta_metrics=[hy], composite_metrics=[lipton])
@@ -132,6 +132,20 @@ class MetricTest(unittest.TestCase):
     backtester.run()
     t2 = time.time() - t1
     print(f'ok, {t2} seconds')
+
+  def test_liquidity_spectrum(self):
+    liquidity_spectrum = LiquiditySpectrum()
+    reader = OrderbookReader(snapshot_file='resources/orderbook/orderbooks.csv.gz', nrows=10, stop_after=2)
+    ob: OrderBook = next(reader)[0]
+    lss = liquidity_spectrum.evaluate(ob)
+
+    self.assertEqual(lss[0,0], np.sum(ob.ask_volumes[:3]))
+    self.assertEqual(lss[1,0], np.sum(ob.ask_volumes[3:6]))
+    self.assertEqual(lss[2,0], np.sum(ob.ask_volumes[6:]))
+
+    self.assertEqual(lss[0,1], np.sum(ob.bid_volumes[:3]))
+    self.assertEqual(lss[1,1], np.sum(ob.bid_volumes[3:6]))
+    self.assertEqual(lss[2,1], np.sum(ob.bid_volumes[6:]))
 
 if __name__ == '__main__':
   unittest.main()

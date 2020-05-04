@@ -3,8 +3,7 @@ from typing import List, Deque, Dict, Callable, Tuple, Union
 import datetime
 from collections import deque, defaultdict
 
-from hft.utils.consts import QuoteSides
-from hft.utils.types import Delta, NamedExecutable, DeltaExecutable, TradeExecutable
+from hft.utils.types import Delta, NamedExecutable, DeltaExecutable, TradeExecutable, DepleshionReplenishmentSide
 from hft.utils.data import OrderBook, Trade
 import numpy as np
 import math
@@ -36,7 +35,7 @@ class Metric(ABC):
     return True
 
 class InstantMetric(Metric):
-  def evaluate(self, arg: Union[Trade, OrderBook])  -> Union[np.array, float]:
+  def evaluate(self, arg: Union[Trade, OrderBook]) -> Union[np.array, float]:
     latest = self._evaluate(arg)
     self.latest[arg.symbol] = latest
     return latest
@@ -148,6 +147,28 @@ class VWAP_volume(_VWAP):
       i -= 1
     return values
 
+
+class LiquiditySpectrum(InstantMetric):
+  '''
+  Implements Liquidity Spectrum features.
+  Provides stregthed values of level volumes by summing up several of them. Another smoothing metric
+
+  ls1 = sum(volumes[:3])
+  ls2 = sum(volumes[3:6])
+  ls3 = sum(volumes[6:])
+  result = [ls1, ls2, ls3]
+  '''
+  def __init__(self):
+    super().__init__(name='liquidity-spectrum')
+
+  def _evaluate(self, orderbook: OrderBook) -> np.array:
+    volumes = np.stack([orderbook.ask_volumes, orderbook.bid_volumes])
+    ls1 = np.sum(volumes[:, :3], axis=1)
+    ls2 = np.sum(volumes[:, 3:6], axis=1)
+    ls3 = np.sum(volumes[:, 6:], axis=1)
+    return np.stack([ls1, ls2, ls3])
+
+
 class TimeMetric(Metric):
   def __init__(self, name,
                callables: List[NamedExecutable],
@@ -235,15 +256,108 @@ class TradeMetric(TimeMetric):
 
 class DeltaMetric(InstantMetric, ABC):
   def filter(self, event: Delta):
-    # if event[-1].size > 0:
-    #   return True
-    # return False
-    return True
+    return np.sum(event[-1][1, :]) != 0.0
 
   def evaluate(self, delta: Delta)  -> float:
     latest = self._evaluate(delta)
     self.latest[delta[1]] = latest
     return latest
+
+
+class HayashiYoshido(DeltaMetric):
+  # todo: check twice implementation
+  '''
+  Implements Hayashi-Yoshido UHF volatility estimator on log(!) values of deltas
+  Accumulates updates on each step and automatically adjusts values of equation without need of reevaluation of whole sequence
+  Denominator is `current_sum`, delimeters are `current_sq`
+
+  Old values are removed via `sum_deque` and `sq_deque`, which keep track of affect on removal of old values.
+
+  This Time metric does not provide `storage` field
+  '''
+  def __init__(self, seconds=60):
+    super().__init__(name='hayashi-yoshido')
+    self.seconds = seconds
+    self.current_sum = {s: defaultdict(lambda: 0.0) for s in DepleshionReplenishmentSide}
+    self.current_sq = {s: defaultdict(lambda: {True: 0.0, False: 0.0}) for s in DepleshionReplenishmentSide}
+
+    self.current_p = {s: defaultdict(lambda: {True: None, False: None}) for s in DepleshionReplenishmentSide}
+    self.last_diff = {s: defaultdict(lambda: {True: None, False: None}) for s in DepleshionReplenishmentSide}
+
+    self.sum_deque = {s: defaultdict(lambda: deque()) for s in DepleshionReplenishmentSide}
+    self.sq_deque = {s: defaultdict(lambda: {True: deque(), False: deque()}) for s in DepleshionReplenishmentSide}
+
+    ## Main and Aux axes
+    self.p1 = True
+    self.p2 = False
+
+  # def filter(self, event: Delta):
+  #   # sign, quote_side = np.sum(event[-1][1, :]), event[2] # get first volume from `price-volume` np array
+  #   # if sign > 0 and quote_side % 2 == QuoteSides.ASK:
+  #   #   return True
+  #   # elif sign < 0 and quote_side % 2 == QuoteSides.BID:
+  #   #   return True
+  #   # return False
+  #   return True
+
+  def __str__(self):
+    return f'hayashi-yoshido-vol:{self.seconds}'
+
+  def evaluate(self, delta: Delta) -> float:
+    latest, queue = self._evaluate(delta)
+    self.latest[delta[1], queue.name] = latest
+    return latest, queue.value
+
+  def _evaluate(self, event:Delta) -> Tuple[float, DepleshionReplenishmentSide]:
+
+    def remove_old_values(symbol, timestamp):
+      while len(sum_deque[symbol]) > 0 and (timestamp - sum_deque[symbol][0][0]).seconds > self.seconds:
+        _, value = sum_deque[symbol].popleft()
+        current_sum[symbol] -= value
+
+      for p in [self.p1, self.p2]:
+        coll = sq_deque[symbol][p]
+        while len(coll) > 0 and (timestamp - coll[0][0]).seconds > self.seconds:
+          _, value = coll.popleft()
+          current_sq[symbol][p] -= value
+
+    def evaluate_side(value):
+      if current_p[symbol][p] is None:
+        current_p[symbol][p] = value
+      else:
+        diff = value - current_p[symbol][p]
+        last_diff[symbol][p] = diff
+        current_p[symbol][p] = value
+
+        sq_update = diff ** 2
+        current_sq[symbol][p] += sq_update
+        sq_deque[symbol][p].append((ts, sq_update))
+
+        if last_diff[symbol][not p] is not None and current_sq[symbol][not p] > 0:
+          sum_update = diff * last_diff[symbol][not p]
+          current_sum[symbol] += sum_update
+          sum_deque[symbol].append((ts, sum_update))
+
+          return current_sum[symbol] / np.sqrt(current_sq[symbol][p]) / np.sqrt(current_sq[symbol][not p])
+      return None
+
+    sign, quote_side = np.sum(event[-1][1, :]), event[2] # get first volume from `price-volume` np array
+    ts, symbol = event[0], event[1]
+    value = np.sum(event[-1][1, :])
+    p = value > 0
+    value = np.log(abs(value))
+
+    queues: DepleshionReplenishmentSide = DepleshionReplenishmentSide.eval(sign, quote_side)
+    current_p = self.current_p[queues]
+    current_sum = self.current_sum[queues]
+    sum_deque = self.sum_deque[queues]
+    current_sq = self.current_sq[queues]
+    last_diff = self.last_diff[queues]
+    sq_deque = self.sq_deque[queues]
+
+    remove_old_values(symbol, ts)
+    return evaluate_side(value), queues
+
 
 class DeltaTimeMetric(DeltaMetric, TimeMetric):
   def __init__(self,
@@ -298,80 +412,7 @@ class DeltaTimeMetric(DeltaMetric, TimeMetric):
   def __str__(self):
     return f'delta-time-metric:{self.seconds}'
 
-class HoyashiYoshido(DeltaMetric):
-  '''
-  Implements Hoyashi-Yoshido UHF volatility estimator
-  Accumulates updates on each step and automatically adjusts values of equation without need of reevaluation of whole sequence
-  Denominator is `current_sum`, delimeters are `current_sq`
 
-  Old values are removed via `sum_deque` and `sq_deque`, which keep track of affect on removal of old values.
-
-  This Time metric does not provide `storage` field
-  '''
-  def __init__(self, seconds=60, **kwargs):
-    super().__init__(name='hoyashi-yoshido', **kwargs)
-    self.seconds = seconds
-    self.current_sum = defaultdict(lambda: 0.0)
-    self.current_sq = defaultdict(lambda: {True: 0.0, False: 0.0})
-
-    self.current_p = defaultdict(lambda: {True: None, False: None})
-    self.last_diff = defaultdict(lambda: {True: None, False: None})
-
-    self.sum_deque = defaultdict(lambda: deque())
-    self.sq_deque = defaultdict(lambda: {True: deque(), False: deque()})
-
-    ## Main and Aux axes
-    self.p1 = True
-    self.p2 = False
-
-  def _remove_old_values(self, symbol, timestamp):
-    while len(self.sum_deque[symbol]) > 0 and (timestamp - self.sum_deque[symbol][0][0]).seconds > self.seconds:
-      _, value = self.sum_deque[symbol].popleft()
-      self.current_sum[symbol] -= value
-
-    for p in [self.p1, self.p2]:
-      coll = self.sq_deque[symbol][p]
-      while len(coll) > 0 and (timestamp - coll[0][0]).seconds > self.seconds:
-        _, value = coll.popleft()
-        self.current_sq[symbol][p] -= value
-
-  def filter(self, event: Delta):
-    sign, quote_side = np.sum(event[-1][1, :]), event[2] # get first volume from `price-volume` np array
-    if sign > 0 and quote_side % 2 == QuoteSides.ASK:
-      return True
-    elif sign < 0 and quote_side % 2 == QuoteSides.BID:
-      return True
-    return False
-
-  def __str__(self):
-    return f'hoyashi-yoshido-vol:{self.seconds}'
-
-  def _evaluate(self, event:Delta) -> float:
-    ts, symbol = event[0], event[1]
-    self._remove_old_values(symbol, ts)
-
-    value = np.sum(event[-1][1, :])
-    p = value > 0
-    value = abs(value)
-
-    if self.current_p[symbol][p] is None:
-      self.current_p[symbol][p] = value
-    else:
-      diff = value - self.current_p[symbol][p]
-      self.last_diff[symbol][p] = diff
-      self.current_p[symbol][p] = value
-
-      sq_update = diff ** 2
-      self.current_sq[symbol][p] += sq_update
-      self.sq_deque[symbol][p].append((ts, sq_update))
-
-      if self.last_diff[symbol][not p] is not None and self.current_sq[symbol][not p] > 0:
-        sum_update = diff * self.last_diff[symbol][not p]
-        self.current_sum[symbol] += sum_update
-        self.sum_deque[symbol].append((ts, sum_update))
-
-        return self.current_sum[symbol] / np.sqrt(self.current_sq[symbol][p]) / np.sqrt(self.current_sq[symbol][not p])
-    return None
 
 class CompositeMetric(InstantMetric):
   def __init__(self, name: str):
@@ -384,7 +425,7 @@ class CompositeMetric(InstantMetric):
 class Lipton(CompositeMetric):
   def __init__(self, vol_name: str, volume_levels=1):
     '''
-    Lipton metric, evaluvates probability of Upward movement  | #todo: implement downward movement
+    Lipton metric, evaluvates probability of Upward movement  |
 
     :param vol_name: name of metric where to take p_xy (UHF vol estimator, ex.: Hoyashi-Yoshido
     :param volume_levels: to consider when taking `x` & `y`
@@ -402,8 +443,10 @@ class Lipton(CompositeMetric):
     assert self._metric_map is not None
     vol_latest = self._metric_map[self.vol_metric].latest
 
-    p_xy = vol_latest[snapshot.symbol]
-    if p_xy is not None:
+    p_xy = vol_latest[snapshot.symbol, DepleshionReplenishmentSide.BID_ASK.name], \
+           vol_latest[snapshot.symbol, DepleshionReplenishmentSide.ASK_BID.name]
+    if not p_xy[0] is None and not p_xy[1] is None:
+      p_xy = np.array(p_xy)
       p_xy = np.clip(p_xy, self.__n_clip, self.__p_clip)
       x = np.sum(snapshot.bid_volumes[:self.volume_levels])
       y = np.sum(snapshot.ask_volumes[:self.volume_levels])

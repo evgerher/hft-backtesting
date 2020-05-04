@@ -23,7 +23,7 @@ class GatlingTest(unittest.TestCase):
     backtester = backtest.Backtest(reader, strategy, delay=300)
     backtester.run()
 
-  # @unittest.skip("Skip as it is manual run")
+  @unittest.skip("Skip as it is manual run")
   def test_timelimited_gatling(self):
     reader = TimeLimitedReader('resources/huge_dataset/orderbook_10_03_20.csv.gz',
                              limit_time='10 min',
