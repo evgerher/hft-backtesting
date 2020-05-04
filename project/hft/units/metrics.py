@@ -267,7 +267,7 @@ class DeltaMetric(InstantMetric, ABC):
 class HayashiYoshido(DeltaMetric):
   # todo: check twice implementation
   '''
-  Implements Hayashi-Yoshido UHF volatility estimator
+  Implements Hayashi-Yoshido UHF volatility estimator on log(!) values of deltas
   Accumulates updates on each step and automatically adjusts values of equation without need of reevaluation of whole sequence
   Denominator is `current_sum`, delimeters are `current_sq`
 
@@ -306,7 +306,7 @@ class HayashiYoshido(DeltaMetric):
   def evaluate(self, delta: Delta) -> float:
     latest, queue = self._evaluate(delta)
     self.latest[delta[1], queue.name] = latest
-    return latest
+    return latest, queue.value
 
   def _evaluate(self, event:Delta) -> Tuple[float, DepleshionReplenishmentSide]:
 
@@ -445,7 +445,6 @@ class Lipton(CompositeMetric):
 
     p_xy = vol_latest[snapshot.symbol, DepleshionReplenishmentSide.BID_ASK.name], \
            vol_latest[snapshot.symbol, DepleshionReplenishmentSide.ASK_BID.name]
-
     if not p_xy[0] is None and not p_xy[1] is None:
       p_xy = np.array(p_xy)
       p_xy = np.clip(p_xy, self.__n_clip, self.__p_clip)
