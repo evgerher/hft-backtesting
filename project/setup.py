@@ -9,5 +9,5 @@ setup(
   license='',
   author='Evgeny Sorokin',
   author_email='evgeniy.inpl.sorokin@gmail.com',
-  description='Extendible backtesting platform for HFT based on snapshots and orderbooks from Bitmex'
+  description='Extendible backtesting platform for HFT based on snapshots and _orderbooks from Bitmex'
 )

@@ -44,7 +44,7 @@ class TracesTest(unittest.TestCase):
     self.assertEqual(count[datetime(2042, 2, 1, 8)], 100)
 
   def test_timelimited_reader(self):
-    reader = TimeLimitedReader('resources/orderbook/orderbooks.csv.gz', limit_time='5 min', trades_file='resources/orderbook/trades.csv.gz')
+    reader = TimeLimitedReader('resources/orderbook/_orderbooks.csv.gz', limit_time='5 min', trades_file='resources/orderbook/_trades.csv.gz')
     snapshot_df = reader._snapshots_df
     trades_df = reader._trades_df
     initial_moment = reader.initial_moment
@@ -61,7 +61,7 @@ class TracesTest(unittest.TestCase):
 
   def test_deltas(self):
     filter = Filters.DepthFilter(3)
-    reader = TimeLimitedReader('resources/orderbook/orderbooks.csv.gz', skip_time='530 sec', limit_time='10 sec')
+    reader = TimeLimitedReader('resources/orderbook/_orderbooks.csv.gz', skip_time='530 sec', limit_time='10 sec')
 
     bids = []
     asks = []
@@ -75,7 +75,7 @@ class TracesTest(unittest.TestCase):
           elif v > 0:
             asks.append((res[0], v))
 
-    # tf, symbol, side? delta-values
+    # tf, symbol, side? __delta-values
     bid_ts, bid_deltas = zip(*bids)
     ask_ts, ask_deltas = zip(*asks)
     bid_deltas = np.array(bid_deltas)

@@ -16,3 +16,4 @@ project/build/
 project/*.egg-info/
 project/dist/
 notebooks/
+tests/resources/may1/

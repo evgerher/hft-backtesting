@@ -7,10 +7,11 @@ import numpy as np
 import test_utils
 from hft.backtesting import backtest
 from hft.backtesting.output import StorageOutput
+from hft.units.metrics.composite import Lipton
+from hft.units.metrics.instant import VWAP_volume, HayashiYoshido
 from hft.utils.consts import QuoteSides
 from hft.backtesting.readers import OrderbookReader, TimeLimitedReader
 from hft.backtesting.strategy import CalmStrategy
-from hft.units.metrics import VWAP_volume, DeltaTimeMetric, Lipton, HayashiYoshido, LiquiditySpectrum
 from hft.utils.data import OrderBook
 
 
@@ -60,20 +61,20 @@ class MetricTest(unittest.TestCase):
     vwap = VWAP_volume(volumes)
     self.assertListEqual(volumes, vwap.subitems())
 
-    snapshot = test_utils.get_orderbooks(1, src='resources/orderbook/orderbooks.csv.gz')[0]
+    snapshot = test_utils.get_orderbooks(1, src='resources/orderbook/_orderbooks.csv.gz')[0]
     values = vwap.evaluate(snapshot)
     latest = vwap.latest
     self.assertEqual(values, tuple([latest[v] for v in volumes]))
 
   def test_delta_lipton_metric(self):
-    reader = OrderbookReader(snapshot_file='resources/orderbook/orderbooks.csv.gz', stop_after=5000, depth_to_load=8)
+    reader = OrderbookReader(snapshot_file='resources/orderbook/_orderbooks.csv.gz', stop_after=5000, depth_to_load=8)
 
     delta10 = DeltaTimeMetric(seconds=60)
-    lipton = Lipton('delta-60')
+    lipton = Lipton('__delta-60')
     simulation = CalmStrategy(time_metrics_snapshot=[delta10], composite_metrics=[lipton])
     metric_map = simulation.metrics_map
     lipton.set_metric_map(metric_map)
-    self.assertEqual(metric_map['delta-60'], delta10)
+    self.assertEqual(metric_map['__delta-60'], delta10)
 
     first = reader._snapshot
     backtester = backtest.Backtest(reader, simulation)
@@ -82,12 +83,12 @@ class MetricTest(unittest.TestCase):
 
     # self.assertTrue((last.timestamp - first.timestamp).seconds > 60)
     # TODO: REFACTOR DELTA TO QUANTITY LIMITED METRIC (NOT TIME LIMITED)
-    storage = metric_map['delta-60'].storage
+    storage = metric_map['__delta-60'].storage
     ask_pos_xbtusd = storage[('XBTUSD', QuoteSides.ASK, 'pos')]
     ask_neg_xbtusd = storage[('XBTUSD', QuoteSides.ASK, 'neg')]
     bid_pos_xbtusd = storage[('XBTUSD', QuoteSides.BID, 'pos')]
 
-    latest = metric_map['delta-60'].latest
+    latest = metric_map['__delta-60'].latest
     quantity_ask_pos = latest['quantity', 'XBTUSD',   QuoteSides.ASK, 'pos']
     quantity_ask_neg = latest['quantity', 'XBTUSD',   QuoteSides.ASK, 'neg']
     volume_ask_pos = latest['volume_total', 'XBTUSD', QuoteSides.ASK, 'pos']
@@ -120,7 +121,7 @@ class MetricTest(unittest.TestCase):
       elif 'lipton' in labels:
         lipton_values.append((ts, object))
 
-    reader = TimeLimitedReader(snapshot_file='resources/orderbook/orderbooks.csv.gz', limit_time='5 min')
+    reader = TimeLimitedReader(snapshot_file='resources/orderbook/_orderbooks.csv.gz', limit_time='5 min')
     hy = HayashiYoshido(seconds=20)
     lipton= Lipton(hy.name)
 
@@ -135,7 +136,7 @@ class MetricTest(unittest.TestCase):
 
   def test_liquidity_spectrum(self):
     liquidity_spectrum = LiquiditySpectrum()
-    reader = OrderbookReader(snapshot_file='resources/orderbook/orderbooks.csv.gz', nrows=10, stop_after=2)
+    reader = OrderbookReader(snapshot_file='resources/orderbook/_orderbooks.csv.gz', nrows=10, stop_after=2)
     ob: OrderBook = next(reader)[0]
     lss = liquidity_spectrum.evaluate(ob)
 

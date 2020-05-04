@@ -102,7 +102,7 @@ class DeltaTimeMetric(DeltaMetric, TimeMetric):
                callables: List[DeltaExecutable] = (('quantity', lambda x: len(x)), ('volume_total', lambda x: sum(x))),
                starting_moment: datetime.datetime = None):
 
-    super().__init__(f'delta-{seconds}', callables, seconds, starting_moment)
+    super().__init__(f'__delta-{seconds}', callables, seconds, starting_moment)
     self._time_storage = defaultdict(deque)
 
   def _remove_old_values(self, event: Delta, storage: Deque[Delta]):
@@ -147,4 +147,4 @@ class DeltaTimeMetric(DeltaMetric, TimeMetric):
     return key, target
 
   def __str__(self):
-    return f'delta-time-metric:{self.seconds}'
+    return f'__delta-time-metric:{self.seconds}'

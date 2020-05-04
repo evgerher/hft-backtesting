@@ -16,8 +16,8 @@ class StrategyTest(unittest.TestCase):
   @unittest.skip("works only alone")
   def test_balance(self):
     callables = [
-      ('trades volume_total', lambda trades: sum(map(lambda x: x.volume, trades))),
-      ('trades length', lambda trades: len(trades))
+      ('_trades volume_total', lambda trades: sum(map(lambda x: x.volume, trades))),
+      ('_trades length', lambda trades: len(trades))
     ]
     instant_metrics = [
       VWAP_volume(volumes=[50000, 500000])

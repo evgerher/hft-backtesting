@@ -11,7 +11,7 @@ from hft.units.metrics import *
 
 class BacktestTest(unittest.TestCase):
   def test_run(self):
-    reader = readers.OrderbookReader('resources/orderbook/orderbooks.csv.gz', stop_after=100)
+    reader = readers.OrderbookReader('resources/orderbook/_orderbooks.csv.gz', stop_after=100)
     metrics = [VWAP_depth(3),
                VWAP_volume(volumes=[int(5e5), int(1e6)], symbol='XBTUSD'),
                VWAP_volume(volumes=[int(1e5), int(5e5)], symbol='ETHUSD')]
@@ -24,8 +24,8 @@ class BacktestTest(unittest.TestCase):
     # self.assertTrue(len(backtester.units["('XBTUSD', 'VWAP (Depth): 3 bid')"]) > 2)
 
   def test_init_moment(self):
-    reader = readers.OrderbookReader('resources/orderbook/orderbooks.csv.gz')
-    callables = [('trades count', lambda trades: len(trades))]
+    reader = readers.OrderbookReader('resources/orderbook/_orderbooks.csv.gz')
+    callables = [('_trades count', lambda trades: len(trades))]
     simulation = CalmStrategy([], time_metrics_trade=[TradeMetric(callables, 60)])
     backtester = backtest.Backtest(reader, simulation)
 
@@ -34,11 +34,11 @@ class BacktestTest(unittest.TestCase):
     self.assertEqual((obj.timestamp - simulation.time_metrics['trade'][0]._from).seconds, 0)
 
   def test_trades_volume_minute_metric(self):
-    reader = readers.OrderbookReader('resources/orderbook/orderbooks.csv.gz',
-                                     trades_file='resources/orderbook/trades.csv.gz', stop_after=10000, depth_to_load=10)
+    reader = readers.OrderbookReader('resources/orderbook/_orderbooks.csv.gz',
+                                     trades_file='resources/orderbook/_trades.csv.gz', stop_after=10000, depth_to_load=10)
     callables = [
-      ('trades volume_total', lambda trades: sum(map(lambda x: x.volume, trades))),
-      ('trades length', lambda trades: len(trades))
+      ('_trades volume_total', lambda trades: sum(map(lambda x: x.volume, trades))),
+      ('_trades length', lambda trades: len(trades))
     ]
     simulation = CalmStrategy([], time_metrics_trade=[TradeMetric(callables, 60)])
     instant_metric_names = []
@@ -53,10 +53,10 @@ class BacktestTest(unittest.TestCase):
     self.assertEqual(time_metrics_q, 715)
 
   def test_all_metrics(self):
-    reader = readers.OrderbookReader('resources/orderbook/orderbooks.csv.gz', trades_file='resources/orderbook/trades.csv.gz', stop_after=3000, depth_to_load=6)
+    reader = readers.OrderbookReader('resources/orderbook/_orderbooks.csv.gz', trades_file='resources/orderbook/_trades.csv.gz', stop_after=3000, depth_to_load=6)
     callables = [
-      ('trades volume_total', lambda trades: sum(map(lambda x: x.volume, trades))),
-      ('trades length', lambda trades: len(trades))
+      ('_trades volume_total', lambda trades: sum(map(lambda x: x.volume, trades))),
+      ('_trades length', lambda trades: len(trades))
     ]
 
     metrics = [VWAP_volume(volumes=[100000, 1000000], symbol='XBTUSD'),
@@ -73,13 +73,13 @@ class BacktestTest(unittest.TestCase):
     # todo: FIX THIS, 2 is incorrect
 
   def test_load_orderbooks_and_floats(self):
-    reader = readers.OrderbookReader('resources/orderbook/orderbooks.csv.gz',
-                                     'resources/orderbook/trades.csv.gz',
+    reader = readers.OrderbookReader('resources/orderbook/_orderbooks.csv.gz',
+                                     'resources/orderbook/_trades.csv.gz',
                                      depth_to_load=5, stop_after=500)
 
     callables = [
-      ('trades volume_total', lambda trades: sum(map(lambda x: x.volume, trades))),
-      ('trades length', lambda trades: len(trades))
+      ('_trades volume_total', lambda trades: sum(map(lambda x: x.volume, trades))),
+      ('_trades length', lambda trades: len(trades))
     ]
 
     instant_metrics = [
@@ -100,12 +100,12 @@ class BacktestTest(unittest.TestCase):
 
   def test_2order_simulation(self):
     # reader = readers.OrderbookReader('resources/orderbook10/orderbook.csv.gz',
-    #                                  'resources/orderbook10/trades.csv.gz',
+    #                                  'resources/orderbook10/_trades.csv.gz',
     #                                  pairs_to_load=5)
 
     callables = [
-      ('trades volume_total', lambda trades: sum(map(lambda x: x.volume, trades))),
-      ('trades length', lambda trades: len(trades))
+      ('_trades volume_total', lambda trades: sum(map(lambda x: x.volume, trades))),
+      ('_trades length', lambda trades: len(trades))
     ]
     instant_metrics = [
       VWAP_volume(volumes=[50000, 500000])

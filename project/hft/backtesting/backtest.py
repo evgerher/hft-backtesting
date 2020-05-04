@@ -365,9 +365,9 @@ class Backtest:
       for delta_metric in self.simulation.delta_metrics:
         if delta_metric.filter(delta):
           values = delta_metric.evaluate(delta)
-          # self._flush_output(['delta', 'snapshot', row.symbol, delta_metric.name], row.timestamp, values)
+          # self._flush_output(['__delta', 'snapshot', row.symbol, delta_metric.name], row.timestamp, values)
           self._flush_output([delta_metric.name, row.symbol], row.timestamp, values)
-      self._flush_output(['delta', row.symbol], row.timestamp, delta)
+      self._flush_output(['__delta', row.symbol], row.timestamp, delta)
 
   def __str__(self):
     return '<Backtest with reader={}>'.format(self.reader)
