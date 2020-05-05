@@ -26,12 +26,14 @@ class InstantMultiMetric(InstantMetric):
   def __init__(self, name):
     super().__init__(name)
     subitems = self.subitems()
-    self.latest = {name: defaultdict(lambda: None) for name in subitems}
+    # self.latest = {name: defaultdict(lambda: None) for name in subitems}
+    self.latest = defaultdict(lambda: None)
+
 
   def evaluate(self, snapshot: OrderBook) -> List[np.array]:
       latest = self._evaluate(snapshot)
       for idx, item in enumerate(self.subitems()):
-        self.latest[item] = latest[idx]
+        self.latest[snapshot.symbol, item] = latest[idx]
       return latest
 
   @abstractmethod
@@ -43,8 +45,8 @@ class InstantMultiMetric(InstantMetric):
 
 
 class _VWAP(InstantMultiMetric):
-  def names(self) -> List[str]:
-    return [f'{self.__str__()} bid', f'{self.__str__()} ask', f'{self.__str__()} midpoint']
+  def subitems(self) -> List[str]:
+    return ['bid', 'ask', 'midpoint']
 
   def _evaluate(self, snapshot: OrderBook) -> Tuple[np.array, np.array, np.array]:
     vwap_bid, vwap_ask = self._bid(snapshot), self._ask(snapshot)
@@ -103,8 +105,9 @@ class VWAP_volume(_VWAP):
     self.symbol = symbol
     super().__init__(name)
 
-  def subitems(self):
-    return self.volumes
+  # def subitems(self):
+  #   # return self.volumes
+  #   return ['bid', 'ask', 'midprice']
 
   def _evaluate_side(self, prices: np.array, volumes: np.array) -> np.array:
     i = 0
