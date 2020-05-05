@@ -57,24 +57,22 @@ class Strategy(ABC):
   # delay = 1e-3  # 1 msec delay from my laptop
 
   def __init__(self, instant_metrics: List[InstantMetric] = [],
-               depth_filter: Filters.DepthFilter = Filters.DepthFilter(4),
                delta_metrics: List[DeltaMetric] = [],
                time_metrics_trade: List[TradeMetric] = [],
                time_metrics_snapshot: List[TimeMetric] = [],
                composite_metrics: List[CompositeMetric] = [],
                initial_balance: int = int(1e6),
                balance_listener: Callable[[Tuple], None] = None,
-               filter_depth: int = None):
+               filter_depth: int = 4):
     """
 
     :param instant_metrics:
     :param depth_filter:
     """
+    filter_depth = filter_depth or 4
+    self.filter = Filters.DepthFilter(filter_depth)
+
     self.instant_metrics: List[InstantMetric] = instant_metrics
-    if filter_depth is not None:
-      self.filter = Filters.DepthFilter(filter_depth)
-    else:
-      self.filter: Filters.DepthFilter = depth_filter
     self.time_metrics: Dict[str, List[TimeMetric]] = {
       'trade': time_metrics_trade,
       'orderbook': time_metrics_snapshot

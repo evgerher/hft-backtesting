@@ -49,7 +49,8 @@ class OrderbookReader(Reader):
                trades_file: Optional[str] = None,
                nrows: int = 300000,
                stop_after: int = None,
-               depth_to_load:int=10):
+               depth_to_load:int=10,
+               is_precomputed: bool = False):
     """
     :param snapshot_file: to read
     :param trades_file: to read
@@ -62,6 +63,7 @@ class OrderbookReader(Reader):
     self._snapshot_idx, self._trades_idx = 0, 0
     self._total_snapshots, self._total_trades = 0, 0
 
+    self._is_precomputed = is_precomputed
     self._nrows = nrows
     self._pairs_to_load = depth_to_load
     self._snapshots_df, self.__limit_snapshot = self._read_snapshots(self._snapshot_file, 0)
@@ -83,6 +85,7 @@ class OrderbookReader(Reader):
 
     initial_snapshot = self._snapshots_df.iloc[0, 0]
     initial_trade = initial_trade or initial_snapshot
+
     super().__init__(min(initial_trade, initial_snapshot))
 
   def _read_csv(self, fname, skiprows=0):
@@ -143,12 +146,12 @@ class OrderbookReader(Reader):
 
   def _read_trades(self, trades_file: str, skiprows: int):
     df, limit = self.__update_df(trades_file, skiprows)
-    df = fix_trades_rename(df, 1, 2)
+    df = fix_trades_rename(df, 1, 2, self._is_precomputed)
     return df, limit
 
   def _read_snapshots(self, snapshot_file, skiprows:int):
     df, limit = self.__update_df(snapshot_file, skiprows)
-    df = fix_timestamp_drop_millis(df, 0, 1)
+    df = fix_timestamp_drop_millis(df, 0, 1, self._is_precomputed)
     return df, limit
 
   def _end_condition(self) -> bool:

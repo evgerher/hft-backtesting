@@ -371,3 +371,11 @@ class Backtest:
 
   def __str__(self):
     return '<Backtest with reader={}>'.format(self.reader)
+
+
+class BacktestOnSample(Backtest):
+  def run(self, tqdm_enabled=False, notify_each=3000):
+    for row, isorderbook in self.reader:
+      self._process_event(row, isorderbook)
+    statuses = self._return_unfinished_orders(row.timestamp)
+    self.simulation.return_unfinished(statuses, self.memory)

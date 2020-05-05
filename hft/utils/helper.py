@@ -42,20 +42,21 @@ def convert_to_datetime(moment: Union[datetime.datetime, str]):
     return moment
 
 
-def fix_timestamp(df, timestamp_index, millis_index):
+def fix_timestamp(df, timestamp_index, millis_index, precomputed=False):
   df.iloc[:, timestamp_index] = pd.to_datetime(df.iloc[:, timestamp_index])
-  df.iloc[:, millis_index] = df.iloc[:, millis_index].apply(lambda x: datetime.timedelta(milliseconds=x))
-  df.iloc[:, timestamp_index] += df.iloc[:, millis_index]
+  if not precomputed:
+    df.iloc[:, millis_index] = df.iloc[:, millis_index].apply(lambda x: datetime.timedelta(milliseconds=x))
+    df.iloc[:, timestamp_index] += df.iloc[:, millis_index]
   return df
 
-def fix_timestamp_drop_millis(df, timestamp_index, millis_index):
-  df = fix_timestamp(df, timestamp_index, millis_index)
+def fix_timestamp_drop_millis(df, timestamp_index, millis_index, precomputed=False):
+  df = fix_timestamp(df, timestamp_index, millis_index, precomputed)
   df = df.drop(columns=[millis_index])
   return df
 
 
-def fix_trades_rename(df, timestamp_index, millis_index):
-  df = fix_timestamp_drop_millis(df, timestamp_index, millis_index)
+def fix_trades_rename(df, timestamp_index, millis_index, precomputed=False):
+  df = fix_timestamp_drop_millis(df, timestamp_index, millis_index, precomputed)
   df = df.drop(columns=[5])  # remove `action`
   df.columns = ['symbol', 'timestamp', 'price', 'volume', 'side']
   df.loc[df.side == 'Sell', "side"] = TradeSides.SELL

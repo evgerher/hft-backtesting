@@ -1,4 +1,9 @@
 import unittest
+
+from hft.backtesting.backtest import Backtest, BacktestOnSample
+from hft.backtesting.strategy import CalmStrategy
+
+from hft.backtesting.readers import OrderbookReader
 from hft.environment import sampler
 import shutil
 import pandas as pd
@@ -67,10 +72,14 @@ class SamplerTest(unittest.TestCase):
 
   @unittest.skip('')
   def test_custom(self):
-    samplerr = sampler.TimeSampler('resources/may1/orderbooks/0.csv.gz',
-                                   'resources/may1/trades/0.csv.gz',
-                                   'time-sampled', 300, nrows=1000000)
-    samplerr.split_samples()
+    def init_simulation(orderbook_file, trade_file):
+      reader = OrderbookReader(orderbook_file, trade_file, nrows=None, is_precomputed=True)
+      strategy = CalmStrategy(initial_balance=0.0)
+      backtest = BacktestOnSample(reader, strategy, delay=300)
+      backtest.run()
+
+    of, tf = ('..\\notebooks\\time-sampled\\orderbook_0.csv.gz', '..\\notebooks\\time-sampled\\trade_0.csv.gz')
+    init_simulation(of, tf)
 
 
 if __name__ == '__main__':

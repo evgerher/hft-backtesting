@@ -1,4 +1,5 @@
 from abc import ABC
+import gc
 
 import concurrent
 from concurrent.futures.thread import ThreadPoolExecutor
@@ -20,19 +21,18 @@ class Sampler(ABC):
   # todo: separate samplers and writers logic
   # todo: implement sampler as iterator
 
-  def __init__(self, orderbooks_file: str, trades_file: str, destination: str, max_workers=4, nrows=1000000, starting_idx=0):
+  def __init__(self, orderbooks_file: str, trades_file: str, destination: str, max_workers=4, nrows=700000, starting_idx=0):
     self._orderbooks_file = orderbooks_file
     self._trades_file = trades_file
     self._destination = destination
     self.__pool = ThreadPoolExecutor(max_workers=max_workers)
     self.__file_idx = starting_idx
     self._nrows = nrows
+
     self._orderbook_skiprows = 0
     self._trade_skiprows = 0
-
-
     orderbook_f: Future = self.__pool.submit(self._load_frame, self._orderbooks_file, nrows, self._orderbook_skiprows, True)
-    trades_f: Future = self.__pool.submit(self._load_frame, self._trades_file, nrows, self._trade_skiprows, False)
+    trades_f: Future = self.__pool.submit(self._load_frame, self._trades_file, nrows // 2, self._trade_skiprows, False)
 
     self._orderbooks: pd.DataFrame = orderbook_f.result()
     self._trades: pd.DataFrame = trades_f.result()
@@ -91,17 +91,21 @@ class Sampler(ABC):
     concurrent.futures.wait(self._futures)
     self._futures.clear()
     logger.info("Reload orderbook df")
+    del self._orderbooks
+    gc.collect()
     self._orderbooks = orderbooks
     self.current_moment = self._orderbooks.index[0]
 
   def _reload_trade(self):
-    trades = self._load_frame(self._trades_file, self._nrows, self._trade_skiprows, False)
+    trades = self._load_frame(self._trades_file, self._nrows // 2, self._trade_skiprows, False)
     self._trade_skiprows += len(trades)
 
     # wait until _futures empty
     concurrent.futures.wait(self._futures)
     self._futures.clear()
     logger.info("Reload trade df")
+    del self._trades
+    gc.collect()
     self._trades = trades
 
 
@@ -110,7 +114,7 @@ class Sampler(ABC):
       while not self._finished_trade and not self._finished_orderbook:
         (orderbook_samples, orderbooks_done), (trade_samples, trades_done) = self._sample()
 
-        if len(self._trades) != self._nrows and trades_done:
+        if len(self._trades) != self._nrows // 2 and trades_done:
           self._finished_trade = True
 
         if len(self._orderbooks) != self._nrows and orderbooks_done:
