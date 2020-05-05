@@ -141,13 +141,3 @@ class TracesTest(unittest.TestCase):
     self.assertEqual(ts3[datetime(year=2000, month=1, day=1, hour=6, minute=10)], 9)
     self.assertEqual(ts3[datetime(year=2000, month=1, day=1, hour=6, minute=40)], 15)
     self.assertEqual(ts3[datetime(year=2000, month=1, day=1, hour=7, minute=10)], 0)
-
-  def test_point(self):
-    ts = traces.TimeSeries(default=0)
-
-    ts[2.0] = 10
-    ts[3.0] = 20
-    ts[4.0] = 2
-
-    ts.plot()
-    plt.show()

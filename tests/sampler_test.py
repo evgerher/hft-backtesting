@@ -71,3 +71,7 @@ class SamplerTest(unittest.TestCase):
                                    'resources/may1/trades/0.csv.gz',
                                    'time-sampled', 300, nrows=1000000)
     samplerr.split_samples()
+
+
+if __name__ == '__main__':
+  unittest.main()
