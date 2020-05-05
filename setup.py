@@ -4,7 +4,7 @@ setup(
   name='backtesting-hft',
   version='1.0.0',
   packages=['hft'],
-  package_dir={'': '.'},
+  package_dir={'hft': 'project/'},
   url='',
   license='',
   author='Evgeny Sorokin',

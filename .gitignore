@@ -17,3 +17,4 @@ project/*.egg-info/
 project/dist/
 notebooks/
 tests/resources/may1/
+venv2/

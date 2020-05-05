@@ -20,12 +20,12 @@ class Sampler(ABC):
   # todo: separate samplers and writers logic
   # todo: implement sampler as iterator
 
-  def __init__(self, orderbooks_file: str, trades_file: str, destination: str, max_workers=4, nrows=1000000):
+  def __init__(self, orderbooks_file: str, trades_file: str, destination: str, max_workers=4, nrows=1000000, starting_idx=0):
     self._orderbooks_file = orderbooks_file
     self._trades_file = trades_file
     self._destination = destination
     self.__pool = ThreadPoolExecutor(max_workers=max_workers)
-    self.__file_idx = 0
+    self.__file_idx = starting_idx
     self._nrows = nrows
     self._orderbook_skiprows = 0
     self._trade_skiprows = 0
@@ -36,6 +36,8 @@ class Sampler(ABC):
 
     self._orderbooks: pd.DataFrame = orderbook_f.result()
     self._trades: pd.DataFrame = trades_f.result()
+    # self._orderbooks = self._load_frame(self._orderbooks_file, nrows, self._orderbook_skiprows, True)
+    # self._trades = self._load_frame(self._trades_file, nrows, self._trade_skiprows, False)
 
     self._trade_skiprows += len(self._trades)
     self._orderbook_skiprows += len(self._orderbooks)
@@ -104,32 +106,32 @@ class Sampler(ABC):
 
 
   def split_samples(self):
-    while not self._finished_trade and not self._finished_orderbook:
-      (orderbook_samples, orderbooks_done), (trade_samples, trades_done) = self._sample()
+    try:
+      while not self._finished_trade and not self._finished_orderbook:
+        (orderbook_samples, orderbooks_done), (trade_samples, trades_done) = self._sample()
 
-      if len(self._trades) != self._nrows and trades_done:
-        self._finished_trade = True
+        if len(self._trades) != self._nrows and trades_done:
+          self._finished_trade = True
 
-      if len(self._orderbooks) != self._nrows and orderbooks_done:
-        self._finished_orderbook = True
+        if len(self._orderbooks) != self._nrows and orderbooks_done:
+          self._finished_orderbook = True
 
-      self._split_by_sample(orderbook_samples, trade_samples)
+        self._split_by_sample(orderbook_samples, trade_samples)
 
-      if orderbooks_done and not self._finished_orderbook: # flag whether dataframe is finished and requires reload
-        self._reload_orderbook()
-      if trades_done and not self._finished_trade:
-        self._reload_trade()
-    concurrent.futures.wait(self._futures)
-    self.__pool.shutdown()
-    logger.info('Finished processing')
+        if orderbooks_done and not self._finished_orderbook: # flag whether dataframe is finished and requires reload
+          self._reload_orderbook()
+        if trades_done and not self._finished_trade:
+          self._reload_trade()
+      concurrent.futures.wait(self._futures)
+    finally:
+      self.__pool.shutdown()
+      logger.info('Finished processing')
 
 class TimeSampler(Sampler):
   def __init__(self, orderbooks_file: str, trades_file: str, destination: str, seconds: int, **kwargs):
     # todo: warmup ?
     super().__init__(orderbooks_file, trades_file, destination, **kwargs)
     self.__delta = datetime.timedelta(seconds=seconds)
-    self._orderbooks.index = helper.get_datetime_index(self._orderbooks, True)
-    self._trades.index = helper.get_datetime_index(self._trades, False)
     self.current_moment = self._orderbooks.index[0]
     logger.info("Loaded TimeSampler")
 

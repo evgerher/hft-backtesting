@@ -64,3 +64,10 @@ class SamplerTest(unittest.TestCase):
     self.assertTrue(volume_traded - volume < 200000)
 
     shutil.rmtree(dest_folder)
+
+  @unittest.skip('')
+  def test_custom(self):
+    samplerr = sampler.TimeSampler('resources/may1/orderbooks/0.csv.gz',
+                                   'resources/may1/trades/0.csv.gz',
+                                   'time-sampled', 300, nrows=1000000)
+    samplerr.split_samples()
