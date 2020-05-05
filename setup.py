@@ -1,10 +1,11 @@
-from setuptools import setup
+from setuptools import setup, find_packages
 
 setup(
   name='backtesting-hft',
   version='1.0.0',
-  packages=['hft'],
-  package_dir={'hft': 'project/'},
+  packages=find_packages(include=['hft', 'hft.*']),
+  # packages=['hft'],
+  # package_dir={'hft': 'project'},
   url='',
   license='',
   author='Evgeny Sorokin',

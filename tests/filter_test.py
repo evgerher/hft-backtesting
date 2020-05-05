@@ -3,7 +3,6 @@ import numpy as np
 import test_utils
 from hft.units.filters import Filters
 from hft.utils.consts import QuoteSides
-
 from hft.utils.data import OrderBook
 
 

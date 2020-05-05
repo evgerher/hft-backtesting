@@ -2,10 +2,10 @@ from typing import List, Dict
 import datetime
 import numpy as np
 
-from hft.dataloader import Connector
+from hft.dataloader.callbacks.connectors import Connector
 from hft.utils.data import OrderBook
 from hft.utils.logger import setup_logger
-from hft.dataloader import TradeMessage, MetaMessage
+from hft.dataloader.callbacks.message import TradeMessage, MetaMessage
 from abc import ABC, abstractmethod
 
 logger = setup_logger('<data-loader>', 'INFO')

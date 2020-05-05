@@ -18,3 +18,5 @@ project/dist/
 notebooks/
 tests/resources/may1/
 venv2/
+build/
+backtesting_hft.egg-info/

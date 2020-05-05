@@ -5,9 +5,11 @@ from datetime import timedelta
 import matplotlib.pyplot as plt
 import numpy as np
 from pandas.plotting import register_matplotlib_converters
-register_matplotlib_converters()
-from hft.backtesting.readers import OrderbookReader, TimeLimitedReader
+
+from hft.backtesting.readers import TimeLimitedReader
 from hft.units.filters import Filters
+
+register_matplotlib_converters()
 import time
 
 class TracesTest(unittest.TestCase):

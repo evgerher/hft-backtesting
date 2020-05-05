@@ -3,7 +3,6 @@ import logging.config
 
 fmt_string = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 to_file = False
-import os
 
 def set_fmt_string(s):
   global fmt_string

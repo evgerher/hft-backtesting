@@ -36,7 +36,7 @@ class SamplerTest(unittest.TestCase):
     volume = 500000
     samplerr = sampler.VolumeSampler('resources/orderbook/orderbooks.csv.gz',
                                    'resources/orderbook/trades.csv.gz',
-                                   dest_folder, volume, 'XBTUSD', nrows=45000)
+                                     dest_folder, volume, 'XBTUSD', nrows=45000)
     samplerr.split_samples()
 
     df1 = pd.read_csv(f'{dest_folder}/orderbook_0.csv.gz', header=None)

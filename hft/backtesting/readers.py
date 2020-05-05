@@ -6,7 +6,7 @@ from hft.utils.data import OrderBook, Trade
 from hft.utils.helper import fix_timestamp_drop_millis, fix_trades_rename
 from hft.utils.logger import setup_logger
 import pandas as pd
-from abc import ABC, abstractmethod
+from abc import ABC
 
 logger = setup_logger('<reader>', 'INFO')
 

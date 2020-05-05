@@ -7,11 +7,12 @@ import numpy as np
 import test_utils
 from hft.backtesting import backtest
 from hft.backtesting.output import StorageOutput
-from hft.units.metrics.composite import Lipton
-from hft.units.metrics.instant import VWAP_volume, HayashiYoshido
-from hft.utils.consts import QuoteSides
 from hft.backtesting.readers import OrderbookReader, TimeLimitedReader
 from hft.backtesting.strategy import CalmStrategy
+from hft.units.metrics.composite import Lipton
+from hft.units.metrics.instant import VWAP_volume, HayashiYoshido, LiquiditySpectrum
+from hft.units.metrics.time import DeltaTimeMetric
+from hft.utils.consts import QuoteSides
 from hft.utils.data import OrderBook
 
 
