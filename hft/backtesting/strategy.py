@@ -3,9 +3,11 @@ from dataclasses import dataclass
 from typing import List, Dict, Tuple, Union, Callable
 
 from hft.backtesting.data import OrderStatus, OrderRequest
+from hft.units.metrics.composite import CompositeMetric
+from hft.units.metrics.instant import DeltaMetric, InstantMetric
+from hft.units.metrics.time import TradeMetric, TimeMetric
 from hft.utils.consts import Statuses, QuoteSides
 from hft.utils.data import OrderBook, Trade
-from hft.units.metrics import InstantMetric, TradeMetric, TimeMetric, DeltaTimeMetric, CompositeMetric, DeltaMetric
 from hft.units.filters import Filters
 from hft.utils.logger import setup_logger
 
