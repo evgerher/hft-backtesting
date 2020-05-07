@@ -4,11 +4,9 @@ setup(
   name='backtesting-hft',
   version='0.5.0',
   packages=find_packages(include=['hft', 'hft.*']),
-  # packages=['hft'],
-  # package_dir={'hft': 'project'},
   url='',
   license='',
   author='Evgeny Sorokin',
   author_email='evgeniy.inpl.sorokin@gmail.com',
-  description='Extendible backtesting platform for HFT based on snapshots and _orderbooks from Bitmex'
+  description='Extendible backtesting platform for HFT based on orderbooks and trades from Bitmex'
 )

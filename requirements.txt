@@ -1,4 +1,4 @@
 pandas
 numpy
 tqdm
-traces
+websocket_client==0.46.0

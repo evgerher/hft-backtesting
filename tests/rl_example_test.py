@@ -53,7 +53,7 @@ class ModelTest(unittest.TestCase):
                         statuses: List[OrderStatus],
                         memory: Dict[str, Union[Trade, OrderBook]]) -> List[OrderRequest]:
         global tick_counter
-        if (tick_counter + 1) % 3000 == 0:
+        if tick_counter % 1500 == 0:
           obs = self.get_observation()
           portfolio_state = self.get_state()
           # reward = self.get_reward(state)
@@ -72,8 +72,8 @@ class ModelTest(unittest.TestCase):
 
     def init_simulation(orderbook_file, trade_file):
 
-      vwap1 = VWAP_volume([int(2.5e5), int(1e6)], name='vwap')
-      liq = LiquiditySpectrum()
+      vwap1 = VWAP_volume([int(2.5e5), int(1e6)], name='vwap', z_normalize=3000)
+      liq = LiquiditySpectrum(z_normalize=3000)
 
       trade_metric = TradeMetric([
         ('quantity', lambda x: len(x)),
