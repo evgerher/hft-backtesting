@@ -43,7 +43,7 @@ class ListReader(Reader):
 class OrderbookReader(Reader):
   # todo: separate reader with and without _trades file
   # todo: move readers into separate class
-  # todo: implement parallel async file read during simulation
+  # todo: implement parallel async file read during strategy
 
   def __init__(self, snapshot_file: str,
                trades_file: Optional[str] = None,
@@ -123,6 +123,8 @@ class OrderbookReader(Reader):
       return obj
 
   def try_reset(self) -> bool:
+    if self._nrows is None:
+      return False # finished whole file
     self._reload_snapshot_df()
     # self._trade_end_condition()
     if self._trades_file is not None:

@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
   name='backtesting-hft',
-  version='1.0.0',
+  version='0.5.0',
   packages=find_packages(include=['hft', 'hft.*']),
   # packages=['hft'],
   # package_dir={'hft': 'project'},

@@ -11,8 +11,8 @@ from hft.utils.types import DepleshionReplenishmentSide
 
 
 class CompositeMetric(InstantMetric):
-  def __init__(self, name: str):
-    super().__init__(name)
+  def __init__(self, name: str, **kwargs):
+    super().__init__(name, **kwargs)
     self._metric_map = None
 
   def set_metric_map(self, metric_map: Dict[str, Metric]):
@@ -20,7 +20,7 @@ class CompositeMetric(InstantMetric):
 
 
 class Lipton(CompositeMetric):
-  def __init__(self, vol_name: str, volume_levels=1):
+  def __init__(self, vol_name: str, volume_levels=1, **kwargs):
     '''
     Lipton metric, evaluvates probability of Upward movement  |
 
@@ -28,7 +28,7 @@ class Lipton(CompositeMetric):
     :param volume_levels: to consider when taking `x` & `y`
     If levels = 1, metric becomes very unstable, maybe more levels will give stability
     '''
-    super().__init__('lipton')
+    super().__init__('lipton', **kwargs)
     self.vol_metric = vol_name
     self._first_time = True
     self.volume_levels = volume_levels
@@ -74,8 +74,8 @@ class Lipton(CompositeMetric):
 
 class QuickestDetection(CompositeMetric): # todo: does not work properly
   # todo: what if h1 and h2 are functions?
-  def __init__(self, h1, h2, name: str, time_horizon=600):
-    super().__init__(name)
+  def __init__(self, h1, h2, name: str, time_horizon=600, **kwargs):
+    super().__init__(name, **kwargs)
     self.h1 = h1
     self.h2 = h2
     self._max = 0.0

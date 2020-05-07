@@ -1,5 +1,5 @@
 from abc import abstractmethod, ABC
-from collections.__init__ import defaultdict, deque
+from collections import defaultdict, deque
 from typing import List, Tuple, Union
 
 import numpy as np
@@ -23,8 +23,8 @@ class InstantMetric(Metric):
     return [self.name]
 
 class InstantMultiMetric(InstantMetric):
-  def __init__(self, name):
-    super().__init__(name)
+  def __init__(self, name, **kwargs):
+    super().__init__(name, **kwargs)
     subitems = self.subitems()
     # self.latest = {name: defaultdict(lambda: None) for name in subitems}
     self.latest = defaultdict(lambda: None)
@@ -44,14 +44,14 @@ class InstantMultiMetric(InstantMetric):
     return [self.name] + self.subitems()
 
 
-class _VWAP(InstantMultiMetric):
+class _VWAP(InstantMetric):
   def subitems(self) -> List[str]:
     return ['bid', 'ask', 'midpoint']
 
-  def _evaluate(self, snapshot: OrderBook) -> Tuple[np.array, np.array, np.array]:
+  def _evaluate(self, snapshot: OrderBook) -> np.array:
     vwap_bid, vwap_ask = self._bid(snapshot), self._ask(snapshot)
     midpoint = self._midpoint(vwap_bid, vwap_ask)
-    return (vwap_bid, vwap_ask, midpoint)
+    return np.stack([vwap_bid, vwap_ask, midpoint])
 
   @abstractmethod
   def _evaluate_side(self, prices: np.array, volumes: np.array) -> np.array:
@@ -71,9 +71,9 @@ class VWAP_depth(_VWAP):
   def __str__(self):
     return f'VWAP (Depth): {self.level}'
 
-  def __init__(self, name = 'vwap-depth', level = 3):
+  def __init__(self, name = 'vwap-depth', level = 3, **kwargs):
     self.level = level
-    super().__init__(name)
+    super().__init__(name, **kwargs)
 
   def subitems(self):
     return [self.level]
@@ -100,14 +100,10 @@ class VWAP_volume(_VWAP):
   def __str__(self):
     return f'<VWAP (Volume): {self.volumes}>'
 
-  def __init__(self, volumes: List[int], symbol: str = None, name: str = 'vwap-volume_total'):
+  def __init__(self, volumes: List[int], symbol: str = None, name: str = 'vwap-volume', **kwargs):
     self.volumes = sorted(volumes)
     self.symbol = symbol
-    super().__init__(name)
-
-  # def subitems(self):
-  #   # return self.volumes
-  #   return ['bid', 'ask', 'midprice']
+    super().__init__(name, **kwargs)
 
   def _evaluate_side(self, prices: np.array, volumes: np.array) -> np.array:
     i = 0
@@ -124,11 +120,11 @@ class VWAP_volume(_VWAP):
         i += 1
         sum_ = np.sum(weights)
 
-      values[idx] = np.sum(prices[:i] * (weights[:i] / volume))
+      weighted = weights / volume
+      ratio = np.sum(weighted) # when there is not enough volume on known levels to meet condition
+      values[idx] = np.sum(prices * weighted) / ratio
       i -= 1
     return values
-
-
 
 
 class LiquiditySpectrum(InstantMetric):
@@ -141,8 +137,8 @@ class LiquiditySpectrum(InstantMetric):
   ls3 = sum(volumes[6:])
   result = [ls1, ls2, ls3]
   '''
-  def __init__(self):
-    super().__init__(name='liquidity-spectrum')
+  def __init__(self, **kwargs):
+    super().__init__(name='liquidity-spectrum', **kwargs)
 
   def _evaluate(self, orderbook: OrderBook) -> np.array:
     volumes = np.stack([orderbook.ask_volumes, orderbook.bid_volumes])
@@ -173,8 +169,8 @@ class HayashiYoshido(DeltaMetric):
 
   This Time metric does not provide `storage` field
   '''
-  def __init__(self, seconds=60):
-    super().__init__(name='hayashi-yoshido')
+  def __init__(self, seconds=60, **kwargs):
+    super().__init__(name='hayashi-yoshido', **kwargs)
     self.seconds = seconds
     self.current_sum = {s: defaultdict(lambda: 0.0) for s in DepleshionReplenishmentSide}
     self.current_sq = {s: defaultdict(lambda: {True: 0.0, False: 0.0}) for s in DepleshionReplenishmentSide}

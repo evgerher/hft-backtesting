@@ -15,9 +15,10 @@ class TimeMetric(Metric):
   def __init__(self, name,
                callables: List[NamedExecutable],
                seconds=60,
-               starting_moment: datetime.datetime = None):
+               starting_moment: datetime.datetime = None,
+               **kwargs):
 
-    super().__init__(name)
+    super().__init__(name, _default_factory=lambda: defaultdict(lambda: None), **kwargs)
     self.metric_names: List[str] = [c[0] for c in callables]
     self.seconds = seconds
     # symbol, side -> trade
@@ -61,7 +62,7 @@ class TimeMetric(Metric):
       assert len(names) == len(values)
 
       for idx, name in enumerate(names):
-        self.latest[(name, *key)] = values[idx]
+        self.latest[event.symbol][(name, *key)] = values[idx]
 
       return values
 
@@ -79,8 +80,8 @@ class TimeMetric(Metric):
 class TradeMetric(TimeMetric):
   def __init__(self,
                callables: List[TradeExecutable],
-               seconds=60):
-    super().__init__(f'trade-metric-{seconds}', callables, seconds)
+               seconds=60, **kwargs):
+    super().__init__(f'trade-metric-{seconds}', callables, seconds, **kwargs)
 
   def _remove_old_values(self, event: Trade, storage: Deque[Trade]):
     while (event.timestamp - storage[0].timestamp).seconds > self.seconds:
@@ -100,9 +101,9 @@ class DeltaTimeMetric(DeltaMetric, TimeMetric):
   def __init__(self,
                seconds=60,
                callables: List[DeltaExecutable] = (('quantity', lambda x: len(x)), ('volume_total', lambda x: sum(x))),
-               starting_moment: datetime.datetime = None):
+               starting_moment: datetime.datetime = None, **kwargs):
 
-    super().__init__(f'__delta-{seconds}', callables, seconds, starting_moment)
+    super().__init__(f'__delta-{seconds}', callables, seconds, starting_moment, **kwargs)
     self._time_storage = defaultdict(deque)
 
   def _remove_old_values(self, event: Delta, storage: Deque[Delta]):

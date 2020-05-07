@@ -233,7 +233,7 @@ class BacktestTest(unittest.TestCase):
                 np.array([10.0, 10.5, 11.0]), np.array([100, 100, 600]))
     ])
 
-    simulation.trigger = lambda *args: [] # disable inner logic for simulation
+    simulation.trigger = lambda *args: [] # disable inner logic for strategy
     backtester = backtest.Backtest(reader, simulation, output, delay=100)
 
     backtester._process_event(reader[0], type(reader[0]) == OrderBook)
