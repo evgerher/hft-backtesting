@@ -1,16 +1,16 @@
-FROM python:alpine3.7
+FROM python:alpine3.8
 RUN apk update
-RUN apk add --no-cache --update py3-numpy=1.13.3-r0
 RUN apk add --no-cache --virtual .build-deps gcc musl-dev
 RUN pip install --upgrade pip
 RUN pip install numpy
 WORKDIR /
-COPY dataloader /dataloader
-COPY utils /utils
-RUN pip install -r /dataloader/requirements.txt
+RUN mkdir /hft
+COPY dataloader /hft/dataloader
+COPY utils /hft/utils
+RUN pip install -r /hft/dataloader/requirements.txt
 ENV PYTHONPATH "${PYTHONPATH}:/usr/lib/python3.7/site-packages:/"
 EXPOSE 9000
 EXPOSE 13000
 ARG HOST
 ARG PASSWORD
-ENTRYPOINT python /dataloader/loader.py --host=${HOST} --password=${PASSWORD}
+ENTRYPOINT python /hft/dataloader/loader.py --host=${HOST} --password=${PASSWORD}

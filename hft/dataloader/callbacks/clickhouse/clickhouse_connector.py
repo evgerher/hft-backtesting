@@ -1,9 +1,10 @@
 import datetime
 
 from hft.dataloader.callbacks.clickhouse import clickhouse_cmds
-from hft.dataloader import Connector
 from clickhouse_driver import Client
-from hft.dataloader import TradeMessage
+
+from hft.dataloader.callbacks.connectors import Connector
+from hft.dataloader.callbacks.message import TradeMessage
 from hft.utils.data import OrderBook
 from hft.utils.logger import setup_logger
 
@@ -32,7 +33,7 @@ class ClickHouse(Connector):
     self.trades_counter = 0
 
   def store_trade(self, trade: TradeMessage):
-    logger.debug(f"Insert trade: symbol={trade.symbol} {trade.size} pieces for {trade.price}, "
+    logger.info(f"Insert trade: symbol={trade.symbol} {trade.size} pieces for {trade.price}, "
                  f"action={trade.action} on side={trade.side} @ {trade.timestamp}")
 
 
@@ -54,7 +55,7 @@ class ClickHouse(Connector):
       self.client.connection.ping()
 
   def store_snapshot(self, symbol: str, timestamp: datetime.datetime, data: list):
-    logger.debug(f"Insert snapshot: {timestamp}, symbol={symbol}")
+    logger.info(f"Insert snapshot: {timestamp}, symbol={symbol}")
     self.client.execute('insert into snapshots values', [[timestamp, timestamp.microsecond  // 1000, symbol] + data])
     self.snapshot_counter += 1
 
@@ -67,7 +68,7 @@ class ClickHouse(Connector):
       self.client = self.create_client()
 
   def store_orderbook(self, orderbook: OrderBook):
-    logger.debug(f"Insert orderbook: {orderbook.timestamp}, symbol={orderbook.symbol}")
+    logger.info(f"Insert orderbook: {orderbook.timestamp}, symbol={orderbook.symbol}")
 
     ap = orderbook.ask_prices.tolist()
     av = orderbook.ask_volumes.tolist()
