@@ -3,8 +3,7 @@ from hft.backtesting.readers import OrderbookReader
 from hft.backtesting.strategy import Strategy
 from hft.backtesting.data import OrderStatus, OrderRequest
 from hft.utils.consts import Statuses, QuoteSides, TradeSides
-from hft.utils.types import Delta
-from hft.utils.data import OrderBook, Trade
+from hft.utils.data import OrderBook, Trade, Delta
 from hft.utils.logger import setup_logger
 from tqdm import tqdm
 
@@ -97,13 +96,13 @@ class Backtest:
         pend_orders = self.__update_pending_objects(event.timestamp, self.pending_orders)
         for ord in pend_orders:
           self.__move_order_to_active(ord)
-      if delta[2] >= 4: # is critical
-        statuses = self.__critical_price_change(event.symbol, delta[2] % 2, event.timestamp, delta[-1])
-      elif delta[2] >= 2: # BID-ALTER or ASK-ALTER
+      if delta.quote_side >= 4: # is critical
+        statuses = self.__critical_price_change(event.symbol, delta.quote_side % 2, event.timestamp, delta.diff)
+      elif delta.quote_side >= 2: # BID-ALTER or ASK-ALTER
         statuses = self._price_step_cancel_order(event, delta)
 
-      if delta[-1].size > 0 and delta[-1][1, 0] < 0 and not self.__last_is_trade[event.symbol]:
-        self.__cancel_quote_levels_update((event.symbol, delta[2] % 2), delta[-1])
+      if delta.diff.size > 0 and delta.diff[1, 0] < 0 and not self.__last_is_trade[event.symbol]:
+        self.__cancel_quote_levels_update((event.symbol, delta.quote_side % 2), delta.diff)
       self.__last_is_trade[event.symbol] = False
       self._update_snapshots(event, delta)
     else:
@@ -186,10 +185,10 @@ class Backtest:
               items[i] = (items[i][0], max(0, order_volume_before + depletion), items[i][2])
 
 
-  def _price_step_cancel_order(self, event: OrderBook, option: Delta) -> List[OrderStatus]:
+  def _price_step_cancel_order(self, event: OrderBook, delta: Delta) -> List[OrderStatus]:
     statuses = []
 
-    side = option[2] % 2 # % 2 is to transform BID-ALTER -> BID and ASK-ALTER -> ASK
+    side = delta.quote_side % 2 # % 2 is to transform BID-ALTER -> BID and ASK-ALTER -> ASK
     orders = self.simulated_orders[(event.symbol, side)]
     altered_side_price = event.bid_prices[0] if side == QuoteSides.BID else event.ask_prices[0]
     price_to_del = []
@@ -380,7 +379,7 @@ class Backtest:
       values = instant_metric.evaluate(row)
       self._flush_output(['instant-metric', 'snapshot', row.symbol, instant_metric.name], row.timestamp, values)
 
-    if delta[-1].size > 0: # If any update occured
+    if delta.diff.size > 0: # If any update occured
       for delta_metric in self.strategy.delta_metrics:
         if delta_metric.filter(delta):
           values = delta_metric.evaluate(delta)

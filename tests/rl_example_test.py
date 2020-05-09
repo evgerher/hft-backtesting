@@ -18,22 +18,29 @@ tick_counter = 0
 class ModelTest(unittest.TestCase):
   # @unittest.skip('')
   def test_run(self):
+    # matrices: [2,3,2], [2,3,2], [2, 2], [2]
     names = ['vwap', 'liquidity-spectrum', 'hayashi-yoshido', 'lipton']
+    # [2, 4]
     time_names = ['trade-metric-60']
+
+
 
     class RLStrategy(Strategy):
 
-      def get_observation(self):
-        # vwap1 = np.fromiter(self.metrics_map['vwap1'].latest.values(), dtype=np.float) # np array [2, 3, 2]
-        # liq   = np.fromiter(self.metrics_map['liquidity-spectrum'].latest.values(), dtype=np.float) # np array [2, 3, 2]
-        # trades = np.fromiter(self.metrics_map['trade-metric-60'].latest.values(), dtype=np.float) # np array [2, 4] ???
-        # hy = np.fromiter(self.metrics_map['hayashi-yoshido'].latest.values(), dtype=np.float) # np array [2, 2]
-        # lipton = np.fromiter(self.metrics_map['lipton'].latest.values(), dtype=np.float) # np array [2]
-        # Each metric is first splitted by `symbol`
+      def return_unfinished(self, statuses: List[OrderStatus], memory: Dict[str, Union[Trade, OrderBook]]):
+        obs = self.get_observation()
+        portfolio_state = self.get_state()
+        # reward = self.get_reward(state) + self.terminal_reward(portfolio_state)
+        # todo: store terminal state and terminal reward
+        super().return_unfinished(statuses, memory)
 
-        # np.array(list(map(lambda x: list(x.values()), self.metrics_map['trade-metric-60'].latest.values())))
-        items = list(map(lambda name: np.array(list(self.metrics_map[name].latest.values()), dtype=np.float), names[:-1]))
-        items += [np.array(list(map(lambda x: list(x.values()), self.metrics_map[name].latest.values()))) for name in time_names] # transformation for time metrics
+      def get_observation(self):
+
+        # transform trivial metrics
+        items = list(map(lambda name: np.array(list(self.metrics_map[name].latest.values()), dtype=np.float), names))
+
+        # transformation for time metrics
+        items += [np.array(list(map(lambda x: list(x.values()), self.metrics_map[name].latest.values()))) for name in time_names]
         return items
 
 
@@ -53,7 +60,7 @@ class ModelTest(unittest.TestCase):
                         statuses: List[OrderStatus],
                         memory: Dict[str, Union[Trade, OrderBook]]) -> List[OrderRequest]:
         global tick_counter
-        if tick_counter % 1500 == 0:
+        if (tick_counter + 1) % 1500 == 0:
           obs = self.get_observation()
           portfolio_state = self.get_state()
           # reward = self.get_reward(state)
@@ -61,7 +68,8 @@ class ModelTest(unittest.TestCase):
 
           # todo: define risk-adjusted reward, model arch, storaging of SARSA?, weights update
           # todo: define initial obs_state pair from environment (first access to .define_orders)
-          # obs = np.stack(obs)
+
+          # todo: store state, reward and define action
 
           orders = []
         else:

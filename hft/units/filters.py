@@ -1,6 +1,5 @@
 from hft.utils.consts import QuoteSides
-from hft.utils.types import Delta
-from hft.utils.data import OrderBook
+from hft.utils.data import OrderBook, Delta
 from typing import Dict, List, Optional, Tuple
 from hft.utils.logger import  setup_logger
 import numpy as np
@@ -21,9 +20,7 @@ class Filters:
       self.symbol = symbol
 
     def filter(self, snapshot: OrderBook) -> Optional:
-      if snapshot.symbol == self.symbol:
-        return True
-      return None
+      return snapshot.symbol == self.symbol
 
 
   class DepthFilter(Filter):
@@ -62,11 +59,16 @@ class Filters:
         return np.stack((price_old, -volume_old)), True
 
     def process(self, snapshot: OrderBook) -> Optional[Delta]:
+      result = self._process(snapshot)
+      if result is not None:
+        self._store_levels(snapshot)
+      return result
+
+    def _process(self, snapshot: OrderBook) -> Optional[Delta]:
       stored_memory = self.stored_bid_price.get(snapshot.symbol, None)
       
       if stored_memory is None:
-        self._store_levels(snapshot)
-        return (snapshot.timestamp, snapshot.symbol, QuoteSides.INIT, np.empty((0,)))
+        return Delta(snapshot.timestamp, snapshot.symbol, QuoteSides.INIT, np.empty((0,)))
       else:
         bid_price = snapshot.bid_prices[0]
         blp = bid_price != self.stored_bid_price[snapshot.symbol][0]
@@ -80,10 +82,10 @@ class Filters:
             answer, is_critical = self.__delta_level_consumed(snapshot.bid_prices, self.stored_bid_price[snapshot.symbol],
                                                  snapshot.bid_volumes, self.stored_bid_volume[snapshot.symbol])
 
-          result = (snapshot.timestamp, snapshot.symbol,
-                    QuoteSides.BID_ALTER_CRITICAL if is_critical else QuoteSides.BID_ALTER, answer)
-          self._store_levels(snapshot)
-          return result
+          return Delta(snapshot.timestamp,
+                         snapshot.symbol,
+                         QuoteSides.BID_ALTER_CRITICAL if is_critical else QuoteSides.BID_ALTER,
+                         answer)
 
         ask_price = snapshot.ask_prices[0]
         alp = ask_price != self.stored_ask_price[snapshot.symbol][0]
@@ -96,25 +98,29 @@ class Filters:
             logger.debug(f'Ask price descreased, level=0')
             is_critical = False
             answer = np.stack(([snapshot.ask_prices[0]], [snapshot.ask_volumes[0]]))
-          result = (snapshot.timestamp, snapshot.symbol,
-                    QuoteSides.ASK_ALTER_CRITICAL if is_critical else QuoteSides.ASK_ALTER, answer)
-          self._store_levels(snapshot)
-          return result
+          return Delta(snapshot.timestamp,
+                         snapshot.symbol,
+                         QuoteSides.ASK_ALTER_CRITICAL if is_critical else QuoteSides.ASK_ALTER,
+                         answer)
 
         bid_levels_volume = snapshot.bid_volumes[:self.levels]
         blv = bid_levels_volume - self.stored_bid_volume[snapshot.symbol][:self.levels]
         selector = blv != 0
         if selector.any():
           logger.debug(f'Bid volume altered, level={np.where(blv == True)[0]}')
-          self._store_levels(snapshot)
-          return (snapshot.timestamp, snapshot.symbol, QuoteSides.BID, np.stack((snapshot.bid_prices[:self.levels][selector], blv[selector])))
+          return Delta(snapshot.timestamp,
+                       snapshot.symbol,
+                       QuoteSides.BID,
+                       np.stack((snapshot.bid_prices[:self.levels][selector], blv[selector])))
 
         ask_volume = snapshot.ask_volumes[:self.levels]
         alv = ask_volume - self.stored_ask_volume[snapshot.symbol][:self.levels]
         selector = alv != 0
         if selector.any():
           logger.debug(f'Ask volume altered, level={np.where(alv == True)[0]}')
-          self._store_levels(snapshot)
-          return (snapshot.timestamp, snapshot.symbol, QuoteSides.ASK, np.stack((snapshot.ask_prices[:self.levels][selector], alv[selector])))
+          return Delta(snapshot.timestamp,
+                       snapshot.symbol,
+                       QuoteSides.ASK,
+                       np.stack((snapshot.ask_prices[:self.levels][selector], alv[selector])))
 
       return None

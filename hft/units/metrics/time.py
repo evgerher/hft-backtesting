@@ -7,8 +7,8 @@ import numpy as np
 
 from hft.units.metric import Metric
 from hft.units.metrics.instant import DeltaMetric
-from hft.utils.data import Trade
-from hft.utils.types import NamedExecutable, Delta, TradeExecutable, DeltaExecutable
+from hft.utils.data import Trade, Delta
+from hft.utils.types import NamedExecutable, TradeExecutable, DeltaExecutable
 
 
 class TimeMetric(Metric):
@@ -18,7 +18,7 @@ class TimeMetric(Metric):
                starting_moment: datetime.datetime = None,
                **kwargs):
 
-    super().__init__(name, _default_factory=lambda: defaultdict(lambda: None), **kwargs)
+    super().__init__(name, _default_factory=lambda: defaultdict(dict), **kwargs)
     self.metric_names: List[str] = [c[0] for c in callables]
     self.seconds = seconds
     # symbol, side -> trade

@@ -1,3 +1,4 @@
+# todo: refactor to enum.Enum s
 class Statuses:
   CANCEL = 0
   NEW = 1

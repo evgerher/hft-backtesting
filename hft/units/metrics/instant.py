@@ -5,8 +5,8 @@ from typing import List, Tuple, Union
 import numpy as np
 
 from hft.units.metric import Metric
-from hft.utils.data import OrderBook, Trade
-from hft.utils.types import Delta, DepleshionReplenishmentSide
+from hft.utils.data import OrderBook, Trade, Delta
+from hft.utils.types import DepleshionReplenishmentSide
 
 
 class InstantMetric(Metric):
@@ -22,26 +22,23 @@ class InstantMetric(Metric):
   def label(self) -> List[str]:
     return [self.name]
 
-class InstantMultiMetric(InstantMetric):
-  def __init__(self, name, **kwargs):
-    super().__init__(name, **kwargs)
-    subitems = self.subitems()
-    # self.latest = {name: defaultdict(lambda: None) for name in subitems}
-    self.latest = defaultdict(lambda: None)
-
-
-  def evaluate(self, snapshot: OrderBook) -> List[np.array]:
-      latest = self._evaluate(snapshot)
-      for idx, item in enumerate(self.subitems()):
-        self.latest[snapshot.symbol, item] = latest[idx]
-      return latest
-
-  @abstractmethod
-  def subitems(self) -> List[str]:
-    raise NotImplementedError
-
-  def label(self):
-    return [self.name] + self.subitems()
+# class InstantMultiMetric(InstantMetric):
+#   def __init__(self, name, **kwargs):
+#     super().__init__(name, **kwargs)
+#
+#
+#   def evaluate(self, snapshot: OrderBook) -> List[np.array]:
+#       latest = self._evaluate(snapshot)
+#       for idx, item in enumerate(self.subitems()):
+#         self.latest[snapshot.symbol, item] = latest[idx]
+#       return latest
+#
+#   @abstractmethod
+#   def subitems(self) -> List[str]:
+#     raise NotImplementedError
+#
+#   def label(self):
+#     return [self.name] + self.subitems()
 
 
 class _VWAP(InstantMetric):
@@ -150,16 +147,15 @@ class LiquiditySpectrum(InstantMetric):
 
 class DeltaMetric(InstantMetric, ABC):
   def filter(self, event: Delta):
-    return np.sum(event[-1][1, :]) != 0.0
+    return np.sum(event.diff[1, :]) != 0.0
 
   def evaluate(self, delta: Delta)  -> float:
     latest = self._evaluate(delta)
-    self.latest[delta[1]] = latest
+    self.latest[delta.symbol] = latest
     return latest
 
 
 class HayashiYoshido(DeltaMetric):
-  # todo: check twice implementation
   '''
   Implements Hayashi-Yoshido UHF volatility estimator on log(!) values of deltas
   Accumulates updates on each step and automatically adjusts values of equation without need of reevaluation of whole sequence
@@ -169,28 +165,33 @@ class HayashiYoshido(DeltaMetric):
 
   This Time metric does not provide `storage` field
   '''
-  def __init__(self, seconds=60, **kwargs):
+  def __init__(self, seconds=300, normalization=False, **kwargs):
     super().__init__(name='hayashi-yoshido', **kwargs)
     self.seconds = seconds
-    self.current_sum = {s: defaultdict(lambda: 0.0) for s in DepleshionReplenishmentSide}
-    self.current_sq = {s: defaultdict(lambda: {True: 0.0, False: 0.0}) for s in DepleshionReplenishmentSide}
 
-    self.current_p = {s: defaultdict(lambda: {True: None, False: None}) for s in DepleshionReplenishmentSide}
-    self.last_diff = {s: defaultdict(lambda: {True: None, False: None}) for s in DepleshionReplenishmentSide}
+    self.__current_sum = {s: defaultdict(lambda: 0.0) for s in DepleshionReplenishmentSide}
+    self.__current_sq = {s: defaultdict(lambda: {True: 0.0, False: 0.0}) for s in DepleshionReplenishmentSide}
+    self.__last_diff = {s: defaultdict(lambda: {True: None, False: None}) for s in DepleshionReplenishmentSide}
+    self._integral_sum = {s: defaultdict(lambda: {True: 0.0, False: 0.0}) for s in DepleshionReplenishmentSide}
 
-    self.sum_deque = {s: defaultdict(lambda: deque()) for s in DepleshionReplenishmentSide}
-    self.sq_deque = {s: defaultdict(lambda: {True: deque(), False: deque()}) for s in DepleshionReplenishmentSide}
+    self._previous_t = {s: defaultdict(lambda: {True: None, False: None}) for s in DepleshionReplenishmentSide}
+
+    self.__sum_deque = {s: defaultdict(deque) for s in DepleshionReplenishmentSide}
+    self.__sq_deque = {s: defaultdict(lambda: {True: deque(), False: deque()}) for s in DepleshionReplenishmentSide}
+    self._integral_deque = {s: defaultdict(lambda: {True: deque(), False: deque()}) for s in DepleshionReplenishmentSide}
 
     ## Main and Aux axes
-    self.p1 = True
-    self.p2 = False
+    self.__p1 = True
+    self.__p2 = False
+
+    self._normalization = normalization
 
   def __str__(self):
     return f'hayashi-yoshido-vol:{self.seconds}'
 
-  def evaluate(self, delta: Delta) -> float:
+  def evaluate(self, delta: Delta) -> Tuple[float, int]: # todo: explain
     latest, queue = self._evaluate(delta)
-    self.latest[delta[1], queue.name] = latest
+    self.latest[delta.symbol, queue.name] = latest
     return latest, queue.value
 
   def _evaluate(self, event:Delta) -> Tuple[float, DepleshionReplenishmentSide]:
@@ -200,19 +201,36 @@ class HayashiYoshido(DeltaMetric):
         _, value = sum_deque[symbol].popleft()
         current_sum[symbol] -= value
 
-      for p in [self.p1, self.p2]:
-        coll = sq_deque[symbol][p]
-        while len(coll) > 0 and (timestamp - coll[0][0]).seconds > self.seconds:
-          _, value = coll.popleft()
-          current_sq[symbol][p] -= value
+      for p in [self.__p1, self.__p2]:
+        for coll, upd in zip((sq_deque[symbol][p], integral_deque[symbol][p]), (current_sq[symbol], integral_sum[symbol])):
+          while len(coll) > 0 and (timestamp - coll[0][0]).seconds > self.seconds:
+            _, value = coll.popleft()
+            upd[p] -= value
 
     def evaluate_side(value):
-      if current_p[symbol][p] is None:
-        current_p[symbol][p] = value
+      # todo: fixme: memorize two queues (depletion & replenishment)
+      # разбить горизонт на секундные интервалы, внутри каждой секунды сумму depletion & replenishment.
+      # Взять общий горизонт k секунд; На общем горизонте посчитать мат ожидание внутри каждого из блоков (120 непересекающихся отрезков).
+      # Из каждого отрезка вычесть average (для обоих сторон) -> центрированная случайная величина
+      # Без hy вычислить covariance. Скалярное произведение между двумя векторами (описаны выше) / произведение модулей
+
+      # todo: Реализовать оба метода и сравнить результаты
+
+
+      if last_diff[symbol][p] is None:
+        last_diff[symbol][p] = value
+        previous_t[symbol][p] = ts
       else:
-        diff = value - current_p[symbol][p]
+        integral_square = (ts - previous_t[symbol][p]).total_seconds() * value / self.seconds
+        integral_sum[symbol][p] += integral_square  # todo, make it optional action
+        previous_t[symbol][p] = ts
+        integral_deque[symbol][p].append((ts, integral_square))
+
+        if self._normalization:
+          diff = value - integral_sum[symbol][p] # mean
+        else:
+          diff = value
         last_diff[symbol][p] = diff
-        current_p[symbol][p] = value
 
         sq_update = diff ** 2
         current_sq[symbol][p] += sq_update
@@ -226,19 +244,39 @@ class HayashiYoshido(DeltaMetric):
           return current_sum[symbol] / np.sqrt(current_sq[symbol][p]) / np.sqrt(current_sq[symbol][not p])
       return None
 
-    sign, quote_side = np.sum(event[-1][1, :]), event[2] # get first volume from `price-volume` np array
-    ts, symbol = event[0], event[1]
-    value = np.sum(event[-1][1, :])
+    value, quote_side = np.sum(event.diff[1, :]), event.quote_side # get first volume from `price-volume` np array
+    ts, symbol = event.timestamp, event.symbol
     p = value > 0
-    value = np.log(abs(value))
+    queues: DepleshionReplenishmentSide = DepleshionReplenishmentSide.eval(value, quote_side)
+    value = abs(value)
 
-    queues: DepleshionReplenishmentSide = DepleshionReplenishmentSide.eval(sign, quote_side)
-    current_p = self.current_p[queues]
-    current_sum = self.current_sum[queues]
-    sum_deque = self.sum_deque[queues]
-    current_sq = self.current_sq[queues]
-    last_diff = self.last_diff[queues]
-    sq_deque = self.sq_deque[queues]
+
+    current_sum = self.__current_sum[queues]
+    sum_deque = self.__sum_deque[queues]
+    current_sq = self.__current_sq[queues]
+    last_diff = self.__last_diff[queues]
+    sq_deque = self.__sq_deque[queues]
+    integral_sum = self._integral_sum[queues]
+    integral_deque = self._integral_deque[queues]
+    previous_t = self._previous_t[queues]
 
     remove_old_values(symbol, ts)
     return evaluate_side(value), queues
+
+
+class CraftyCorrelation(DeltaMetric):
+  def __init__(self, seconds, name):
+    super().__init__(name)
+    self.seconds = seconds
+
+  def evaluate(self, delta: Delta) -> Tuple[float, int]: # todo: explain
+    latest, queue = self._evaluate(delta)
+    self.latest[delta.symbol, queue.name] = latest
+    return latest, queue.value
+
+  def _evaluate(self, event: Delta):
+    value, quote_side = np.sum(event.diff[1, :]), event.quote_side  # get first volume from `price-volume` np array
+    ts, symbol = event.timestamp, event.symbol
+    p = value > 0
+    value = abs(value)
+

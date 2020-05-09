@@ -32,23 +32,23 @@ class SnapshotBuilder:
 
     # state=[{'id': 8799192250, 'side': 'Sell', 'size': 59553, 'price': 8077.5}, ...], symbol=XBTUSD
 
-  def apply(self, delta: list, action: str):
+  def apply(self, updates: list, action: str):
     if action in 'update':
-      for update in delta:
+      for update in updates:
         try:
           self.data[self.mapping[update['id']] + 1] = update['size']
         except Exception as e:
           print(e)
           raise e
     elif action in 'insert': # [{"id": 8799193300, "side": "Sell", "size": 491901}, {"id": 8799193450, "side": "Sell", "size": 1505581}]
-      for insert in delta:
+      for insert in updates:
         _id = insert['id']
         idx: int = self.free.pop(0)
         self.mapping[_id] = idx
         self.data[idx] = float(insert['price'])
         self.data[idx + 1] = insert['size']
     elif action in 'delete': # [{"id":29699996493,"side":"Sell"},{"id":29699996518,"side":"Buy"}]}
-      for delete in delta:
+      for delete in updates:
         _id = delete['id']
         idx: int = self.mapping[_id]
         self.data[idx + 1] = 0
