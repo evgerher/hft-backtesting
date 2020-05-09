@@ -1,3 +1,4 @@
+import datetime
 from abc import abstractmethod, ABC
 from collections import defaultdict, deque
 from typing import List, Tuple, Union
@@ -265,18 +266,73 @@ class HayashiYoshido(DeltaMetric):
 
 
 class CraftyCorrelation(DeltaMetric):
-  def __init__(self, seconds, name):
+  def __init__(self, seconds:int, block_size:int, name):
+    assert seconds % block_size == 0
     super().__init__(name)
     self.seconds = seconds
 
+    self._blocks_quantity = seconds // block_size
+    self._block_time = datetime.timedelta(seconds=block_size)
+    # sum and q in current block
+    self._latest_block = {s: defaultdict(dict) for s in DepleshionReplenishmentSide}
+    # avg over blocks
+    self._blocks = {s: defaultdict(lambda: {True: deque(maxlen=self._blocks_quantity),
+                                            False: deque(maxlen=self._blocks_quantity)})
+                    for s in DepleshionReplenishmentSide}
+    # timer for the next block, until it did not appear
+    self._next_block_t = {s: defaultdict(lambda: {True: None, False: None}) for s in DepleshionReplenishmentSide}
+
+
   def evaluate(self, delta: Delta) -> Tuple[float, int]: # todo: explain
     latest, queue = self._evaluate(delta)
-    self.latest[delta.symbol, queue.name] = latest
+    if latest is None: # reload existing value
+      latest = self.latest[delta.symbol, queue.name]
+    else:
+      self.latest[delta.symbol, queue.name] = latest
     return latest, queue.value
 
   def _evaluate(self, event: Delta):
     value, quote_side = np.sum(event.diff[1, :]), event.quote_side  # get first volume from `price-volume` np array
     ts, symbol = event.timestamp, event.symbol
     p = value > 0
+    queues: DepleshionReplenishmentSide = DepleshionReplenishmentSide.eval(value, quote_side)
     value = abs(value)
 
+    if self._next_block_t[queues][symbol][p] is None:
+      self._next_block_t[queues][symbol][p] = ts + self._block_time
+      self._latest_block[queues][symbol][p] = (value, 1)
+      return None, queues
+    else:
+      if self._next_block_t[queues][symbol][p] < ts:
+        # update queues
+        cur_block = self._latest_block[queues][symbol][p]
+        self._blocks[queues][symbol][p].append(1.0 * cur_block[0] / cur_block[1])
+        self._latest_block[queues][symbol][p] = (value, 1)
+        self._next_block_t[queues][symbol][p] = ts + self._block_time
+
+        # eval correlation
+        items = self._blocks[queues][symbol][p]
+        vsitems = self._blocks[queues][symbol][not p]
+
+
+        s1, s2 = map(np.array, [items, vsitems])
+        l_items, l_vsitems = map(len, [items, vsitems])
+
+        if all([l_vsitems > 1, l_vsitems > 1]):
+          if l_items != l_vsitems:
+            l = min(l_items, l_vsitems)
+            s1 = s1[-l:]
+            s2 = s2[-l:]
+
+          s1 -= np.mean(s1)
+          s2 -= np.mean(s2)
+
+          cov = np.dot(s1, s2)
+          corr = cov / np.linalg.norm(s1, 2) / np.linalg.norm(s2, 2)
+          return corr, queues
+        else:
+          return None, queues
+      else:
+        cur_block = self._latest_block[queues][symbol][p]
+        self._latest_block[queues][symbol][p] = (cur_block[0] + value, cur_block[1] + 1)
+        return None, queues

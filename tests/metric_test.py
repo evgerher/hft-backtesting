@@ -12,7 +12,7 @@ from hft.backtesting.readers import OrderbookReader, TimeLimitedReader
 from hft.backtesting.strategy import CalmStrategy
 from hft.units.metric import ZNormalized
 from hft.units.metrics.composite import Lipton
-from hft.units.metrics.instant import VWAP_volume, HayashiYoshido, LiquiditySpectrum
+from hft.units.metrics.instant import VWAP_volume, HayashiYoshido, LiquiditySpectrum, CraftyCorrelation
 from hft.units.metrics.time import DeltaTimeMetric
 from hft.utils.consts import QuoteSides
 from hft.utils.data import OrderBook
@@ -216,6 +216,16 @@ class MetricTest(unittest.TestCase):
     # v2 = v2.reshape(sh)
 
     self.assertTrue((v == normalized).all()) # todo: does not work, wtf ??? Due to floating error, random 7.6 e-5 mistakes
+
+  def test_crafty_correlation(self):
+    crafty = CraftyCorrelation(40, 5, 'crafty')
+    reader = OrderbookReader(snapshot_file='resources/orderbook/orderbooks.csv.gz', nrows=10000, stop_after=3000)
+    strategy = CalmStrategy(delta_metrics=[crafty])
+    backtest = Backtest(reader, strategy)
+    backtest.run()
+
+    self.assertTrue(all(map(lambda x: abs(x) <= 1.0, crafty.latest.values())))
+
 
 
 if __name__ == '__main__':

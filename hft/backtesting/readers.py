@@ -103,6 +103,8 @@ class OrderbookReader(Reader):
 
   def __next__(self) -> Tuple[Union[Trade, OrderBook], bool]:  # snapshot or trade
     while True:
+      if self.stop_after is not None and self._total_snapshots + self._snapshot_idx == self.stop_after + 1:
+        raise StopIteration()
       if self._limit_trades != 0 and self._read_first_trades or (
           not self._finished_trades
           and self._trade.timestamp <= self._snapshot.timestamp):

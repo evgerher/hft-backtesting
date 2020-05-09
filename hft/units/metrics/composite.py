@@ -43,7 +43,7 @@ class Lipton(CompositeMetric):
       return False
     else:
       return True
-
+  #
   # def filter(self, arg):
   #   return hasattr(arg, 'bid_volumes')
 
