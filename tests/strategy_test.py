@@ -2,13 +2,15 @@ import datetime
 import unittest
 
 from hft.backtesting import backtest
+import numpy as np
+
 from hft.backtesting.output import StorageOutput
 from hft.backtesting.readers import ListReader
-from hft.units.metrics import VWAP_volume, TradeMetric
-from test_utils import TestStrategy
+from hft.units.metrics.instant import VWAP_volume
+from hft.units.metrics.time import TradeMetric
 from hft.utils.consts import TradeSides
 from hft.utils.data import OrderBook, Trade
-import numpy as np
+from test_utils import TestStrategy
 
 
 class StrategyTest(unittest.TestCase):
@@ -16,8 +18,8 @@ class StrategyTest(unittest.TestCase):
   @unittest.skip("works only alone")
   def test_balance(self):
     callables = [
-      ('trades volume_total', lambda trades: sum(map(lambda x: x.volume, trades))),
-      ('trades length', lambda trades: len(trades))
+      ('_trades volume_total', lambda trades: sum(map(lambda x: x.volume, trades))),
+      ('_trades length', lambda trades: len(trades))
     ]
     instant_metrics = [
       VWAP_volume(volumes=[50000, 500000])

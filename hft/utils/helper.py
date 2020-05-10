@@ -42,21 +42,36 @@ def convert_to_datetime(moment: Union[datetime.datetime, str]):
     return moment
 
 
-def fix_timestamp(df, timestamp_index, millis_index):
-  df[timestamp_index] = pd.to_datetime(df[timestamp_index])
-  df[millis_index] = df[millis_index].apply(lambda x: datetime.timedelta(milliseconds=x))
-  df[timestamp_index] += df[millis_index]
+def fix_timestamp(df, timestamp_index, millis_index, precomputed=False):
+  df.iloc[:, timestamp_index] = pd.to_datetime(df.iloc[:, timestamp_index])
+  if not precomputed:
+    df.iloc[:, millis_index] = df.iloc[:, millis_index].apply(lambda x: datetime.timedelta(milliseconds=x))
+    df.iloc[:, timestamp_index] += df.iloc[:, millis_index]
+  return df
+
+def fix_timestamp_drop_millis(df, timestamp_index, millis_index, precomputed=False):
+  df = fix_timestamp(df, timestamp_index, millis_index, precomputed)
   df = df.drop(columns=[millis_index])
   return df
 
 
-def fix_trades(df, timestamp_index, millis_index):
-  df = fix_timestamp(df, timestamp_index, millis_index)
+def fix_trades_rename(df, timestamp_index, millis_index, precomputed=False):
+  df = fix_timestamp_drop_millis(df, timestamp_index, millis_index, precomputed)
   df = df.drop(columns=[5])  # remove `action`
   df.columns = ['symbol', 'timestamp', 'price', 'volume', 'side']
   df.loc[df.side == 'Sell', "side"] = TradeSides.SELL
   df.loc[df.side == 'Buy', "side"] = TradeSides.BUY
   return df
+
+
+def get_datetime_index(df: pd.DataFrame, is_orderboook: bool) -> pd.DatetimeIndex:
+  if is_orderboook:
+    timestamp_index = 0
+    df = fix_timestamp(df, timestamp_index, 1)
+  else:
+    timestamp_index = 1
+    df = fix_timestamp(df, timestamp_index, 2)
+  return pd.DatetimeIndex(df.iloc[:, timestamp_index])
 
 
 def convert_to_timedelta(time_symbol: str) -> Optional[datetime.timedelta]:

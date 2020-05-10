@@ -64,6 +64,6 @@ if __name__ == '__main__':
       if opt in ("--help"):
         print(
           'Dataloader starts to retrieve snapshots of BTCUSD (XBTUSD) and ETHUSD on startup from BITMEX exchange\n',
-          'Stores snapshots on each delta received into clickhouse server',
+          'Stores snapshots on each __delta received into clickhouse server',
         )
         sys.exit(0)

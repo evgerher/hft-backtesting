@@ -1,6 +1,6 @@
 import datetime
 from dataclasses import dataclass
-from typing import List
+from typing import List, Tuple
 
 import numpy as np
 
@@ -82,3 +82,16 @@ class OrderBook:
            f'timestamp: {self.timestamp} ' \
            f'best bid,volume_total=({self.bid_prices[0], self.bid_volumes[0]}), ' \
            f'lowest ask,volume_total=({self.ask_prices[0], self.ask_volumes[0]})>'
+
+
+@dataclass
+class DeltaValue:
+  timestamp: datetime.datetime
+  value: int
+
+@dataclass
+class Delta:
+  timestamp: datetime.datetime
+  symbol: str
+  quote_side: int
+  diff: np.array

@@ -3,8 +3,7 @@ from hft.backtesting.readers import OrderbookReader
 from hft.backtesting.strategy import Strategy
 from hft.backtesting.data import OrderStatus, OrderRequest
 from hft.utils.consts import Statuses, QuoteSides, TradeSides
-from hft.utils.types import Delta
-from hft.utils.data import OrderBook, Trade
+from hft.utils.data import OrderBook, Trade, Delta
 from hft.utils.logger import setup_logger
 from tqdm import tqdm
 
@@ -20,27 +19,30 @@ logger = setup_logger('<backtest>', 'INFO')
 
 
 class Backtest:
+  # todo: move part of logic into sepa rate class and extend from it (trait-like architecture)
 
   def __init__(self, reader: OrderbookReader,
-               simulation: Strategy,
+               strategy: Strategy,
                output: Optional[Output] = None,
-               order_position_policy: str = 'tail', # 'random' or 'head'
+               order_position_policy: str = 'tail',  # 'random' or 'head'
                time_horizon:int=120,
                seed=1337,
-               notify_partial = True,
-               delay=0):
+               notify_partial: bool = True,
+               delay: int=0,
+               warmup: bool=False):
     """
 
     :param reader:
-    :param simulation:
+    :param strategy:
     :param output:
     :param order_position_policy:
     :param time_horizon:
     :param seed:
     :param delay: delay in microseconds !
+    :param warmup: whether to run backtest without strategy decisions until all time metrics are initialized or not.
     """
     self.reader: OrderbookReader = reader
-    self.simulation: Strategy = simulation
+    self.strategy: Strategy = strategy
     self.time_horizon: int = time_horizon
 
     self.memory: Dict[str, Union[Trade, OrderBook]] = {}
@@ -71,13 +73,21 @@ class Backtest:
     self._generate_initial_position = policy
     self.__initialize_time_metrics()
     self.delay = delay
+
+    if warmup: # define amount of seconds for backtest to run before making decisions
+      metrics = [item for sublist in self.strategy.time_metrics.values() for item in sublist]
+      w = max(map(lambda metric: metric.seconds, metrics))
+      self.warmup = self.reader.initial_moment + datetime.timedelta(seconds=w)
+      self.warmup_ended = False
+    else:
+      self.warmup_ended = True
     logger.info(f"Initialized {self}")
 
   def _process_event(self, event: Union[Trade, OrderBook], isorderbook: bool):
     statuses = []
     delta = None
     if isorderbook:
-      delta = self.simulation.filter.process(event)
+      delta = self.strategy.filter.process(event)
       if delta is None:
         return
 
@@ -86,13 +96,13 @@ class Backtest:
         pend_orders = self.__update_pending_objects(event.timestamp, self.pending_orders)
         for ord in pend_orders:
           self.__move_order_to_active(ord)
-      if delta[2] >= 4: # is critical
-        statuses = self.__critical_price_change(event.symbol, delta[2] % 2, event.timestamp, delta[-1])
-      elif delta[2] >= 2: # BID-ALTER or ASK-ALTER
+      if delta.quote_side >= 4: # is critical
+        statuses = self.__critical_price_change(event.symbol, delta.quote_side % 2, event.timestamp, delta.diff)
+      elif delta.quote_side >= 2: # BID-ALTER or ASK-ALTER
         statuses = self._price_step_cancel_order(event, delta)
 
-      if delta[-1].size > 0 and delta[-1][1, 0] < 0 and not self.__last_is_trade[event.symbol]:
-        self.__cancel_quote_levels_update((event.symbol, delta[2] % 2), delta[-1])
+      if delta.diff.size > 0 and delta.diff[1, 0] < 0 and not self.__last_is_trade[event.symbol]:
+        self.__cancel_quote_levels_update((event.symbol, delta.quote_side % 2), delta.diff)
       self.__last_is_trade[event.symbol] = False
       self._update_snapshots(event, delta)
     else:
@@ -100,11 +110,19 @@ class Backtest:
       statuses = self._evaluate_statuses(event)
       self.__last_is_trade[event.symbol] = True
 
+      # it is here just because trades are rare, thus less computations
+      if not self.warmup_ended and self.warmup < self.reader.current_timestamp:
+        self.warmup_ended = True
+
     if self.delay != 0: # if delay, statuses are also queued
       for status in statuses:
         self.pending_statuses.append((status.at, status))
       statuses = self.__update_pending_objects(event.timestamp, self.pending_statuses)
-    actions = self.simulation.trigger(event, statuses, self.memory)
+
+    if self.warmup_ended:
+      actions = self.strategy.trigger(event, statuses, self.memory)
+    else:
+      actions = []
 
     self._update_composite_metrics(event, delta)
     if len(actions) > 0:
@@ -167,10 +185,10 @@ class Backtest:
               items[i] = (items[i][0], max(0, order_volume_before + depletion), items[i][2])
 
 
-  def _price_step_cancel_order(self, event: OrderBook, option: Delta) -> List[OrderStatus]:
+  def _price_step_cancel_order(self, event: OrderBook, delta: Delta) -> List[OrderStatus]:
     statuses = []
 
-    side = option[2] % 2 # % 2 is to transform BID-ALTER -> BID and ASK-ALTER -> ASK
+    side = delta.quote_side % 2 # % 2 is to transform BID-ALTER -> BID and ASK-ALTER -> ASK
     orders = self.simulated_orders[(event.symbol, side)]
     altered_side_price = event.bid_prices[0] if side == QuoteSides.BID else event.ask_prices[0]
     price_to_del = []
@@ -221,7 +239,7 @@ class Backtest:
 
     logger.info(f'Backtest finished run')
     statuses = self._return_unfinished_orders(row.timestamp)
-    self.simulation.return_unfinished(statuses, self.memory)
+    self.strategy.return_unfinished(statuses, self.memory)
 
   def _return_unfinished_orders(self, timestamp: datetime.datetime) -> List[OrderStatus]:
     statuses = [x[1] for x in list(self.pending_statuses)]
@@ -231,7 +249,7 @@ class Backtest:
 
   def _evaluate_statuses(self, trade: Trade) -> List[OrderStatus]:
     """
-    Trade simulation unit
+    Trade strategy unit
     :param trade:
     :return:
     """
@@ -320,7 +338,7 @@ class Backtest:
         self.simulated_orders[(symbol, side)][price].remove(order)
 
   def __initialize_time_metrics(self):
-    for metrics in self.simulation.time_metrics.values():
+    for metrics in self.strategy.time_metrics.values():
       for metric in metrics:
         metric.set_starting_moment(self.reader.initial_moment)
 
@@ -339,7 +357,7 @@ class Backtest:
     self.memory[('trade', row.symbol, row.side)] = row
     self._flush_output(['trade'], row.timestamp, row)  # todo: fix
 
-    for time_metric in self.simulation.time_metrics['trade']:
+    for time_metric in self.strategy.time_metrics['trade']:
       if time_metric.filter(row):
         values = time_metric.evaluate(row)
         self._flush_output(['time-metric', 'trade', row.symbol, time_metric.name], row.timestamp, values)
@@ -347,7 +365,7 @@ class Backtest:
   def _update_composite_metrics(self, data: Union[Trade, OrderBook], option: Optional[Delta]):
     logger.debug('Update composite units')
 
-    for composite_metric in self.simulation.composite_metrics:
+    for composite_metric in self.strategy.composite_metrics:
       if composite_metric.filter(data):
         value = composite_metric.evaluate(data)
         self._flush_output(['composite-metric', 'snapshot', data.symbol, composite_metric.name], data.timestamp, value)
@@ -357,17 +375,24 @@ class Backtest:
     self.memory[('orderbook', row.symbol)] = row
     self._flush_output(['snapshot', row.symbol], row.timestamp, row)
 
-    for instant_metric in self.simulation.instant_metrics:
+    for instant_metric in self.strategy.instant_metrics:
       values = instant_metric.evaluate(row)
       self._flush_output(['instant-metric', 'snapshot', row.symbol, instant_metric.name], row.timestamp, values)
 
-    if delta[-1].size > 0: # If any update occured
-      for delta_metric in self.simulation.delta_metrics:
+    if delta.diff.size > 0: # If any update occured
+      for delta_metric in self.strategy.delta_metrics:
         if delta_metric.filter(delta):
           values = delta_metric.evaluate(delta)
-          # self._flush_output(['delta', 'snapshot', row.symbol, delta_metric.name], row.timestamp, values)
           self._flush_output([delta_metric.name, row.symbol], row.timestamp, values)
       self._flush_output(['delta', row.symbol], row.timestamp, delta)
 
   def __str__(self):
     return '<Backtest with reader={}>'.format(self.reader)
+
+
+class BacktestOnSample(Backtest):
+  def run(self, tqdm_enabled=False, notify_each=3000):
+    for row, isorderbook in self.reader:
+      self._process_event(row, isorderbook)
+    statuses = self._return_unfinished_orders(row.timestamp)
+    self.strategy.return_unfinished(statuses, self.memory)

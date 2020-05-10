@@ -6,7 +6,7 @@ from hft.backtesting.readers import OrderbookReader
 class ReaderTest(unittest.TestCase):
   def test_read_csv(self):
     stop_after = 100
-    snapshotReader = OrderbookReader('resources/orderbook/orderbooks.csv.gz', stop_after=stop_after)
+    snapshotReader = OrderbookReader('resources/orderbook/_orderbooks.csv.gz', stop_after=stop_after)
 
     snapshots = []
     for row, isorderbook in snapshotReader:
@@ -22,7 +22,7 @@ class ReaderTest(unittest.TestCase):
 
   def test_read_csv_gz(self):
     stop_after = 100
-    reader = OrderbookReader('resources/orderbook/orderbooks.csv.gz', stop_after=stop_after)
+    reader = OrderbookReader('resources/orderbook/_orderbooks.csv.gz', stop_after=stop_after)
 
     snapshots = []
     for row in reader:

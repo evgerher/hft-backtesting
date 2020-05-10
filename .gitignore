@@ -15,4 +15,9 @@ project/clickhouse_storage/
 project/build/
 project/*.egg-info/
 project/dist/
+dist/
 notebooks/
+tests/resources/may1/
+venv2/
+build/
+backtesting_hft.egg-info/

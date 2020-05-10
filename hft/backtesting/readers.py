@@ -3,10 +3,10 @@ from typing import Optional, List, Union, Tuple, Generator
 
 from hft.utils import helper
 from hft.utils.data import OrderBook, Trade
-from hft.utils.helper import fix_timestamp, fix_trades
+from hft.utils.helper import fix_timestamp_drop_millis, fix_trades_rename
 from hft.utils.logger import setup_logger
 import pandas as pd
-from abc import ABC, abstractmethod
+from abc import ABC
 
 logger = setup_logger('<reader>', 'INFO')
 
@@ -41,15 +41,16 @@ class ListReader(Reader):
     return self.items[idx]
 
 class OrderbookReader(Reader):
-  # todo: separate reader with and without trades file
+  # todo: separate reader with and without _trades file
   # todo: move readers into separate class
-  # todo: implement parallel async file read during simulation
+  # todo: implement parallel async file read during strategy
 
   def __init__(self, snapshot_file: str,
                trades_file: Optional[str] = None,
                nrows: int = 300000,
                stop_after: int = None,
-               depth_to_load:int=10):
+               depth_to_load:int=10,
+               is_precomputed: bool = False):
     """
     :param snapshot_file: to read
     :param trades_file: to read
@@ -62,6 +63,7 @@ class OrderbookReader(Reader):
     self._snapshot_idx, self._trades_idx = 0, 0
     self._total_snapshots, self._total_trades = 0, 0
 
+    self._is_precomputed = is_precomputed
     self._nrows = nrows
     self._pairs_to_load = depth_to_load
     self._snapshots_df, self.__limit_snapshot = self._read_snapshots(self._snapshot_file, 0)
@@ -83,6 +85,7 @@ class OrderbookReader(Reader):
 
     initial_snapshot = self._snapshots_df.iloc[0, 0]
     initial_trade = initial_trade or initial_snapshot
+
     super().__init__(min(initial_trade, initial_snapshot))
 
   def _read_csv(self, fname, skiprows=0):
@@ -100,6 +103,8 @@ class OrderbookReader(Reader):
 
   def __next__(self) -> Tuple[Union[Trade, OrderBook], bool]:  # snapshot or trade
     while True:
+      if self.stop_after is not None and self._total_snapshots + self._snapshot_idx == self.stop_after + 1:
+        raise StopIteration()
       if self._limit_trades != 0 and self._read_first_trades or (
           not self._finished_trades
           and self._trade.timestamp <= self._snapshot.timestamp):
@@ -120,6 +125,8 @@ class OrderbookReader(Reader):
       return obj
 
   def try_reset(self) -> bool:
+    if self._nrows is None:
+      return False # finished whole file
     self._reload_snapshot_df()
     # self._trade_end_condition()
     if self._trades_file is not None:
@@ -138,17 +145,17 @@ class OrderbookReader(Reader):
 
   def __str__(self):
     return f'<orderbook-reader on orderbook_file={self._snapshot_file}, ' \
-           f'trades_file={self._trades_file}, ' \
+           f'_trades_file={self._trades_file}, ' \
            f'batch_nrows={self._nrows}>'
 
   def _read_trades(self, trades_file: str, skiprows: int):
     df, limit = self.__update_df(trades_file, skiprows)
-    df = fix_trades(df, 1, 2)
+    df = fix_trades_rename(df, 1, 2, self._is_precomputed)
     return df, limit
 
   def _read_snapshots(self, snapshot_file, skiprows:int):
     df, limit = self.__update_df(snapshot_file, skiprows)
-    df = fix_timestamp(df, 0, 1)
+    df = fix_timestamp_drop_millis(df, 0, 1, self._is_precomputed)
     return df, limit
 
   def _end_condition(self) -> bool:
@@ -171,7 +178,7 @@ class OrderbookReader(Reader):
   def _reload_trades_df(self):
     if self._trades_idx >= self._nrows:
       self._total_trades += self._trades_idx
-      logger.info(f"Reload trades file: total-trades={self._total_trades}")
+      logger.info(f"Reload _trades file: total-_trades={self._total_trades}")
       self._trades_df, self._limit_trades = self._read_trades(self._trades_file, self._total_trades)
       self._trades_idx = 0
 
@@ -180,7 +187,7 @@ class OrderbookReader(Reader):
   def _trade_end_condition(self):
     if self._trades_file is not None and (self._limit_trades != self._nrows and self._trades_idx == self._limit_trades):
       self._total_trades += self._trades_idx
-      logger.critical(f"Finished trades_file {self._trades_file}, read {self._total_trades} rows")
+      logger.critical(f"Finished _trades_file {self._trades_file}, read {self._total_trades} rows")
       self._finished_trades = True
 
   def total(self):
@@ -231,7 +238,7 @@ class TimeLimitedReader(OrderbookReader):
       if self._end_cutted_trades:
         self._finished_trades = True
       else:
-        logger.info(f"Reload trades file: total-trades={self._total_trades}")
+        logger.info(f"Reload _trades file: total-_trades={self._total_trades}")
         self._trades_df, self._limit_trades = self._read_trades(self._trades_file, self._total_trades)
         self._trades_idx = 0
         self.current_last_trade_ts = self._trades_df.iloc[-1].timestamp
@@ -246,7 +253,7 @@ class TimeLimitedReader(OrderbookReader):
 
   def read_initial_moment(self, snapshot_file:str) -> datetime.datetime:
     df = pd.read_csv(snapshot_file, header=None, nrows=1)
-    df = fix_timestamp(df, 0, 1)
+    df = fix_timestamp_drop_millis(df, 0, 1)
     return df.loc[0, 0]
 
   def _read_snapshots(self, snapshot_file: str, skiprows:int) -> Tuple[pd.DataFrame, int]:

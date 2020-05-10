@@ -36,4 +36,3 @@ class TradeMessage:
       side = data['side']
       trades.append(TradeMessage(symbol, timestamp, price, size, action, side))
     return trades
-    # '.BETHXBT', '2019.10.21T23:20:00.000Z', 0.02121, 100, 'insert', 'Buy'

@@ -3,9 +3,11 @@ from dataclasses import dataclass
 from typing import List, Dict, Tuple, Union, Callable
 
 from hft.backtesting.data import OrderStatus, OrderRequest
+from hft.units.metrics.composite import CompositeMetric
+from hft.units.metrics.instant import DeltaMetric, InstantMetric
+from hft.units.metrics.time import TradeMetric, TimeMetric
 from hft.utils.consts import Statuses, QuoteSides
 from hft.utils.data import OrderBook, Trade
-from hft.units.metrics import InstantMetric, TradeMetric, TimeMetric, DeltaTimeMetric, CompositeMetric, DeltaMetric
 from hft.units.filters import Filters
 from hft.utils.logger import setup_logger
 
@@ -55,24 +57,23 @@ class Strategy(ABC):
   # delay = 1e-3  # 1 msec delay from my laptop
 
   def __init__(self, instant_metrics: List[InstantMetric] = [],
-               depth_filter: Filters.DepthFilter = Filters.DepthFilter(4),
                delta_metrics: List[DeltaMetric] = [],
                time_metrics_trade: List[TradeMetric] = [],
                time_metrics_snapshot: List[TimeMetric] = [],
                composite_metrics: List[CompositeMetric] = [],
                initial_balance: int = int(1e6),
                balance_listener: Callable[[Tuple], None] = None,
-               filter_depth: int = None):
+               filter_depth: int = 4,
+               warmup=False):
     """
 
     :param instant_metrics:
     :param depth_filter:
     """
+    filter_depth = filter_depth or 4
+    self.filter = Filters.DepthFilter(filter_depth)
+
     self.instant_metrics: List[InstantMetric] = instant_metrics
-    if filter_depth is not None:
-      self.filter = Filters.DepthFilter(filter_depth)
-    else:
-      self.filter: Filters.DepthFilter = depth_filter
     self.time_metrics: Dict[str, List[TimeMetric]] = {
       'trade': time_metrics_trade,
       'orderbook': time_metrics_snapshot
@@ -84,7 +85,7 @@ class Strategy(ABC):
 
     self.balance: Dict[str, float] = defaultdict(lambda: 0)
     self.balance['USD'] = initial_balance
-    self.position: Dict[str, Tuple[float, float]] = defaultdict(lambda: (0.0, 0.0))
+    self.position: Dict[str, Tuple[float, float]] = {'XBTUSD': (0.0, 0.0), 'ETHUSD': (0.0, 0.0)}  # (average_price, volume)
 
     self.balance_listener = balance_listener
     self.fee: Dict[str, TraditionalFee] = defaultdict(lambda: TraditionalFee.zero())

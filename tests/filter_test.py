@@ -3,7 +3,6 @@ import numpy as np
 import test_utils
 from hft.units.filters import Filters
 from hft.utils.consts import QuoteSides
-
 from hft.utils.data import OrderBook
 
 
@@ -35,7 +34,7 @@ class FilterTest(unittest.TestCase):
 
     filter3.process(o1)
     result = filter3.process(o2)
-    delta = result[-1]
+    delta = result.diff
 
     self.assertEqual(result[2], QuoteSides.BID)
     self.assertEqual(delta[0, 0], 9.0)
@@ -50,7 +49,7 @@ class FilterTest(unittest.TestCase):
 
     filter3.process(o1)
     result = filter3.process(o2)
-    delta = result[-1]
+    delta = result.diff
     self.assertEqual(result[2], QuoteSides.BID)
     self.assertEqual(delta[0, 0], 10.0)
     self.assertEqual(delta[1, 0], 50)
@@ -68,7 +67,7 @@ class FilterTest(unittest.TestCase):
 
     filter3.process(o1)
     result = filter3.process(o2)
-    delta = result[-1]
+    delta = result.diff
 
     self.assertEqual(result[2], QuoteSides.ASK)
     self.assertEqual(delta[0, 0], 12.0)
@@ -83,7 +82,7 @@ class FilterTest(unittest.TestCase):
 
     filter3.process(o1)
     result = filter3.process(o2)
-    delta = result[-1]
+    delta = result.diff
 
     self.assertEqual(result[2], QuoteSides.ASK)
     self.assertEqual(delta[0, 0], 13.0)
@@ -98,7 +97,7 @@ class FilterTest(unittest.TestCase):
 
     filter3.process(o1)
     result = filter3.process(o2)
-    delta = result[-1]
+    delta = result.diff
 
     self.assertEqual(result[2], QuoteSides.ASK_ALTER)
     self.assertEqual(delta[0, 0], 10.0)
@@ -113,7 +112,7 @@ class FilterTest(unittest.TestCase):
 
     filter3.process(o1)
     result = filter3.process(o2)
-    delta = result[-1]
+    delta = result.diff
 
     self.assertEqual(result[2], QuoteSides.BID_ALTER)
     self.assertEqual(delta[0, 0], 11.0)
@@ -128,7 +127,7 @@ class FilterTest(unittest.TestCase):
 
     filter3.process(o1)
     result = filter3.process(o2)
-    delta = result[-1]
+    delta = result.diff
 
     self.assertEqual(result[2], QuoteSides.BID_ALTER)
     self.assertEqual(delta[0, 0], 10.0)

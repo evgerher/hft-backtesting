@@ -34,3 +34,6 @@ class GatlingTest(unittest.TestCase):
     strategy = GatlingMM(10000)
     backtester = backtest.Backtest(reader, strategy, delay=300)
     backtester.run()
+
+if __name__ == '__main__':
+  unittest.main()
