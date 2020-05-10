@@ -10,14 +10,14 @@ tests/resources/logs.txt
 tests/tmp.py
 .pytest_cache
 project/clickhouse_storage/
-*.ipynb
 *.log
 project/build/
 project/*.egg-info/
 project/dist/
 dist/
-notebooks/
 tests/resources/may1/
 venv2/
 build/
 backtesting_hft.egg-info/
+notebooks/*-sampled
+notebooks/.ipynb_checkpoints
