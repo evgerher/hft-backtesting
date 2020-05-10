@@ -1,4 +1,5 @@
 # HFT-Backtesting
+![](https://github.com/evgerher/hft-backtesting/workflows/test/badge.svg)
 
 This repository contains implementation of a framework for hft (tick-data) backtesting.  
 You may find a lot of examples in `notebooks` and `tests`, it will be described later.  
