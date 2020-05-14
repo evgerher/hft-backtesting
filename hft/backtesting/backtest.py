@@ -156,7 +156,7 @@ class Backtest:
     return statuses
 
   def __cancel_quote_levels_update(self, symbol_side: SymbolSide,  price_volume: np.array):
-    snapshot: OrderBook = self.memory[(('orderbook', symbol_side[0]))]
+    snapshot: OrderBook = self.memory[('orderbook', symbol_side[0])]
     target_price = snapshot.bid_prices if symbol_side[1] == QuoteSides.BID else snapshot.ask_prices
     target_volume = snapshot.bid_volumes if symbol_side[1] == QuoteSides.BID else snapshot.ask_volumes
 

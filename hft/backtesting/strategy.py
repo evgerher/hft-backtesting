@@ -83,7 +83,7 @@ class Strategy(ABC):
 
     self.active_orders: Dict[int, OrderRequest] = {}
 
-    self.balance: Dict[str, float] = defaultdict(lambda: 0)
+    self.balance: Dict[str, float] = defaultdict(lambda: 0.0)
     self.balance['USD'] = initial_balance
     self.position: Dict[str, Tuple[float, float]] = {'XBTUSD': (0.0, 0.0), 'ETHUSD': (0.0, 0.0)}  # (average_price, volume)
 
