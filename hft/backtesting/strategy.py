@@ -1,6 +1,6 @@
 from collections import defaultdict
 from dataclasses import dataclass
-from typing import List, Dict, Tuple, Union, Callable
+from typing import List, Dict, Tuple, Union, Callable, Optional
 
 from hft.backtesting.data import OrderStatus, OrderRequest
 from hft.units.metrics.composite import CompositeMetric
@@ -53,25 +53,26 @@ class TraditionalFee:
 
 
 class Strategy(ABC):
-  delay = 400e-6  # 400 microsec from intranet computer to exchange terminal
-  # delay = 1e-3  # 1 msec delay from my laptop
 
   def __init__(self, instant_metrics: List[InstantMetric] = [],
                delta_metrics: List[DeltaMetric] = [],
                time_metrics_trade: List[TradeMetric] = [],
                time_metrics_snapshot: List[TimeMetric] = [],
                composite_metrics: List[CompositeMetric] = [],
-               initial_balance: int = int(1e6),
+               initial_balance: float = 1e6,
                balance_listener: Callable[[Tuple], None] = None,
-               filter_depth: int = 4,
-               warmup=False):
+               filter: Optional[Union[int, Filters.Filter]] = 4):
     """
 
     :param instant_metrics:
     :param depth_filter:
     """
-    filter_depth = filter_depth or 4
-    self.filter = Filters.DepthFilter(filter_depth)
+    if isinstance(filter, int):
+      self.filter = Filters.DepthFilter(filter)
+    elif isinstance(filter, Filters.Filter):
+      self.filter = filter
+    else:
+      self.filter = Filters.DepthFilter(4)
 
     self.instant_metrics: List[InstantMetric] = instant_metrics
     self.time_metrics: Dict[str, List[TimeMetric]] = {

@@ -43,19 +43,15 @@ class Lipton(CompositeMetric):
       return False
     else:
       return True
-  #
-  # def filter(self, arg):
-  #   return hasattr(arg, 'bid_volumes')
 
   def _evaluate(self, snapshot: OrderBook):
     assert self._metric_map is not None
     vol_latest = self._metric_map[self.vol_metric].latest
 
-    p_xy = vol_latest[snapshot.symbol, DepleshionReplenishmentSide.BID_ASK.name], \
-           vol_latest[snapshot.symbol, DepleshionReplenishmentSide.ASK_BID.name]
-    if not p_xy[0] is None and not p_xy[1] is None:
-      p_xy = np.array(p_xy)
-      p_xy = np.clip(p_xy, self.__n_clip, self.__p_clip)
+    p_xy = vol_latest[snapshot.symbol, DepleshionReplenishmentSide.BID_ASK.name]
+    if not p_xy is None:
+      # p_xy = np.array(p_xy)
+      # p_xy = np.clip(p_xy, self.__n_clip, self.__p_clip)
       x = np.sum(snapshot.bid_volumes[:self.volume_levels])
       y = np.sum(snapshot.ask_volumes[:self.volume_levels])
       sqrt_corr = np.sqrt((1 + p_xy) / (1 - p_xy))

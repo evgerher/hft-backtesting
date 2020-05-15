@@ -1,3 +1,4 @@
+import datetime
 import random
 import unittest
 from collections import deque, namedtuple
@@ -25,7 +26,7 @@ class ModelTest(unittest.TestCase):
     # matrices: [2,3,2], [2,3,2], [2, 2], [2]
     names = ['vwap', 'liquidity-spectrum', 'hayashi-yoshido', 'lipton']
     # [2, 4]
-    time_names = ['trade-metric-60', 'trade-metric-120']
+    time_names = ['trade-metric-60', 'trade-metric-180']
 
 
     class DuelingDQN(nn.Module):
@@ -35,6 +36,7 @@ class ModelTest(unittest.TestCase):
         self.output_dim = output_dim
         self.gamma = gamma
         self.optimizer = torch.optim.AdamW(self.parameters(), lr=lr)
+        self.MSE_loss = torch.nn.MSELoss()
 
         self.feature_layer = nn.Sequential(
           nn.Linear(input_dim, 128),
@@ -66,12 +68,26 @@ class ModelTest(unittest.TestCase):
         qvals = value + (adv - adv.mean())
         return qvals
 
-    State = namedtuple('State', 'prev_obs prev_ps action obs ps prices done' )
+    State = namedtuple('State', 'prev_obs prev_ps action obs ps prices done')
+
+    class DecisionCondition:
+      def __init__(self, volume: float):
+        self.volume_condition = volume
+        self.volume = 0.0
+
+      def __call__(self, event: Union[Trade, OrderBook]):
+        if isinstance(event, Trade) and event.symbol == 'XBTUSD':
+          self.volume += event.volume
+          if self.volume > self.volume_condition:
+            self.volume %= self.volume_condition
+            return True
+        return False
 
 
     class RLStrategy(Strategy):
-      def __init__(self, model: DuelingDQN, buffer_length: int, **kwags):
+      def __init__(self, condition: DecisionCondition, model: DuelingDQN, buffer_length: int, simulation_end: datetime.datetime, **kwags):
         super().__init__(**kwags)
+        self.condition = condition
         self.buffer: Deque[State] = deque(maxlen=buffer_length)
         self.model: DuelingDQN = model
         self.action_space: Dict[int, Tuple[int, int]] = {
@@ -85,14 +101,15 @@ class ModelTest(unittest.TestCase):
           7: (2, 1),
           8: (2, 2)
         }
+        self._simulation_end = simulation_end
         # work only with xbtusd
         # self.position: Dict[str, Tuple[float, float]] = {'XBTUSD': (0.0, 0.0)}  # (average_price, volume)
 
       def return_unfinished(self, statuses: List[OrderStatus], memory: Dict[str, Union[Trade, OrderBook]]):
         obs = self.get_observation()
         ps = self.get_state()
-        prices = self.get_prices(memory)
-        self.buffer.append((self.prev_obs, self.prev_ps, self.prev_action, obs, ps, prices, True))
+        meta = (self.get_prices(memory), 0.0)
+        self.buffer.append((self.prev_obs, self.prev_ps, self.prev_action, obs, ps, meta, True))
         super().return_unfinished(statuses, memory)
 
       def get_observation(self):
@@ -140,35 +157,39 @@ class ModelTest(unittest.TestCase):
         return alpha - torch.exp(-(terminal_ps[0, :] - terminal_ps[1, :] * terminal_prices))
 
       def update(self):
-        items = random.sample(self.buffer, 1024)
-        prev_obs, prev_ps, action, obs, ps, prices, done = map(torch.tensor, zip(*items))
+        if len(self.buffer) > 1024:
+          items = random.sample(self.buffer, 1024)
+          prev_obs, prev_ps, action, obs, ps, meta, done = map(torch.tensor, zip(*items))
 
-        prev_v, _, prev_qvalues = self.model(prev_obs[~done]) # todo: here are target and current models?
-        v, _, qvalues = self.model(obs[~done])
+          prev_v, _, prev_qvalues = self.model(prev_obs[~done]) # todo: here are target and current models?
+          v, _, qvalues = self.model(obs[~done])
 
-        rewards = torch.empty_like(done)
-        rewards[done] = self.get_terminal_reward(ps[done], prices[done])
-        rewards[~done] = self.get_reward(prev_v, v, prev_ps, ps, tau, a, b)
+          rewards = torch.empty_like(done)
+          rewards[done] = self.get_terminal_reward(ps[done], meta[done][0])
+          rewards[~done] = self.get_reward(prev_v, v, prev_ps[~done], ps[~done], meta[~done][1], a=0.7, b=0.01)
 
-        prev_qvalues = prev_qvalues.gather(1, action)
-        qvalues = qvalues.max(1)[0]
-        expected_q = rewards + self.model.gamma * qvalues
+          prev_qvalues = prev_qvalues.gather(1, action)
+          qvalues = qvalues.max(1)[0]
+          expected_q = rewards + self.model.gamma * qvalues
 
-        loss = self.model.MSE_loss(prev_qvalues, expected_q) # or hubert loss
+          loss = self.model.MSE_loss(prev_qvalues, expected_q)  # or hubert loss
 
-        self.model.optimizer.zero_grad()
-        loss.backward()
-        for param in self.model.parameters():
-          param.grad.data.clamp_(-1., 1.)
-        self.model.optimizer.step()
+          self.model.optimizer.zero_grad()
+          loss.backward()
+          for param in self.model.parameters():
+            param.grad.data.clamp_(-1., 1.)
+          self.model.optimizer.step()
 
-      def get_action(self, obs, ps, eps=0.2): # todo: epsilon must change accordgin to curve
+      def get_action(self, obs, ps, eps=0.2): # todo: epsilon must change accordging to curve
         if np.random.uniform(0.0, 1.0) < eps:
           return random.randint(0, len(self.action_space) - 1)
         with torch.no_grad():
           _, _, qvals = self.model(torch.tensor(obs).unsqueeze(0))
           action = torch.argmax(qvals).cpu().detach().item()
           return action
+
+      def get_timeleft(self, ts: datetime.datetime) -> float:
+        return (self._simulation_end - ts).total_seconds()
 
       def action_to_order(self, action: int, memory, ts, quantity: int) -> List[OrderRequest]: # value from 0 to 8
         offset_bid, offset_ask = self.action_space[action]
@@ -184,33 +205,29 @@ class ModelTest(unittest.TestCase):
       def define_orders(self, row: Union[Trade, OrderBook],
                         statuses: List[OrderStatus],
                         memory: Dict[str, Union[Trade, OrderBook]]) -> List[OrderRequest]:
-        global tick_counter
-        if (tick_counter + 1) % 1500 == 0: # todo: refactor condition
+        if self.condition(row):
           obs = self.get_observation()
           ps = self.get_state()
           action = self.get_action(obs, ps)
-          prices = self.get_prices(memory)
+          meta = (self.get_prices(memory), self.get_timeleft(row.timestamp))
 
           if self.prev_obs is not None:
-            self.buffer.append((self.prev_obs, self.prev_ps, self.prev_action, obs, ps, prices, False))
+            self.buffer.append((self.prev_obs, self.prev_ps, self.prev_action, obs, ps, meta, False))
 
           self.prev_ps = ps
           self.prev_obs = obs
           self.prev_action = action
 
-          if len(self.buffer) > 1024:
-            self.update()
+          self.update()
 
           orders = self.action_to_order(action, memory, row.timestamp, 1000)
         else:
           orders = []
-
-        tick_counter += 1
         return orders
 
     def init_simulation(orderbook_file, trade_file):
 
-      vwap1 = VWAP_volume([int(2.5e5), int(1e6)], name='vwap', z_normalize=1500)
+      vwap = VWAP_volume([int(2.5e5), int(1e6)], name='vwap', z_normalize=1500)
       liq = LiquiditySpectrum(z_normalize=1500)
 
       trade_metric = TradeMetric([
@@ -222,16 +239,19 @@ class ModelTest(unittest.TestCase):
         ('total', lambda trades: np.log(sum(map(lambda x: x.volume, trades))))
       ], seconds=180)
 
-      hy = HayashiYoshido()
+      hy = HayashiYoshido(seconds=90)
       lipton = Lipton(hy.name)
 
       # todo: refactor in backtesting auto-cancel queries with prices worse than top 3 levels
       # todo: update reader to work with only `xbtusd`
-      model = DuelingDQN(input_dim=19, output_dim=9)
+      condition = DecisionCondition(150000.0)
+      model = DuelingDQN(input_dim=38, output_dim=9)
       reader = OrderbookReader(orderbook_file, trade_file, nrows=None, is_precomputed=True)
-      strategy = RLStrategy(model, buffer_length=40000, instant_merics=[vwap1, liq], delta_metrics=[hy],
+      end_ts = reader.get_ending_moment()
+
+      strategy = RLStrategy(condition, model, buffer_length=40000, simulation_end=end_ts, instant_merics=[vwap, liq], delta_metrics=[hy],
                             time_metrics_trade=[trade_metric, trade_metric2], composite_metrics=[lipton], initial_balance=0.0)
-      backtest = BacktestOnSample(reader, strategy, delay=300, warmup=True)
+      backtest = BacktestOnSample(reader, strategy, delay=300, warmup=True, stale_depth=5)
       backtest.run()
 
     init_simulation('../notebooks/time-sampled/orderbook_0.csv.gz', '../notebooks/time-sampled/trade_0.csv.gz')
