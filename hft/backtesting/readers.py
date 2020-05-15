@@ -196,7 +196,7 @@ class OrderbookReader(Reader):
     return None
 
   def get_ending_moment(self) -> datetime.datetime:
-    return min(self._trades_df.index[-1], self._snapshots_df.index[-1]).to_pydatetime()
+    return min(self._trades_df.iloc[-1].timestamp, self._snapshots_df.iloc[-1][0]).to_pydatetime()
 
 
 class TimeLimitedReader(OrderbookReader):
