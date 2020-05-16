@@ -1,7 +1,7 @@
 import datetime
 from abc import abstractmethod
 from collections.__init__ import defaultdict, deque
-from typing import List, Dict, Tuple, Deque, Callable, Union, Optional
+from typing import List, Dict, Tuple, Deque, Callable, Union, Optional, Sequence
 
 import numpy as np
 
@@ -12,13 +12,12 @@ from hft.utils.types import NamedExecutable, TradeExecutable, DeltaExecutable
 
 
 class TimeMetric(Metric):
-  def __init__(self, name,
+  def __init__(self, name, defaults:  Sequence[Tuple[Union[str, Tuple], object]],
                callables: List[NamedExecutable],
                seconds=60,
                starting_moment: datetime.datetime = None,
                **kwargs):
-
-    super().__init__(name, _default_factory=lambda: defaultdict(dict), **kwargs)
+    super().__init__(name, defaults, _default_factory=lambda: defaultdict(dict), **kwargs)
     self.metric_names: List[str] = [c[0] for c in callables]
     self.seconds = seconds
     # symbol, side -> trade
@@ -83,11 +82,12 @@ class TimeMetric(Metric):
 
 
 class TradeMetric(TimeMetric):
-  def __init__(self,
+  def __init__(self, defaults: Sequence[Tuple[Union[str, Tuple], object]],
                callables: List[TradeExecutable],
                seconds=60, name: Optional[str] = None, **kwargs):
     name = name if not name is None else f'trade-metric-{seconds}'
-    super().__init__(name, callables, seconds, **kwargs)
+    assert len(defaults) % len(callables) * 2 == 0  # 2 sides for each callable to compute, unknown amount of labels
+    super().__init__(name, defaults, callables, seconds, **kwargs)
 
   def _remove_old_values(self, event: Trade, storage: Deque[Trade]):
     while (event.timestamp - storage[0].timestamp).seconds > self.seconds:
@@ -103,13 +103,12 @@ class TradeMetric(TimeMetric):
     return f'trade-time-metric:{self.seconds}'
 
 
-class DeltaTimeMetric(DeltaMetric, TimeMetric):
-  def __init__(self,
-               seconds=60,
+class DeltaTimeMetric(DeltaMetric, TimeMetric): # todo: `defaults` sucks
+  def __init__(self, defaults: Sequence[Tuple[Union[str, Tuple], object]], seconds=60,
                callables: List[DeltaExecutable] = (('quantity', lambda x: len(x)), ('volume_total', lambda x: sum(x))),
                starting_moment: datetime.datetime = None, **kwargs):
 
-    super().__init__(f'__delta-{seconds}', callables, seconds, starting_moment, **kwargs)
+    super().__init__(f'delta-{seconds}', defaults, callables, seconds, starting_moment, **kwargs)
     self._time_storage = defaultdict(deque)
 
   def _remove_old_values(self, event: Delta, storage: Deque[Delta]):

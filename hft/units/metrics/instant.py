@@ -1,7 +1,7 @@
 import datetime
 from abc import abstractmethod, ABC
 from collections import defaultdict, deque
-from typing import List, Tuple, Union
+from typing import List, Tuple, Union, Sequence
 
 import numpy as np
 
@@ -74,7 +74,11 @@ class VWAP_depth(_VWAP):
 
   def __init__(self, name = 'vwap-depth', level = 3, **kwargs):
     self.level = level
-    super().__init__(name, **kwargs)
+    defaults = [
+      ('XBTUSD', np.zeros(shape=(3, level))),
+      ('ETHUSD', np.zeros(shape=(3, level)))
+    ]
+    super().__init__(name, defaults, **kwargs)
 
   def subitems(self):
     return [self.level]
@@ -104,7 +108,11 @@ class VWAP_volume(_VWAP):
   def __init__(self, volumes: List[int], symbol: str = None, name: str = 'vwap-volume', **kwargs):
     self.volumes = sorted(volumes)
     self.symbol = symbol
-    super().__init__(name, **kwargs)
+    defaults = [
+      ('XBTUSD', np.zeros(shape=(3, len(volumes)))),
+      ('ETHUSD', np.zeros(shape=(3, len(volumes))))
+    ]
+    super().__init__(name, defaults, **kwargs)
 
   def _evaluate_side(self, prices: np.array, volumes: np.array) -> np.array:
     i = 0
@@ -139,7 +147,11 @@ class LiquiditySpectrum(InstantMetric):
   result = [ls1, ls2, ls3]
   '''
   def __init__(self, **kwargs):
-    super().__init__(name='liquidity-spectrum', **kwargs)
+    defaults = [
+      ('XBTUSD', np.zeros((3, 2))),
+      ('ETHUSD', np.zeros((3, 2))),
+    ]
+    super().__init__('liquidity-spectrum', defaults, **kwargs)
 
   def _evaluate(self, orderbook: OrderBook) -> np.array:
     volumes = np.stack([orderbook.ask_volumes, orderbook.bid_volumes])
@@ -170,7 +182,16 @@ class HayashiYoshido(DeltaMetric):
   This Time metric does not provide `storage` field
   '''
   def __init__(self, seconds=300, normalization=False, **kwargs):
-    super().__init__(name='hayashi-yoshido', **kwargs)
+
+    defaults = []
+
+    # todo: strictly requires refactoring!
+    symbols = ['XBTUSD', 'ETHUSD']
+    for symbol in symbols:
+      for s in DepleshionReplenishmentSide:
+        defaults.append(((symbol, s.name), 0.0))
+
+    super().__init__('hayashi-yoshido', defaults, **kwargs)
     self.seconds = seconds
 
     self.__current_sum = {s: defaultdict(lambda: 0.0) for s in DepleshionReplenishmentSide}
@@ -269,9 +290,17 @@ class HayashiYoshido(DeltaMetric):
 
 
 class CraftyCorrelation(DeltaMetric):
-  def __init__(self, seconds:int, block_size:int, name):
+  def __init__(self, seconds:int, block_size:int, name, **kwargs):
     assert seconds % block_size == 0
-    super().__init__(name)
+    defaults = []
+
+    # todo: strictly requires refactoring!
+    symbols = ['XBTUSD', 'ETHUSD']
+    for symbol in symbols:
+      for s in DepleshionReplenishmentSide:
+        defaults.append(((symbol, s.name), 0.0))
+
+    super().__init__(name, defaults, **kwargs)
     self.seconds = seconds
 
     self._blocks_quantity = seconds // block_size

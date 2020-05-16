@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from collections import defaultdict, deque
 
 from abc import ABC, abstractmethod
-from typing import Tuple, Optional
+from typing import Tuple, Optional, Sequence, Union
 import numpy as np
 
 
@@ -63,7 +63,7 @@ class ZNormalized(defaultdict):
 
 class Metric(ABC):
 
-  def __init__(self, name, z_normalize: Optional[int] = None, _default_factory=lambda: None):
+  def __init__(self, name, defaults: Sequence[Tuple[Union[str, Tuple], object]], z_normalize: Optional[int] = None, _default_factory=lambda: None):
     '''
     Base class for Metric object
     :param name:
@@ -74,6 +74,13 @@ class Metric(ABC):
       self.latest = defaultdict(_default_factory)
     else:
       self.latest = ZNormalized(period=z_normalize, default_factory=_default_factory)
+
+    # Preserve order in all simulations
+    self.init_latest(defaults)
+
+  def init_latest(self, defaults: Sequence[Tuple[Union[str, Tuple], object]]):
+    for k, v in defaults:
+      self.latest[k] = v
 
   # def evaluate(self, *args) -> 'MetricData':
   @abstractmethod

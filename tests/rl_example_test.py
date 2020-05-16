@@ -264,11 +264,18 @@ class ModelTest(unittest.TestCase):
       vwap = VWAP_volume([int(2.5e5), int(1e6)], name='vwap', z_normalize=4000)
       liq = LiquiditySpectrum(z_normalize=4000)
 
-      trade_metric = TradeMetric([
+      defaults = [
+        (('XBTUSD', 0), [0.0]),
+        (('XBTUSD', 1), [0.0]),
+        (('ETHUSD', 0), [0.0]),
+        (('ETHUSD', 1), [0.0]),
+      ]
+
+      trade_metric = TradeMetric(defaults, [
         # ('quantity', lambda x: len(x)),
         ('total', lambda trades: np.log(sum(map(lambda x: x.volume, trades))))
       ], seconds=45) # todo: add z-normalize for time-metrics
-      trade_metric2 = TradeMetric([
+      trade_metric2 = TradeMetric(defaults, [
         # ('quantity', lambda x: len(x)),
         ('total', lambda trades: np.log(sum(map(lambda x: x.volume, trades))))
       ], seconds=75)
