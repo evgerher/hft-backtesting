@@ -15,7 +15,7 @@ from hft.utils.data import Trade, OrderBook
 import numpy as np
 import torch
 from torch import nn
-
+import glob
 
 tick_counter = 0
 
@@ -25,7 +25,7 @@ class ModelTest(unittest.TestCase):
   def test_run(self):
     # matrices: [2,3,2], [2,3,2], [2, 2], [2]
     names = ['vwap', 'liquidity-spectrum', 'hayashi-yoshido', 'lipton']
-    # [2, 4]
+    # [2, 2], [2, 2]
     time_names = ['trade-metric-45', 'trade-metric-75']
 
     class DuelingDQN(nn.Module):
@@ -83,7 +83,7 @@ class ModelTest(unittest.TestCase):
       def __init__(self, model: DuelingDQN, target: DuelingDQN,
                    condition: DecisionCondition,
                    gamma = 0.99, lr=1e-3,
-                   update_each:int=10,
+                   update_each:int=4,
                    buffer_size:int=30000, batch_size=1024):
         self._replay_buffer: Deque[State] = deque(maxlen=buffer_size)
         self._batch_size: int = batch_size
@@ -117,7 +117,7 @@ class ModelTest(unittest.TestCase):
 
       def get_reward(self, prev_v: torch.Tensor, v: torch.Tensor,
                      prev_ps: torch.Tensor, ps: torch.Tensor,
-                     tau: torch.Tensor, a=0.7, b=1./500):
+                     tau: torch.Tensor, a=0.7, b=1./1000):
         vv = a * (v - prev_v)
         vv.squeeze_(1)
 
@@ -193,27 +193,27 @@ class ModelTest(unittest.TestCase):
           8: (2, 2)
         }
 
-
-        # work only with xbtusd
-        # self.position: Dict[str, Tuple[float, float]] = {'XBTUSD': (0.0, 0.0)}  # (average_price, volume)
-
       def return_unfinished(self, statuses: List[OrderStatus], memory: Dict[str, Union[Trade, OrderBook]]):
         obs, ps, meta = self.get_observation(), self.get_state(), (self.get_prices(memory), 0.0)
         self.agent.store_episode(obs, ps, meta, True, None)
         self.agent.end_episode_states.append(ps)
-        self.agent.update() # todo: remove this line later on
+        # self.agent.update() # todo: remove this line later on
         self.agent.reset_state()
 
         super().return_unfinished(statuses, memory)
 
       def get_observation(self):
         # transform trivial metrics
-        items = list(map(lambda name: np.array(list(self.metrics_map[name].latest.values()), dtype=np.float), names))
+        items = list(map(lambda name: self.metrics_map[name].to_numpy(), names))
 
         # transformation for time metrics
-        items += [np.array(list(map(lambda x: list(x.values()), self.metrics_map[name].latest.values()))) for name in time_names]
+        # items += [np.array(list(map(lambda x: list(x.values()), self.metrics_map[name].latest.values()))) for name in time_names]
+        items += list(map(lambda name: self.metrics_map[name].to_numpy(), time_names))
         items = [t.flatten() for t in items]
-        return np.concatenate(items, axis=None)
+        items = np.concatenate(items, axis=None)
+        if len(items) != 38:
+          print('here')
+        return items
         # return items
 
       def get_prices(self, memory) -> float: # todo: refactor and use vwap
@@ -260,31 +260,24 @@ class ModelTest(unittest.TestCase):
           orders = []
         return orders
 
-    def init_simulation(orderbook_file, trade_file):
-      vwap = VWAP_volume([int(2.5e5), int(1e6)], name='vwap', z_normalize=1500)
-      liq = LiquiditySpectrum(z_normalize=1500)
+    def init_simulation(agent: Agent, orderbook_file: str, trade_file: str):
+      vwap = VWAP_volume([int(2.5e5), int(1e6)], name='vwap', z_normalize=4000)
+      liq = LiquiditySpectrum(z_normalize=4000)
 
       trade_metric = TradeMetric([
         # ('quantity', lambda x: len(x)),
         ('total', lambda trades: np.log(sum(map(lambda x: x.volume, trades))))
-      ], seconds=45)
+      ], seconds=45) # todo: add z-normalize for time-metrics
       trade_metric2 = TradeMetric([
         # ('quantity', lambda x: len(x)),
         ('total', lambda trades: np.log(sum(map(lambda x: x.volume, trades))))
       ], seconds=75)
 
-      hy = HayashiYoshido(seconds=90)
+      hy = HayashiYoshido(seconds=75)
       lipton = Lipton(hy.name)
 
       # todo: refactor in backtesting auto-cancel queries with prices worse than top 3 levels
       # todo: update reader to work with only `xbtusd`
-      condition = DecisionCondition(150000.0)
-      model:  DuelingDQN = DuelingDQN(input_dim=38, output_dim=9)
-      target: DuelingDQN = DuelingDQN(input_dim=38, output_dim=9)
-      target.load_state_dict(model.state_dict())
-
-      agent = Agent(model, target, condition, batch_size=16)
-
       reader = OrderbookReader(orderbook_file, trade_file, nrows=None, is_precomputed=True)
       end_ts = reader.get_ending_moment()
 
@@ -292,7 +285,18 @@ class ModelTest(unittest.TestCase):
                             time_metrics_trade=[trade_metric, trade_metric2], composite_metrics=[lipton], initial_balance=0.0)
       backtest = BacktestOnSample(reader, strategy, delay=300, warmup=True, stale_depth=5)
       backtest.run()
-      strategy.episode_counter += 1
 
-    init_simulation('../notebooks/time-sampled/orderbook_0.csv.gz', '../notebooks/time-sampled/trade_0.csv.gz')
-    print(tick_counter)
+    condition = DecisionCondition(150000.0)
+    model: DuelingDQN = DuelingDQN(input_dim=38, output_dim=9)
+    target: DuelingDQN = DuelingDQN(input_dim=38, output_dim=9)
+    target.load_state_dict(model.state_dict())
+
+    agent = Agent(model, target, condition, batch_size=512)
+    for idx, (ob_file, tr_file) in enumerate(zip(glob.glob('../notebooks/time-sampled/orderbook_*'), glob.glob('../notebooks/time-sampled/trade_*'))):
+      init_simulation(agent, ob_file, tr_file)
+      if idx == 3:
+        break
+
+    end_states = agent.end_episode_states
+    for t in end_states:
+      print(t)

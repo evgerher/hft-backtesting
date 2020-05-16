@@ -23,6 +23,9 @@ class InstantMetric(Metric):
   def label(self) -> List[str]:
     return [self.name]
 
+  def to_numpy(self) -> np.array:
+    return np.array(list(self.latest.values()), dtype=np.float)
+
 # class InstantMultiMetric(InstantMetric):
 #   def __init__(self, name, **kwargs):
 #     super().__init__(name, **kwargs)

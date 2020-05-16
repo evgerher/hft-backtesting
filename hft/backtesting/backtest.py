@@ -79,7 +79,7 @@ class Backtest:
 
     if warmup: # define amount of seconds for backtest to run before making decisions
       metrics = [item for sublist in self.strategy.time_metrics.values() for item in sublist]
-      w = max(map(lambda metric: metric.seconds, metrics))
+      w = max(map(lambda metric: metric.seconds, metrics)) + 3
       self.warmup = self.reader.initial_moment + datetime.timedelta(seconds=w)
       self.warmup_ended = False
     else:

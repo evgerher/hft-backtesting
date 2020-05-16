@@ -87,4 +87,8 @@ class Metric(ABC):
   def filter(self, arg):
     return True
 
+  @abstractmethod
+  def to_numpy(self):
+    raise NotImplementedError
+
 
