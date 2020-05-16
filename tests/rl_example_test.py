@@ -2,7 +2,8 @@ import datetime
 import random
 import unittest
 from collections import deque, namedtuple
-from typing import Union, List, Dict, Tuple, NamedTuple, Deque
+from typing import Union, List, Dict, Tuple, Deque
+import pandas as pd
 
 from hft.backtesting.backtest import BacktestOnSample
 from hft.backtesting.data import OrderStatus, OrderRequest
@@ -69,7 +70,7 @@ class ModelTest(unittest.TestCase):
     class DecisionCondition:
       def __init__(self, volume: float):
         self.volume_condition: float = volume
-        self.volume = 0.0
+        self.reset()
 
       def __call__(self, event: Union[Trade, OrderBook]):
         if isinstance(event, Trade) and event.symbol == 'XBTUSD':
@@ -79,6 +80,9 @@ class ModelTest(unittest.TestCase):
             return True
         return False
 
+      def reset(self):
+        self.volume = 0.0
+
     class Agent:
       def __init__(self, model: DuelingDQN, target: DuelingDQN,
                    condition: DecisionCondition,
@@ -87,10 +91,11 @@ class ModelTest(unittest.TestCase):
                    buffer_size:int=30000, batch_size=1024):
         self._replay_buffer: Deque[State] = deque(maxlen=buffer_size)
         self._batch_size: int = batch_size
-        self._condition: DecisionCondition = condition
+        self.condition: DecisionCondition = condition
         self._model : DuelingDQN = model
         self._target: DuelingDQN = target
         self.end_episode_states: List = []
+        self.episode_files: List[Tuple[str, str]] = []
 
         self.EPS_START = 0.9
         self.EPS_END = 0.1
@@ -105,11 +110,19 @@ class ModelTest(unittest.TestCase):
         self.episode_counter = 0
         self.reset_state()
 
+      def episode_results(self) -> pd.DataFrame:
+        fnames, states = agent.episode_files, agent.end_episode_states
+        states = [t[0].tolist() + [t[1]] for t in states]
+        episodes = [list(t[0]) + t[1] for t in zip(fnames, states)]
+        res = pd.DataFrame(episodes, columns=['ob_file', 'tr_file', 'usd', 'xbt', 'eth', 'xbt_price'])
+        return res
+
       def reset_state(self):
         self.obs = None
         self.action = None
         self.ps = None
         self.episode_counter += 1
+        self.condition.reset()
 
         # reload weights
         if (self.episode_counter + 1) % self._update_each == 0:
@@ -117,12 +130,12 @@ class ModelTest(unittest.TestCase):
 
       def get_reward(self, prev_v: torch.Tensor, v: torch.Tensor,
                      prev_ps: torch.Tensor, ps: torch.Tensor,
-                     tau: torch.Tensor, a=0.7, b=1./1000):
+                     tau: torch.Tensor, a=1.5, b=1./1000):
         vv = a * (v - prev_v)
         vv.squeeze_(1)
 
-        state_delta = torch.abs(ps) - torch.abs(prev_ps)
-        pos = (torch.exp(b*tau) * torch.sign(state_delta))
+        state_delta = torch.abs(prev_ps) - torch.abs(ps) # todo: updated here, react negatively on accumulation of assets
+        pos = (torch.exp(b*tau) * state_delta) # todo: updated here, instead of sign, use delta
 
         # a(V_t - V_{t-1}) + e^{b*tau} * sgn(|i_t| - |i_{t-1}|)
         return vv + pos
@@ -196,7 +209,7 @@ class ModelTest(unittest.TestCase):
       def return_unfinished(self, statuses: List[OrderStatus], memory: Dict[str, Union[Trade, OrderBook]]):
         obs, ps, meta = self.get_observation(), self.get_state(), (self.get_prices(memory), 0.0)
         self.agent.store_episode(obs, ps, meta, True, None)
-        self.agent.end_episode_states.append(ps)
+        self.agent.end_episode_states.append((ps, meta[0])) # end state and prices
         # self.agent.update() # todo: remove this line later on
         self.agent.reset_state()
 
@@ -246,7 +259,7 @@ class ModelTest(unittest.TestCase):
       def define_orders(self, row: Union[Trade, OrderBook],
                         statuses: List[OrderStatus],
                         memory: Dict[str, Union[Trade, OrderBook]]) -> List[OrderRequest]:
-        if self.agent._condition(row):
+        if self.agent.condition(row):
           obs = self.get_observation()
           ps = self.get_state()
           action = self.agent.get_action(obs, ps)
@@ -280,7 +293,7 @@ class ModelTest(unittest.TestCase):
         ('total', lambda trades: np.log(sum(map(lambda x: x.volume, trades))))
       ], seconds=75)
 
-      hy = HayashiYoshido(seconds=75)
+      hy = HayashiYoshido(seconds=90)
       lipton = Lipton(hy.name)
 
       # todo: refactor in backtesting auto-cancel queries with prices worse than top 3 levels
@@ -298,9 +311,10 @@ class ModelTest(unittest.TestCase):
     target: DuelingDQN = DuelingDQN(input_dim=38, output_dim=9)
     target.load_state_dict(model.state_dict())
 
-    agent = Agent(model, target, condition, batch_size=512)
+    agent = Agent(model, target, condition, batch_size=6)
     for idx, (ob_file, tr_file) in enumerate(zip(glob.glob('../notebooks/time-sampled/orderbook_*'), glob.glob('../notebooks/time-sampled/trade_*'))):
       init_simulation(agent, ob_file, tr_file)
+      agent.episode_files.append((ob_file, tr_file))
       if idx == 3:
         break
 

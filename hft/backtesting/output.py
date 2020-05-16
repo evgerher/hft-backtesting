@@ -81,3 +81,7 @@ class StorageOutput(Output):
 
   def metric_action(self, timestamp: datetime.datetime, object):
     pass
+
+
+def make_plot_orderbook_trade(orderbook_file, trade_file):
+  pass
