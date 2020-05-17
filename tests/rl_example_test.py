@@ -127,11 +127,13 @@ class ModelTest(unittest.TestCase):
 
         # reload weights
         if (self.episode_counter + 1) % self._update_each == 0:
-          self._target.load_state_dict(self._model.state_dict())
+          state = self._model.state_dict()
+          self._target.load_state_dict(state)
+          torch.save(state, 'model.pth')
 
       def get_reward(self, prev_v: torch.Tensor, v: torch.Tensor,
                      prev_ps: torch.Tensor, ps: torch.Tensor,
-                     tau: torch.Tensor, a=1.5, b=1./1000):
+                     tau: torch.Tensor, a=0.35, b=1./1000):
         vv = a * (v - prev_v)
         vv.squeeze_(1)
 
@@ -141,8 +143,8 @@ class ModelTest(unittest.TestCase):
         # a(V_t - V_{t-1}) + e^{b*tau} * sgn(|i_t| - |i_{t-1}|)
         return vv + pos
 
-      def get_terminal_reward(self, terminal_ps, terminal_prices, alpha=3.0):
-        return alpha - torch.exp(-(terminal_ps[:, 0] / terminal_prices - terminal_ps[:, 1])) # 0: usd, 1: xbtusd, 2: ethusd
+      def get_terminal_reward(self, terminal_ps, terminal_prices, alpha=1.0):
+        return alpha - torch.exp(-(terminal_ps[:, 0] / terminal_prices - terminal_ps[:, 1])) - torch.exp(terminal_ps[:, 1]) # 0: usd, 1: xbtusd, 2: ethusd
 
       def store_episode(self, new_obs, new_ps, meta, done, action):
         if self.is_initialized():
@@ -171,12 +173,14 @@ class ModelTest(unittest.TestCase):
           done = torch.tensor(done, dtype=torch.bool)
           action = torch.tensor(action, dtype=torch.long).unsqueeze(1)
 
-          v, _, qvalues = self._model(prev_obs) # todo: here are target and current models?
+          v, _, qvalues = self._model(prev_obs)
           next_v, _, next_qvalues = self._target(obs)
 
           rewards = torch.empty_like(done, dtype=torch.float)
           rewards[done] = self.get_terminal_reward(ps[done], meta[done][:, 0])
           rewards[~done] = self.get_reward(v[~done], next_v[~done], prev_ps[~done][:, 1], ps[~done][:, 1], meta[~done][:, 1])
+          rewards.clamp_(-1., 1.) # reward clipping
+
 
           qvalues = qvalues.gather(1, action).squeeze(1)
           next_qvalues = next_qvalues.max(1)[0]
@@ -187,7 +191,7 @@ class ModelTest(unittest.TestCase):
           self.optimizer.zero_grad()
           loss.backward()
           for param in self._model.parameters():
-            param.grad.data.clamp_(-1., 1.)
+            param.grad.data.clamp_(-1., 1.) # gradient clipping
           self.optimizer.step()
 
     class RLStrategy(Strategy):
@@ -208,20 +212,25 @@ class ModelTest(unittest.TestCase):
         }
 
       def return_unfinished(self, statuses: List[OrderStatus], memory: Dict[str, Union[Trade, OrderBook]]):
-        obs, ps, meta = self.get_observation(), self.get_state(), (self.get_prices(memory), 0.0)
+        obs, ps, prices = self.get_observation(memory)
+        meta = (prices, 0.0)
         self.agent.store_episode(obs, ps, meta, True, None)
         self.agent.end_episode_states.append((ps, meta[0])) # end state and prices
         self.agent.reset_state()
 
         super().return_unfinished(statuses, memory)
 
-      def get_observation(self):
+      def get_observation(self, memory):
         items = list(map(lambda name: self.metrics_map[name].to_numpy(), names + time_names))
         items = [t.flatten() for t in items]
+
+        prices = self.get_prices(memory)
+        ps = self.get_state()
+        state = np.array([ps[0] / prices, ps[1]])
+
+        items += [state]
         items = np.concatenate(items, axis=None)
-        if len(items) != 38:
-          print('here')
-        return items
+        return items, ps, prices
 
       def get_prices(self, memory) -> float: # todo: refactor and use vwap
         xbt: OrderBook = memory[('orderbook', 'XBTUSD')]
@@ -254,10 +263,9 @@ class ModelTest(unittest.TestCase):
                         memory: Dict[str, Union[Trade, OrderBook]],
                         is_trade: bool) -> List[OrderRequest]:
         if self.agent.condition(is_trade, row):
-          obs = self.get_observation()
-          ps = self.get_state()
+          obs, ps, prices = self.get_observation(memory)
           action = self.agent.get_action(obs)
-          meta = (self.get_prices(memory), self.get_timeleft(row.timestamp))
+          meta = (prices, self.get_timeleft(row.timestamp))
 
           self.agent.store_episode(obs, ps, meta, False, action)
           self.agent.update()
@@ -312,12 +320,14 @@ class ModelTest(unittest.TestCase):
       return backtest.output
 
     condition = DecisionCondition(150000.0)
-    model: DuelingDQN = DuelingDQN(input_dim=38, output_dim=9)
-    target: DuelingDQN = DuelingDQN(input_dim=38, output_dim=9)
+    model: DuelingDQN = DuelingDQN(input_dim=40, output_dim=9)
+    target: DuelingDQN = DuelingDQN(input_dim=40, output_dim=9)
     target.load_state_dict(model.state_dict())
 
-    agent = Agent(model, target, condition, batch_size=6)
-    for idx, (ob_file, tr_file) in enumerate(zip(glob.glob('../notebooks/time-sampled/orderbook_*'), glob.glob('../notebooks/time-sampled/trade_*'))):
+    agent = Agent(model, target, condition, batch_size=8)
+    pairs = list(zip(glob.glob('../notebooks/time-sampled/orderbook_*'), glob.glob('../notebooks/time-sampled/trade_*')))
+    for idx in range(40):
+      ob_file, tr_file = random.choice(pairs)
       result_output = init_simulation(agent, ob_file, tr_file, output_required=True)
       agent.episode_files.append((ob_file, tr_file))
       break
