@@ -123,7 +123,7 @@ class Backtest:
       statuses = self.__update_pending_objects(event.timestamp, self.pending_statuses)
 
     if self.warmup_ended:
-      actions = self.strategy.trigger(event, statuses, self.memory)
+      actions = self.strategy.trigger(event, statuses, self.memory, not isorderbook)
     else:
       actions = []
 

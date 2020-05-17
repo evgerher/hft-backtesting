@@ -200,14 +200,16 @@ class Strategy(ABC):
   @abstractmethod
   def define_orders(self, row: Union[Trade, OrderBook],
                     statuses: List[OrderStatus],
-                    memory: Dict[str, Union[Trade, OrderBook]]) -> List[OrderRequest]:
+                    memory: Dict[str, Union[Trade, OrderBook]],
+                    is_trade: bool) -> List[OrderRequest]:
     raise NotImplementedError
 
   def trigger(self, row: Union[Trade, OrderBook],
                statuses: List[OrderStatus],
-               memory: Dict[str, Union[Trade, OrderBook]]):
+               memory: Dict[str, Union[Trade, OrderBook]],
+               is_trade: bool):
     self._balance_update_by_status(statuses)
-    orders = self.define_orders(row, statuses, memory)
+    orders = self.define_orders(row, statuses, memory, is_trade)
     self.__validate_orders(orders, memory)
     self._balance_update_new_order(orders)
     self.__remove_finished_orders(statuses)
@@ -241,7 +243,8 @@ class Strategy(ABC):
 class CalmStrategy(Strategy):
   def define_orders(self, row: Union[Trade, OrderBook],
                     statuses: List[OrderStatus],
-                    memory: Dict[str, Union[Trade, OrderBook]]):
+                    memory: Dict[str, Union[Trade, OrderBook]],
+                    is_trade: bool):
     return []
 
   def trigger(self, *args):

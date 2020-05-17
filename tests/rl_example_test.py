@@ -2,11 +2,12 @@ import datetime
 import random
 import unittest
 from collections import deque, namedtuple
-from typing import Union, List, Dict, Tuple, Deque
+from typing import Union, List, Dict, Tuple, Deque, Optional
 import pandas as pd
 
 from hft.backtesting.backtest import BacktestOnSample
 from hft.backtesting.data import OrderStatus, OrderRequest
+from hft.backtesting.output import make_plot_orderbook_trade, Output, SimulatedOrdersOutput
 from hft.backtesting.readers import OrderbookReader
 from hft.backtesting.strategy import Strategy
 from hft.units.metrics.composite import Lipton
@@ -72,8 +73,8 @@ class ModelTest(unittest.TestCase):
         self.volume_condition: float = volume
         self.reset()
 
-      def __call__(self, event: Union[Trade, OrderBook]):
-        if isinstance(event, Trade) and event.symbol == 'XBTUSD':
+      def __call__(self, is_trade: bool, event: Union[Trade, OrderBook]):
+        if is_trade and event.symbol == 'XBTUSD':
           self.volume += event.volume
           if self.volume > self.volume_condition:
             self.volume %= self.volume_condition
@@ -153,7 +154,7 @@ class ModelTest(unittest.TestCase):
       def is_initialized(self):
         return self.obs is not None  # happens after reset, first obs is missing
 
-      def get_action(self, obs, ps, eps=0.8): # todo: epsilon must change accordging to curve
+      def get_action(self, obs):
         eps = self.EPS_END + (self.EPS_START - self.EPS_END) * np.exp(-1. * self.episode_counter / self.EPS_DECAY)
         if np.random.uniform(0.0, 1.0) < eps:
           return random.randint(0, self._model.output_dim - 1)
@@ -210,33 +211,25 @@ class ModelTest(unittest.TestCase):
         obs, ps, meta = self.get_observation(), self.get_state(), (self.get_prices(memory), 0.0)
         self.agent.store_episode(obs, ps, meta, True, None)
         self.agent.end_episode_states.append((ps, meta[0])) # end state and prices
-        # self.agent.update() # todo: remove this line later on
         self.agent.reset_state()
 
         super().return_unfinished(statuses, memory)
 
       def get_observation(self):
-        # transform trivial metrics
-        items = list(map(lambda name: self.metrics_map[name].to_numpy(), names))
-
-        # transformation for time metrics
-        # items += [np.array(list(map(lambda x: list(x.values()), self.metrics_map[name].latest.values()))) for name in time_names]
-        items += list(map(lambda name: self.metrics_map[name].to_numpy(), time_names))
+        items = list(map(lambda name: self.metrics_map[name].to_numpy(), names + time_names))
         items = [t.flatten() for t in items]
         items = np.concatenate(items, axis=None)
         if len(items) != 38:
           print('here')
         return items
-        # return items
 
       def get_prices(self, memory) -> float: # todo: refactor and use vwap
         xbt: OrderBook = memory[('orderbook', 'XBTUSD')]
-        # eth: OrderBook = memory[('orderbook', 'ETHUSD')]
-
         xbt_midprice = (xbt.ask_prices[0] + xbt.bid_prices[0]) / 2
+
+        # eth: OrderBook = memory[('orderbook', 'ETHUSD')]
         # eth_midprice = (eth.ask_prices[0] + eth.bid_prices[0]) / 2
 
-        # return eth_midprice / xbt_midprice
         return xbt_midprice
 
       def get_state(self) -> np.array:
@@ -258,11 +251,12 @@ class ModelTest(unittest.TestCase):
 
       def define_orders(self, row: Union[Trade, OrderBook],
                         statuses: List[OrderStatus],
-                        memory: Dict[str, Union[Trade, OrderBook]]) -> List[OrderRequest]:
-        if self.agent.condition(row):
+                        memory: Dict[str, Union[Trade, OrderBook]],
+                        is_trade: bool) -> List[OrderRequest]:
+        if self.agent.condition(is_trade, row):
           obs = self.get_observation()
           ps = self.get_state()
-          action = self.agent.get_action(obs, ps)
+          action = self.agent.get_action(obs)
           meta = (self.get_prices(memory), self.get_timeleft(row.timestamp))
 
           self.agent.store_episode(obs, ps, meta, False, action)
@@ -273,9 +267,18 @@ class ModelTest(unittest.TestCase):
           orders = []
         return orders
 
-    def init_simulation(agent: Agent, orderbook_file: str, trade_file: str):
-      vwap = VWAP_volume([int(2.5e5), int(1e6)], name='vwap', z_normalize=4000)
-      liq = LiquiditySpectrum(z_normalize=4000)
+    def init_simulation(agent: Agent, orderbook_file: str, trade_file: str,
+                        output_required: Union[bool, Output] = False) -> Optional[Output]:
+
+      if isinstance(output_required, bool) and output_required:
+        output = SimulatedOrdersOutput()
+      elif isinstance(output_required, Output):
+        output = output_required
+      else:
+        output = None
+
+      vwap = VWAP_volume([int(2.5e5), int(1e6)], name='vwap', z_normalize=3000)
+      liq = LiquiditySpectrum(z_normalize=3000)
 
       defaults = [
         (('XBTUSD', 0), [0.0]),
@@ -303,8 +306,10 @@ class ModelTest(unittest.TestCase):
 
       strategy = RLStrategy(agent, simulation_end=end_ts, instant_metrics=[vwap, liq], delta_metrics=[hy],
                             time_metrics_trade=[trade_metric, trade_metric2], composite_metrics=[lipton], initial_balance=0.0)
-      backtest = BacktestOnSample(reader, strategy, delay=300, warmup=True, stale_depth=5)
+      backtest = BacktestOnSample(reader, strategy, output=output, delay=300, warmup=True, stale_depth=5)
       backtest.run()
+
+      return backtest.output
 
     condition = DecisionCondition(150000.0)
     model: DuelingDQN = DuelingDQN(input_dim=38, output_dim=9)
@@ -313,11 +318,17 @@ class ModelTest(unittest.TestCase):
 
     agent = Agent(model, target, condition, batch_size=6)
     for idx, (ob_file, tr_file) in enumerate(zip(glob.glob('../notebooks/time-sampled/orderbook_*'), glob.glob('../notebooks/time-sampled/trade_*'))):
-      init_simulation(agent, ob_file, tr_file)
+      result_output = init_simulation(agent, ob_file, tr_file, output_required=True)
       agent.episode_files.append((ob_file, tr_file))
-      if idx == 3:
-        break
+      break
 
-    end_states = agent.end_episode_states
-    for t in end_states:
-      print(t)
+    orders_side1, orders_side2 = list(result_output.orders.values())
+    make_plot_orderbook_trade(agent.episode_files[-1][0], 'XBTUSD', orders_side1 + orders_side2, True)
+    # end_states = agent.end_episode_states
+    # for t in end_states:
+    #   print(t)
+
+
+  def test_plot(self):
+    make_plot_orderbook_trade('../notebooks/time-sampled/orderbook_2259.csv.gz', 'XBTUSD', orderbook_precomputed=True)
+    print('ok')
