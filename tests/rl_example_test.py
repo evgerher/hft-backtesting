@@ -298,11 +298,11 @@ class ModelTest(unittest.TestCase):
       trade_metric = TradeMetric(defaults, [
         # ('quantity', lambda x: len(x)),
         ('total', lambda trades: np.log(sum(map(lambda x: x.volume, trades))))
-      ], seconds=45) # todo: add z-normalize for time-metrics
+      ], seconds=45, z_normalize=2000) # todo: add z-normalize for time-metrics
       trade_metric2 = TradeMetric(defaults, [
         # ('quantity', lambda x: len(x)),
         ('total', lambda trades: np.log(sum(map(lambda x: x.volume, trades))))
-      ], seconds=75)
+      ], seconds=75, z_normalize=2000)
 
       hy = HayashiYoshido(seconds=90)
       lipton = Lipton(hy.name)
@@ -328,12 +328,12 @@ class ModelTest(unittest.TestCase):
     pairs = list(zip(glob.glob('../notebooks/time-sampled/orderbook_*'), glob.glob('../notebooks/time-sampled/trade_*')))
     for idx in range(40):
       ob_file, tr_file = random.choice(pairs)
-      result_output = init_simulation(agent, ob_file, tr_file, output_required=True)
+      result_output = init_simulation(agent, ob_file, tr_file, output_required=False)
       agent.episode_files.append((ob_file, tr_file))
-      break
+      # break
 
-    orders_side1, orders_side2 = list(result_output.orders.values())
-    make_plot_orderbook_trade(agent.episode_files[-1][0], 'XBTUSD', orders_side1 + orders_side2, True)
+    # orders_side1, orders_side2 = list(result_output.orders.values())
+    # make_plot_orderbook_trade(agent.episode_files[-1][0], 'XBTUSD', orders_side1 + orders_side2, True)
     # end_states = agent.end_episode_states
     # for t in end_states:
     #   print(t)
