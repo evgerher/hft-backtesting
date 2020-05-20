@@ -1,7 +1,7 @@
 import datetime
 import random
 import unittest
-from collections import deque, namedtuple
+from collections import deque, namedtuple, defaultdict
 from typing import Union, List, Dict, Tuple, Deque, Optional
 import pandas as pd
 
@@ -28,7 +28,7 @@ class ModelTest(unittest.TestCase):
     # matrices: [2,3,2], [2,3,2], [2, 2], [2]
     names = ['vwap', 'liquidity-spectrum', 'hayashi-yoshido', 'lipton']
     # [2, 2], [2, 2]
-    time_names = ['trade-metric-45', 'trade-metric-75']
+    time_names = ['trade-metric-45', 'trade-metric-80']
 
     class DuelingDQN(nn.Module):
       def __init__(self, input_dim: int, output_dim: int):
@@ -87,29 +87,33 @@ class ModelTest(unittest.TestCase):
     class Agent:
       def __init__(self, model: DuelingDQN, target: DuelingDQN,
                    condition: DecisionCondition,
-                   gamma = 0.99, lr=1e-3,
-                   update_each:int=4,
-                   buffer_size:int=30000, batch_size=1024):
+                   gamma=0.9, lr=1e-3,
+                   update_each: int = 4,
+                   buffer_size: int = 30000, batch_size=1024):
         self._replay_buffer: Deque[State] = deque(maxlen=buffer_size)
         self._batch_size: int = batch_size
         self.condition: DecisionCondition = condition
-        self._model : DuelingDQN = model
+        self._model: DuelingDQN = model
         self._target: DuelingDQN = target
         self.end_episode_states: List = []
         self.episode_files: List[Tuple[str, str]] = []
 
-        self.EPS_START = 0.9
-        self.EPS_END = 0.1
+        self.EPS_START = 0.05
+        self.EPS_END = 0.05
         self.EPS_DECAY = 400
 
-
         self.gamma = gamma
-        self.MSE_loss = torch.nn.MSELoss()
-        self.optimizer = torch.optim.RMSprop(self._model.parameters(), lr=lr)
+        self.loss = torch.nn.SmoothL1Loss()
+        self.optimizer = torch.optim.Adam(self._model.parameters(), lr=lr, weight_decay=1e-5, amsgrad=True)
 
         self._update_each = update_each
         self.episode_counter = 0
+
+        self.no_action_event = deque(maxlen=20)
         self.reset_state()
+
+      def store_no_action(self, ts, price):
+        self.no_action_event[0].append((ts, price))
 
       def episode_results(self) -> pd.DataFrame:
         fnames, states = agent.episode_files, agent.end_episode_states
@@ -124,34 +128,37 @@ class ModelTest(unittest.TestCase):
         self.ps = None
         self.episode_counter += 1
         self.condition.reset()
+        self.no_action_event.appendleft([])
 
         # reload weights
-        if (self.episode_counter + 1) % self._update_each == 0:
-          state = self._model.state_dict()
-          self._target.load_state_dict(state)
-          torch.save(state, 'model.pth')
+        state = self._model.state_dict()
+        self._target.load_state_dict(state)
+        if self.episode_counter % 5 == 0:
+          torch.save(state, f'models/model-{self.episode_counter}.pth')
+        torch.save(state, f'model-latest.pth')
 
       def get_reward(self, prev_v: torch.Tensor, v: torch.Tensor,
                      prev_ps: torch.Tensor, ps: torch.Tensor,
-                     tau: torch.Tensor, a=0.35, b=1./1000):
-        vv = a * (v - prev_v)
-        vv.squeeze_(1)
+                     tau: torch.Tensor, a=0.35, b=1. / 1000):
+        vv = a * (v - prev_v).squeeze(1)
 
-        state_delta = torch.abs(prev_ps) - torch.abs(ps) # todo: updated here, react negatively on accumulation of assets
-        pos = (torch.exp(b*tau) * state_delta) # todo: updated here, instead of sign, use delta
+        state_delta = torch.abs(prev_ps) - torch.abs(ps)  # todo: updated here, react negatively on accumulation of assets
+        pos = (torch.exp(b * tau) * state_delta)  # todo: updated here, instead of sign, use delta
 
         # a(V_t - V_{t-1}) + e^{b*tau} * sgn(|i_t| - |i_{t-1}|)
         return vv + pos
 
-      def get_terminal_reward(self, terminal_ps, terminal_prices, alpha=1.0):
-        return alpha - torch.exp(-(terminal_ps[:, 0] / terminal_prices - terminal_ps[:, 1])) - torch.exp(terminal_ps[:, 1]) # 0: usd, 1: xbtusd, 2: ethusd
+      def get_terminal_reward(self, terminal_ps, terminal_prices, alpha=3.0):
+        return alpha - torch.exp(-(terminal_ps[:, 0] / terminal_prices - terminal_ps[:, 1]))  # 0: usd, 1: xbtusd, 2: ethusd
 
       def store_episode(self, new_obs, new_ps, meta, done, action):
-        if self.is_initialized():
-          self._replay_buffer.append((self.obs, self.ps, self.action, new_obs, new_ps, meta, done))
-        self.obs = new_obs
-        self.ps = new_ps
-        self.action = action
+        nans = [np.isnan(t).any() for t in [new_obs, new_ps, meta, done, action]]
+        if not any(nans):
+          if self.is_initialized():
+            self._replay_buffer.append((self.obs, self.ps, self.action, new_obs, new_ps, meta, done))
+          self.obs = new_obs
+          self.ps = new_ps
+          self.action = action
 
       def is_initialized(self):
         return self.obs is not None  # happens after reset, first obs is missing
@@ -161,7 +168,7 @@ class ModelTest(unittest.TestCase):
         if np.random.uniform(0.0, 1.0) < eps:
           return random.randint(0, self._model.output_dim - 1)
         with torch.no_grad():
-          _, _, qvals = self._target(torch.tensor(obs, dtype=torch.float).unsqueeze(0))
+          _, _, qvals = self._target(torch.tensor(obs, dtype=torch.float, device=device).unsqueeze(0))
           action = torch.argmax(qvals).cpu().detach().item()
           return action
 
@@ -169,29 +176,38 @@ class ModelTest(unittest.TestCase):
         if len(self._replay_buffer) > self._batch_size:
           items = random.sample(self._replay_buffer, self._batch_size)
           prev_obs, prev_ps, action, obs, ps, meta, done = zip(*items)
-          prev_obs, prev_ps, obs, ps, meta = map(lambda x: torch.tensor(x, dtype=torch.float), [prev_obs, prev_ps, obs, ps, meta])
-          done = torch.tensor(done, dtype=torch.bool)
-          action = torch.tensor(action, dtype=torch.long).unsqueeze(1)
+          prev_obs, prev_ps, obs, ps, meta = map(lambda x: torch.tensor(x, dtype=torch.float).to(device),
+                                                 [prev_obs, prev_ps, obs, ps, meta])
+          done = torch.tensor(done, dtype=torch.bool).to(device)
+          action = torch.tensor(action, dtype=torch.long).unsqueeze(1).to(device)
 
           v, _, qvalues = self._model(prev_obs)
-          next_v, _, next_qvalues = self._target(obs)
+          with torch.no_grad():
+            next_v, _, next_qvalues = self._target(obs[~done])
 
-          rewards = torch.empty_like(done, dtype=torch.float)
+            #           next_v.detach()
+            #           next_qvalues.detach()
+            #           _.detach()
+            next_qvalues = next_qvalues.max(1)[0]
+
+          rewards = torch.empty_like(done, dtype=torch.float, device=device)
           rewards[done] = self.get_terminal_reward(ps[done], meta[done][:, 0])
-          rewards[~done] = self.get_reward(v[~done], next_v[~done], prev_ps[~done][:, 1], ps[~done][:, 1], meta[~done][:, 1])
-          rewards.clamp_(-1., 1.) # reward clipping
-
+          rewards[~done] = self.get_reward(v[~done], next_v, prev_ps[~done][:, 1], ps[~done][:, 1], meta[~done][:, 1])
+          rewards = rewards.clamp(-1., 1.)  # reward clipping
 
           qvalues = qvalues.gather(1, action).squeeze(1)
-          next_qvalues = next_qvalues.max(1)[0]
-          expected_q = rewards + self.gamma * next_qvalues
 
-          loss = self.MSE_loss(qvalues, expected_q)  # or hubert loss
+          expected_q = torch.empty_like(rewards, dtype=torch.float, device=device)
+          expected_q[~done] = self.gamma * next_qvalues
+          expected_q += rewards
+
+
+          loss = self.loss(qvalues, expected_q)  # or hubert loss
 
           self.optimizer.zero_grad()
           loss.backward()
           for param in self._model.parameters():
-            param.grad.data.clamp_(-1., 1.) # gradient clipping
+            param.grad.data.clamp_(-1., 1.)  # gradient clipping
           self.optimizer.step()
 
     class RLStrategy(Strategy):
@@ -203,19 +219,28 @@ class ModelTest(unittest.TestCase):
           0: (0, 0),
           1: (1, 0),
           2: (2, 0),
-          3: (0, 1),
-          4: (1, 1),
-          5: (1, 2),
-          6: (2, 0),
-          7: (2, 1),
-          8: (2, 2)
+          3: (3, 0),
+          4: (1, 0),
+          5: (1, 1),
+          6: (1, 2),
+          7: (1, 3),
+          8: (2, 0),
+          9: (2, 1),
+          10: (2, 2),
+          11: (2, 3),
+          12: (3, 0),
+          13: (3, 1),
+          14: (3, 2),
+          15: (3, 3),
+          16: (-1, -1)
         }
+
 
       def return_unfinished(self, statuses: List[OrderStatus], memory: Dict[str, Union[Trade, OrderBook]]):
         obs, ps, prices = self.get_observation(memory)
         meta = (prices, 0.0)
-        self.agent.store_episode(obs, ps, meta, True, None)
-        self.agent.end_episode_states.append((ps, meta[0])) # end state and prices
+        self.agent.store_episode(obs, ps, meta, True, 0)
+        self.agent.end_episode_states.append((ps, meta[0]))  # end state and prices
         self.agent.reset_state()
 
         super().return_unfinished(statuses, memory)
@@ -232,7 +257,7 @@ class ModelTest(unittest.TestCase):
         items = np.concatenate(items, axis=None)
         return items, ps, prices
 
-      def get_prices(self, memory) -> float: # todo: refactor and use vwap
+      def get_prices(self, memory) -> float:  # todo: refactor and use vwap
         xbt: OrderBook = memory[('orderbook', 'XBTUSD')]
         xbt_midprice = (xbt.ask_prices[0] + xbt.bid_prices[0]) / 2
 
@@ -247,10 +272,12 @@ class ModelTest(unittest.TestCase):
       def get_timeleft(self, ts: datetime.datetime) -> float:
         return (self._simulation_end - ts).total_seconds()
 
-      def action_to_order(self, action: int, memory, ts, quantity: int) -> List[OrderRequest]: # value from 0 to 8
+      def action_to_order(self, action: int, memory, ts, quantity: int) -> List[OrderRequest]:  # value from 0 to 8
+        if action == 16:  # `do nothing` action
+          return []
         offset_bid, offset_ask = self.action_space[action]
 
-        offset_bid *= 0.5 # price step is .5 dollars
+        offset_bid *= 0.5  # price step is .5 dollars
         offset_ask *= 0.5
 
         ob: OrderBook = memory[('orderbook', 'XBTUSD')]
@@ -265,6 +292,9 @@ class ModelTest(unittest.TestCase):
         if self.agent.condition(is_trade, row):
           obs, ps, prices = self.get_observation(memory)
           action = self.agent.get_action(obs)
+
+          if action == 16: # no action
+            self.agent.store_no_action(row.timestamp, prices)
           meta = (prices, self.get_timeleft(row.timestamp))
 
           self.agent.store_episode(obs, ps, meta, False, action)
@@ -285,7 +315,7 @@ class ModelTest(unittest.TestCase):
       else:
         output = None
 
-      vwap = VWAP_volume([int(2.5e5), int(1e6)], name='vwap', z_normalize=3000)
+      vwap = VWAP_volume([int(5e5), int(1e6)], name='vwap', z_normalize=3000)
       liq = LiquiditySpectrum(z_normalize=3000)
 
       defaults = [
@@ -297,12 +327,12 @@ class ModelTest(unittest.TestCase):
 
       trade_metric = TradeMetric(defaults, [
         # ('quantity', lambda x: len(x)),
-        ('total', lambda trades: np.log(sum(map(lambda x: x.volume, trades))))
-      ], seconds=45, z_normalize=2000) # todo: add z-normalize for time-metrics
+        ('total', lambda trades: sum(map(lambda x: x.volume, trades)))
+      ], seconds=45, z_normalize=2000)  # todo: add z-normalize for time-metrics
       trade_metric2 = TradeMetric(defaults, [
         # ('quantity', lambda x: len(x)),
-        ('total', lambda trades: np.log(sum(map(lambda x: x.volume, trades))))
-      ], seconds=75, z_normalize=2000)
+        ('total', lambda trades: sum(map(lambda x: x.volume, trades)))
+      ], seconds=80, z_normalize=2000)
 
       hy = HayashiYoshido(seconds=90)
       lipton = Lipton(hy.name)
@@ -313,32 +343,44 @@ class ModelTest(unittest.TestCase):
       end_ts = reader.get_ending_moment()
 
       strategy = RLStrategy(agent, simulation_end=end_ts, instant_metrics=[vwap, liq], delta_metrics=[hy],
-                            time_metrics_trade=[trade_metric, trade_metric2], composite_metrics=[lipton], initial_balance=0.0)
+                            time_metrics_trade=[trade_metric, trade_metric2], composite_metrics=[lipton],
+                            initial_balance=0.0)
       backtest = BacktestOnSample(reader, strategy, output=output, delay=300, warmup=True, stale_depth=5)
       backtest.run()
 
       return backtest.output
 
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     condition = DecisionCondition(150000.0)
-    model: DuelingDQN = DuelingDQN(input_dim=40, output_dim=9)
-    target: DuelingDQN = DuelingDQN(input_dim=40, output_dim=9)
+    model: DuelingDQN = DuelingDQN(input_dim=40, output_dim=17).to(device)
+    target: DuelingDQN = DuelingDQN(input_dim=40, output_dim=17).to(device)
+    model.load_state_dict(torch.load('model-latest.pth'))
     target.load_state_dict(model.state_dict())
+    model.train()
+    target.eval()
 
     agent = Agent(model, target, condition, batch_size=8)
-    pairs = list(zip(glob.glob('../notebooks/time-sampled/orderbook_*'), glob.glob('../notebooks/time-sampled/trade_*')))
-    for idx in range(40):
-      ob_file, tr_file = random.choice(pairs)
-      result_output = init_simulation(agent, ob_file, tr_file, output_required=False)
-      agent.episode_files.append((ob_file, tr_file))
-      # break
+    # pairs = list(zip(glob.glob('../notebooks/time-sampled/orderbook_*'), glob.glob('../notebooks/time-sampled/trade_*')))
+    # for idx in range(3):
+      # ob_file, tr_file = random.choice(pairs)
+    ob_file, tr_file = '../notebooks/time-sampled-10min/orderbook_1715.csv.gz', '../notebooks/time-sampled-10min/trade_1715.csv.gz'
+    result_output = init_simulation(agent, ob_file, tr_file, output_required=True)
+    agent.episode_files.append((ob_file, tr_file))
 
-    # orders_side1, orders_side2 = list(result_output.orders.values())
-    # make_plot_orderbook_trade(agent.episode_files[-1][0], 'XBTUSD', orders_side1 + orders_side2, True)
-    # end_states = agent.end_episode_states
-    # for t in end_states:
-    #   print(t)
+    orders_side1, orders_side2 = list(result_output.orders.values())
+    no_action_event = agent.no_action_event[1]
+    make_plot_orderbook_trade('../notebooks/time-sampled-10min/orderbook_1715.csv.gz', 'XBTUSD',
+                              orders_side1 + orders_side2,
+                              no_action_event,
+                              orderbook_precomputed=True)
+
+    res = agent.episode_results()
+    res['pnl'] = res['usd'] + res['xbt'] * res['xbt_price']
+    print('ok')
+
+
 
 
   def test_plot(self):
-    make_plot_orderbook_trade('../notebooks/time-sampled/orderbook_2259.csv.gz', 'XBTUSD', orderbook_precomputed=True)
+    make_plot_orderbook_trade('../notebooks/time-sampled-10min/orderbook_1715.csv.gz', 'XBTUSD', orderbook_precomputed=True)
     print('ok')

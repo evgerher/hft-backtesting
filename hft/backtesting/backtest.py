@@ -25,7 +25,6 @@ class Backtest:
                strategy: Strategy,
                output: Optional[Output] = None,
                order_position_policy: str = 'tail',  # 'random' or 'head'
-               time_horizon:int=120,
                seed=1337,
                notify_partial: bool = True,
                delay: int=0,
@@ -37,7 +36,6 @@ class Backtest:
     :param strategy:
     :param output:
     :param order_position_policy:
-    :param time_horizon:
     :param seed:
     :param delay: delay in microseconds !
     :param warmup: whether to run backtest without strategy decisions until all time metrics are initialized or not.
@@ -45,7 +43,6 @@ class Backtest:
     """
     self.reader: OrderbookReader = reader
     self.strategy: Strategy = strategy
-    self.time_horizon: int = time_horizon
 
     self.memory: Dict[str, Union[Trade, OrderBook]] = {}
     self.output: Output = output

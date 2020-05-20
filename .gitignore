@@ -21,3 +21,4 @@ build/
 backtesting_hft.egg-info/
 notebooks/*sampled*
 notebooks/.ipynb_checkpoints
+*.pth

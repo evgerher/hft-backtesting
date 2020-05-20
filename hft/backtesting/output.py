@@ -1,6 +1,6 @@
 import datetime
 from collections import defaultdict
-from typing import Sequence, Optional
+from typing import Sequence, Optional, List, Tuple
 
 from hft.backtesting.data import OrderRequest
 from hft.utils.consts import QuoteSides
@@ -105,9 +105,11 @@ class SimulatedOrdersOutput(Output):
 
 def make_plot_orderbook_trade(orderbook_file: str, symbol: str,
                               simulated_orders: Optional[Sequence[OrderRequest]] = None,
+                              no_action_ts: Optional[List[Tuple[datetime.datetime, float]]] = None,
                               orderbook_precomputed:bool=False,
                               figsize=(16,6),
-                              skip_every=20):
+                              skip_every=20,
+                              savefig=False):
   '''
   Util function, reads file and plots price of orderbook
   If simulated orders are provided, scatter them on a plot with orderbook prices
@@ -153,8 +155,14 @@ def make_plot_orderbook_trade(orderbook_file: str, symbol: str,
     # ts = [t.to_pydatetime() for t in ts]
     axs.scatter(tss, prices, c='g', label='Simulated ask orders')
 
+  if no_action_ts is not None:
+    tss, prices = zip(*no_action_ts)
+    axs.scatter(tss, prices, c='yellow', label='No action applied')
+
   axs.xaxis.set_major_locator(ticker.AutoLocator())
   plt.legend()
   plt.xticks(rotation=90)
+  if savefig:
+    plt.savefig(orderbook_file.rsplit('/')[-1])
   plt.show()
 
