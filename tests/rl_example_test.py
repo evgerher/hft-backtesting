@@ -68,6 +68,8 @@ class ModelTest(unittest.TestCase):
 
     State = namedtuple('State', 'prev_obs prev_ps action obs ps meta done')
 
+    State = namedtuple('State', 'obs ps action next_obs next_ps meta done')
+
     class DecisionCondition:
       def __init__(self, volume: float):
         self.volume_condition: float = volume
@@ -87,8 +89,8 @@ class ModelTest(unittest.TestCase):
     class Agent:
       def __init__(self, model: DuelingDQN, target: DuelingDQN,
                    condition: DecisionCondition,
-                   gamma=0.9, lr=1e-3,
-                   update_each: int = 4,
+                   gamma=0.95, lr=1e-3,
+                   update_each: int = 3,
                    buffer_size: int = 30000, batch_size=1024):
         self._replay_buffer: Deque[State] = deque(maxlen=buffer_size)
         self._batch_size: int = batch_size
@@ -98,13 +100,13 @@ class ModelTest(unittest.TestCase):
         self.end_episode_states: List = []
         self.episode_files: List[Tuple[str, str]] = []
 
-        self.EPS_START = 0.05
-        self.EPS_END = 0.05
-        self.EPS_DECAY = 400
+        self.EPS_START = 0.9
+        self.EPS_END = 0.1
+        self.EPS_DECAY = 500
 
         self.gamma = gamma
         self.loss = torch.nn.SmoothL1Loss()
-        self.optimizer = torch.optim.Adam(self._model.parameters(), lr=lr, weight_decay=1e-5, amsgrad=True)
+        self.optimizer = torch.optim.Adam(self._model.parameters(), lr=lr, amsgrad=True)
 
         self._update_each = update_each
         self.episode_counter = 0
@@ -131,25 +133,30 @@ class ModelTest(unittest.TestCase):
         self.no_action_event.appendleft([])
 
         # reload weights
-        state = self._model.state_dict()
-        self._target.load_state_dict(state)
-        if self.episode_counter % 5 == 0:
+        if (self.episode_counter + 1) % self._update_each == 0:
+          state = self._model.state_dict()
+          self._target.load_state_dict(state)
           torch.save(state, f'models/model-{self.episode_counter}.pth')
         torch.save(state, f'model-latest.pth')
 
       def get_reward(self, prev_v: torch.Tensor, v: torch.Tensor,
                      prev_ps: torch.Tensor, ps: torch.Tensor,
-                     tau: torch.Tensor, a=0.35, b=1. / 1000):
+                     tau: torch.Tensor, a=0.1, b=1. / 1000,
+                     offset=1.1, scale=0.1):
         vv = a * (v - prev_v).squeeze(1)
 
-        state_delta = torch.abs(prev_ps) - torch.abs(ps)  # todo: updated here, react negatively on accumulation of assets
+        state_delta = torch.abs(prev_ps) - torch.abs(
+          ps)  # todo: updated here, react negatively on accumulation of assets
         pos = (torch.exp(b * tau) * state_delta)  # todo: updated here, instead of sign, use delta
 
-        # a(V_t - V_{t-1}) + e^{b*tau} * sgn(|i_t| - |i_{t-1}|)
-        return vv + pos
+        accumulation_penalty = -torch.exp(torch.abs(ps) * scale) + offset
 
-      def get_terminal_reward(self, terminal_ps, terminal_prices, alpha=3.0):
-        return alpha - torch.exp(-(terminal_ps[:, 0] / terminal_prices - terminal_ps[:, 1]))  # 0: usd, 1: xbtusd, 2: ethusd
+        # a(V_t - V_{t-1}) + e^{b*tau} * sgn(|i_t| - |i_{t-1}|)
+        return vv + pos + accumulation_penalty
+
+      def get_terminal_reward(self, terminal_ps, terminal_prices, alpha=3.0, scale=4.0, shift=8.0):
+        inbalance = (terminal_ps[:, 0] / terminal_prices - terminal_ps[:, 1])
+        return torch.exp(torch.abs(inbalance) * scale) * torch.sign(inbalance) / shift  # 0: usd, 1: xbtusd, 2: ethusd
 
       def store_episode(self, new_obs, new_ps, meta, done, action):
         nans = [np.isnan(t).any() for t in [new_obs, new_ps, meta, done, action]]
@@ -201,7 +208,6 @@ class ModelTest(unittest.TestCase):
           expected_q[~done] = self.gamma * next_qvalues
           expected_q += rewards
 
-
           loss = self.loss(qvalues, expected_q)  # or hubert loss
 
           self.optimizer.zero_grad()
@@ -220,24 +226,32 @@ class ModelTest(unittest.TestCase):
           1: (1, 0),
           2: (2, 0),
           3: (3, 0),
-          4: (1, 0),
+          4: (0, 1),
           5: (1, 1),
           6: (1, 2),
           7: (1, 3),
-          8: (2, 0),
+          8: (0, 3),
           9: (2, 1),
           10: (2, 2),
           11: (2, 3),
-          12: (3, 0),
+          12: (0, 2),
           13: (3, 1),
           14: (3, 2),
           15: (3, 3),
-          16: (-1, -1)
+          16: (4, 0),
+          17: (4, 1),
+          18: (4, 2),
+          19: (4, 3),
+          20: (4, 4),
+          21: (0, 4),
+          22: (1, 4),
+          23: (2, 4),
+          24: (3, 4),
         }
-
+        self.no_action_event = []
 
       def return_unfinished(self, statuses: List[OrderStatus], memory: Dict[str, Union[Trade, OrderBook]]):
-        obs, ps, prices = self.get_observation(memory)
+        obs, ps, prices = self.get_observation(memory, 0.0)
         meta = (prices, 0.0)
         self.agent.store_episode(obs, ps, meta, True, 0)
         self.agent.end_episode_states.append((ps, meta[0]))  # end state and prices
@@ -245,7 +259,7 @@ class ModelTest(unittest.TestCase):
 
         super().return_unfinished(statuses, memory)
 
-      def get_observation(self, memory):
+      def get_observation(self, memory, timeleft):
         items = list(map(lambda name: self.metrics_map[name].to_numpy(), names + time_names))
         items = [t.flatten() for t in items]
 
@@ -253,7 +267,7 @@ class ModelTest(unittest.TestCase):
         ps = self.get_state()
         state = np.array([ps[0] / prices, ps[1]])
 
-        items += [state]
+        items += [state, timeleft]
         items = np.concatenate(items, axis=None)
         return items, ps, prices
 
@@ -272,41 +286,55 @@ class ModelTest(unittest.TestCase):
       def get_timeleft(self, ts: datetime.datetime) -> float:
         return (self._simulation_end - ts).total_seconds()
 
-      def action_to_order(self, action: int, memory, ts, quantity: int) -> List[OrderRequest]:  # value from 0 to 8
-        if action == 16:  # `do nothing` action
-          return []
+      def action_to_order(self, action: int, memory, ts, quantity: int) -> List[OrderRequest]:
         offset_bid, offset_ask = self.action_space[action]
 
         offset_bid *= 0.5  # price step is .5 dollars
         offset_ask *= 0.5
 
         ob: OrderBook = memory[('orderbook', 'XBTUSD')]
+        orders = []
 
-        return [OrderRequest.create_bid(ob.bid_prices[0] - offset_bid, quantity, 'XBTUSD', ts),
-                OrderRequest.create_ask(ob.ask_prices[0] + offset_ask, quantity, 'XBTUSD', ts)]
+        if offset_bid > 0:
+          orders.append(OrderRequest.create_bid(ob.bid_prices[0] - offset_bid, quantity, 'XBTUSD', ts))
+        if offset_ask > 0:
+          orders.append(OrderRequest.create_ask(ob.ask_prices[0] + offset_ask, quantity, 'XBTUSD', ts))
+
+        return orders
+
+      def cancel_orders(self, statuses: List[OrderStatus]) -> List[OrderRequest]:
+        statuses_ids = list(map(lambda x: x.id, statuses))
+        active = self.active_orders.items()
+        active_non_present = filter(lambda x: x[0] not in statuses_ids, active)
+        return list(map(lambda x: OrderRequest.cancelOrder(x[0]), active_non_present))
 
       def define_orders(self, row: Union[Trade, OrderBook],
                         statuses: List[OrderStatus],
                         memory: Dict[str, Union[Trade, OrderBook]],
                         is_trade: bool) -> List[OrderRequest]:
         if self.agent.condition(is_trade, row):
-          obs, ps, prices = self.get_observation(memory)
+          timeleft = self.get_timeleft(row.timestamp)
+          obs, ps, prices = self.get_observation(memory, timeleft)
+
           action = self.agent.get_action(obs)
 
-          if action == 16: # no action
+          if action == 16:  # no action
             self.agent.store_no_action(row.timestamp, prices)
-          meta = (prices, self.get_timeleft(row.timestamp))
+
+          meta = (prices, timeleft)
 
           self.agent.store_episode(obs, ps, meta, False, action)
           self.agent.update()
 
           orders = self.action_to_order(action, memory, row.timestamp, 1000)
+          cancels = self.cancel_orders(statuses)
+          orders += cancels
         else:
           orders = []
         return orders
 
     def init_simulation(agent: Agent, orderbook_file: str, trade_file: str,
-                        output_required: Union[bool, Output] = False) -> Optional[Output]:
+                        output_required: Union[bool, Output] = False, delay=5) -> Optional[Output]:
 
       if isinstance(output_required, bool) and output_required:
         output = SimulatedOrdersOutput()
@@ -328,48 +356,52 @@ class ModelTest(unittest.TestCase):
       trade_metric = TradeMetric(defaults, [
         # ('quantity', lambda x: len(x)),
         ('total', lambda trades: sum(map(lambda x: x.volume, trades)))
-      ], seconds=45, z_normalize=2000)  # todo: add z-normalize for time-metrics
+      ], seconds=45, z_normalize=2000)
       trade_metric2 = TradeMetric(defaults, [
         # ('quantity', lambda x: len(x)),
         ('total', lambda trades: sum(map(lambda x: x.volume, trades)))
       ], seconds=80, z_normalize=2000)
 
-      hy = HayashiYoshido(seconds=90)
-      lipton = Lipton(hy.name)
+      lipton_levels = 8
+      hy = HayashiYoshido(140, True)
+      lipton = Lipton(hy.name, lipton_levels)
 
-      # todo: refactor in backtesting auto-cancel queries with prices worse than top 3 levels
-      # todo: update reader to work with only `xbtusd`
       reader = OrderbookReader(orderbook_file, trade_file, nrows=None, is_precomputed=True)
       end_ts = reader.get_ending_moment()
 
       strategy = RLStrategy(agent, simulation_end=end_ts, instant_metrics=[vwap, liq], delta_metrics=[hy],
                             time_metrics_trade=[trade_metric, trade_metric2], composite_metrics=[lipton],
                             initial_balance=0.0)
-      backtest = BacktestOnSample(reader, strategy, output=output, delay=300, warmup=True, stale_depth=5)
+      backtest = BacktestOnSample(reader, strategy, output=output, delay=delay, warmup=True, stale_depth=7)
       backtest.run()
 
       return backtest.output
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     condition = DecisionCondition(150000.0)
-    model: DuelingDQN = DuelingDQN(input_dim=40, output_dim=17).to(device)
-    target: DuelingDQN = DuelingDQN(input_dim=40, output_dim=17).to(device)
-    model.load_state_dict(torch.load('model-latest.pth'))
-    target.load_state_dict(model.state_dict())
+    model: DuelingDQN = DuelingDQN(input_dim=41, output_dim=25)
+    target: DuelingDQN = DuelingDQN(input_dim=41, output_dim=25)
+    # model.load_state_dict(torch.load('model-latest.pth'))
     model.train()
     target.eval()
+    target.load_state_dict(model.state_dict())
+
+    # target.load_state_dict(torch.load('notebooks/model.pth'))
+
+    model.to(device)
+    target.to(device)
 
     agent = Agent(model, target, condition, batch_size=8)
-    # pairs = list(zip(glob.glob('../notebooks/time-sampled/orderbook_*'), glob.glob('../notebooks/time-sampled/trade_*')))
+    pairs = list(zip(glob.glob('../notebooks/time-sampled/orderbook_*'), glob.glob('../notebooks/time-sampled/trade_*')))
     # for idx in range(3):
-      # ob_file, tr_file = random.choice(pairs)
-    ob_file, tr_file = '../notebooks/time-sampled-10min/orderbook_1715.csv.gz', '../notebooks/time-sampled-10min/trade_1715.csv.gz'
+    ob_file, tr_file = random.choice(pairs)
+    # ob_file, tr_file = '../notebooks/time-sampled-10min/orderbook_1715.csv.gz', '../notebooks/time-sampled-10min/trade_1715.csv.gz'
     result_output = init_simulation(agent, ob_file, tr_file, output_required=True)
     agent.episode_files.append((ob_file, tr_file))
 
     orders_side1, orders_side2 = list(result_output.orders.values())
     no_action_event = agent.no_action_event[1]
-    make_plot_orderbook_trade('../notebooks/time-sampled-10min/orderbook_1715.csv.gz', 'XBTUSD',
+    make_plot_orderbook_trade(ob_file, 'XBTUSD',
                               orders_side1 + orders_side2,
                               no_action_event,
                               orderbook_precomputed=True)

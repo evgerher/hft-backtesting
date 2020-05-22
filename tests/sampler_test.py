@@ -81,6 +81,14 @@ class SamplerTest(unittest.TestCase):
     of, tf = ('..\\notebooks\\time-sampled\\orderbook_0.csv.gz', '..\\notebooks\\time-sampled\\trade_0.csv.gz')
     init_simulation(of, tf)
 
+  def test_volume(self):
+    volume = 30000
+    dst_dir = 'volume-sampled'
+    samplerr = sampler.VolumeSampler('resources/may1/orderbooks/0.csv.gz',
+                                     'resources/may1/trades/0.csv.gz',
+                                     dst_dir, volume, target_symbol='XBTUSD', nrows=700000, max_workers=8)
+    samplerr.split_samples()
+
 
 if __name__ == '__main__':
   unittest.main()

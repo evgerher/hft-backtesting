@@ -58,7 +58,6 @@ class OrderRequest:
 
   @staticmethod
   def cancelOrder(id: int) -> 'OrderRequest':
-    # todo: return money if cancelled
     return OrderRequest(id, Statuses.CANCEL, None, None, None, None, None, 0)
 
   @staticmethod

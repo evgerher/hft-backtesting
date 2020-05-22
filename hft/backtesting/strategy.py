@@ -172,13 +172,14 @@ class Strategy(ABC):
 
   def _balance_update_new_order(self, orders: List[OrderRequest]):
     for order in orders:
-      logger.info(f'New order: {order}')
-      ### action negative update balance
-      self.active_orders[order.id] = order
-      if order.side == QuoteSides.ASK:
-        self.balance[order.symbol] += order.volume / order.price * (self.fee[order.symbol].settlement  + self.fee[order.symbol].maker)
-      elif order.side == QuoteSides.BID:
-        self.balance['USD'] += order.volume * (self.fee[order.symbol].settlement + self.fee[order.symbol].maker)
+      if order.command != Statuses.CANCEL:
+        logger.info(f'New order: {order}')
+        ### action negative update balance
+        self.active_orders[order.id] = order
+        if order.side == QuoteSides.ASK:
+          self.balance[order.symbol] += order.volume / order.price * (self.fee[order.symbol].settlement  + self.fee[order.symbol].maker)
+        elif order.side == QuoteSides.BID:
+          self.balance['USD'] += order.volume * (self.fee[order.symbol].settlement + self.fee[order.symbol].maker)
 
   def _get_allowed_volume(self, symbol, memory, side):
     latest: OrderBook = memory[('orderbook', symbol)]
@@ -187,10 +188,11 @@ class Strategy(ABC):
 
   def __validate_orders(self, orders, memory):
     for order in orders:
-      latest: OrderBook = memory[('orderbook', order.symbol)]
-      side_level = latest.bid_volumes[0] if order.side == QuoteSides.BID else latest.ask_volumes[0]
-      assert order.volume > 0 and ((side_level * 0.15 >= order.volume) or order.volume <= 10000), \
-        f"order size must be max 15% of the level or 10000 units: {order.volume}, {side_level}"
+      if order.command != Statuses.CANCEL:
+        latest: OrderBook = memory[('orderbook', order.symbol)]
+        side_level = latest.bid_volumes[0] if order.side == QuoteSides.BID else latest.ask_volumes[0]
+        assert order.volume > 0 and ((side_level * 0.15 >= order.volume) or order.volume <= 10000), \
+          f"order size must be max 15% of the level or 10000 units: {order.volume}, {side_level}"
 
   def __remove_finished_orders(self, statuses):
     for status in statuses:

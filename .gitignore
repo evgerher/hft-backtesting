@@ -22,3 +22,5 @@ backtesting_hft.egg-info/
 notebooks/*sampled*
 notebooks/.ipynb_checkpoints
 *.pth
+figures/
+*volume-sampled*

@@ -155,7 +155,7 @@ def make_plot_orderbook_trade(orderbook_file: str, symbol: str,
     # ts = [t.to_pydatetime() for t in ts]
     axs.scatter(tss, prices, c='g', label='Simulated ask orders')
 
-  if no_action_ts is not None:
+  if no_action_ts is not None and len(no_action_ts) > 0:
     tss, prices = zip(*no_action_ts)
     axs.scatter(tss, prices, c='yellow', label='No action applied')
 
