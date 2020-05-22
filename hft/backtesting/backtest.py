@@ -356,9 +356,19 @@ class Backtest:
         else:
           self.pending_orders.append((action.created, action))
       elif action.command == Statuses.CANCEL:
-        order = self.simulated_orders_id.pop(action.id)
-        symbol, side, price = order.label()
-        self.simulated_orders[(symbol, side)][price].remove(order)
+        try:
+          order = self.simulated_orders_id.pop(action.id)
+          symbol, side, price = order.label()
+          price_orders = self.simulated_orders[(symbol, side)][price]
+
+          idx_to_del = None
+          for idx, (id, v_b, fill) in enumerate(price_orders):
+            if id == order.id:
+              idx_to_del = idx
+          if idx_to_del is not None:
+            price_orders.pop(idx_to_del)
+        except: # already deleted
+          pass
 
   def __initialize_time_metrics(self):
     for metrics in self.strategy.time_metrics.values():

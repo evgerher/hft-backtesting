@@ -133,8 +133,8 @@ class ModelTest(unittest.TestCase):
         self.no_action_event.appendleft([])
 
         # reload weights
+        state = self._model.state_dict()
         if (self.episode_counter + 1) % self._update_each == 0:
-          state = self._model.state_dict()
           self._target.load_state_dict(state)
           torch.save(state, f'models/model-{self.episode_counter}.pth')
         torch.save(state, f'model-latest.pth')
@@ -217,7 +217,7 @@ class ModelTest(unittest.TestCase):
           self.optimizer.step()
 
     class RLStrategy(Strategy):
-      def __init__(self, agent: Agent, simulation_end: datetime.datetime, **kwags):
+      def __init__(self, agent: Agent, simulation_end: datetime.datetime, cancels_enabled=False, **kwags):
         super().__init__(**kwags)
         self.agent: Agent = agent
         self._simulation_end = simulation_end
@@ -248,6 +248,7 @@ class ModelTest(unittest.TestCase):
           23: (2, 4),
           24: (3, 4),
         }
+        self.cancels_enabled = cancels_enabled
         self.no_action_event = []
 
       def return_unfinished(self, statuses: List[OrderStatus], memory: Dict[str, Union[Trade, OrderBook]]):
@@ -318,8 +319,8 @@ class ModelTest(unittest.TestCase):
 
           action = self.agent.get_action(obs)
 
-          if action == 16:  # no action
-            self.agent.store_no_action(row.timestamp, prices)
+          # if action == 16:  # no action
+          #   self.agent.store_no_action(row.timestamp, prices)
 
           meta = (prices, timeleft)
 
@@ -327,8 +328,9 @@ class ModelTest(unittest.TestCase):
           self.agent.update()
 
           orders = self.action_to_order(action, memory, row.timestamp, 1000)
-          cancels = self.cancel_orders(statuses)
-          orders += cancels
+          if self.cancels_enabled:
+            cancels = self.cancel_orders(statuses)
+            orders += cancels
         else:
           orders = []
         return orders
@@ -378,7 +380,7 @@ class ModelTest(unittest.TestCase):
       return backtest.output
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    condition = DecisionCondition(150000.0)
+    condition = DecisionCondition(100000.0)
     model: DuelingDQN = DuelingDQN(input_dim=41, output_dim=25)
     target: DuelingDQN = DuelingDQN(input_dim=41, output_dim=25)
     # model.load_state_dict(torch.load('model-latest.pth'))
