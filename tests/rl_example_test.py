@@ -18,6 +18,7 @@ import numpy as np
 import torch
 from torch import nn
 import glob
+import matplotlib.pyplot as plt
 
 tick_counter = 0
 
@@ -305,11 +306,11 @@ class ModelTest(unittest.TestCase):
 
         return orders
 
-      def cancel_orders(self, statuses: List[OrderStatus]) -> List[OrderRequest]:
+      def cancel_orders(self, statuses: List[OrderStatus], ts: datetime.datetime) -> List[OrderRequest]:
         statuses_ids = list(map(lambda x: x.id, statuses))
-        active = self.active_orders.items()
-        active_non_present = filter(lambda x: x[0] not in statuses_ids, active)
-        return list(map(lambda x: OrderRequest.cancelOrder(x[0]), active_non_present))
+        active_ids = self.active_orders.keys()
+        active_non_present = filter(lambda x: x not in statuses_ids, active_ids)
+        return list(map(lambda x: OrderRequest.cancelOrder(self.active_orders[x], ts), active_non_present))
 
       def define_orders(self, row: Union[Trade, OrderBook],
                         statuses: List[OrderStatus],
@@ -320,7 +321,7 @@ class ModelTest(unittest.TestCase):
           timeleft = self.get_timeleft(row.timestamp)
           obs, ps, prices = self.get_observation(memory, timeleft)
           if self.cancels_enabled:
-            cancels = self.cancel_orders(statuses)
+            cancels = self.cancel_orders(statuses, row.timestamp)
             orders += cancels
 
           action = self.agent.get_action(obs)
@@ -329,7 +330,7 @@ class ModelTest(unittest.TestCase):
           self.agent.store_episode(obs, ps, meta, False, action)
           self.agent.update()
 
-          orders += self.action_to_order(action, memory, row.timestamp, 1000)
+          orders += self.action_to_order(action, memory, row.timestamp, quantity=1000)
 
         else:
           orders = []
@@ -404,14 +405,19 @@ class ModelTest(unittest.TestCase):
     ### Initialize simulation
     pairs = list(zip(glob.glob('../notebooks/time-sampled/orderbook_*'), glob.glob('../notebooks/time-sampled/trade_*')))
     ob_file, tr_file = random.choice(pairs)
+
+    # ob_file, tr_file = '../notebooks/time-sampled/orderbook_4020.csv.gz', '../notebooks/time-sampled/trade_4020.csv.gz'
+
+    # trade_4020
     result_output = init_simulation(agent, ob_file, tr_file, output_required=True, cancels_enaled=True)
     agent.episode_files.append((ob_file, tr_file))
 
     ### Visualize results
     orders_side1, orders_side2 = list(result_output.orders.values())
-    make_plot_orderbook_trade(ob_file, 'XBTUSD',
+    fig, axs = make_plot_orderbook_trade(ob_file, 'XBTUSD',
                               orders_side1 + orders_side2,
                               orderbook_precomputed=True)
+    plt.show()
 
     res = agent.episode_results()
     res['pnl'] = res['usd'] + res['xbt'] * res['xbt_price']

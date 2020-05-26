@@ -221,7 +221,8 @@ class Backtest:
       if (side == QuoteSides.BID and altered_side_price - level_depth * self.price_step[event.symbol] >= price) or \
           (side == QuoteSides.ASK and altered_side_price + level_depth * self.price_step[event.symbol] <= price):
         for sub in suborders:
-          statuses.append(OrderStatus.cancel(sub[0], event.timestamp))
+          order = self.simulated_orders_id[sub[0]]
+          statuses.append(OrderStatus.cancel(order.id, event.timestamp, order.volume - order.volume_filled)) # todo: here
           del self.simulated_orders_id[sub[0]]
         price_to_del.append(price)
     for price in price_to_del:
@@ -267,8 +268,11 @@ class Backtest:
 
   def _return_unfinished_orders(self, timestamp: datetime.datetime) -> List[OrderStatus]:
     statuses = [x[1] for x in list(self.pending_statuses)]
-    statuses += [OrderStatus.cancel(x[1].id, timestamp) for x in list(self.pending_orders)]
-    statuses += [OrderStatus.cancel(x.id, timestamp) for x in self.simulated_orders_id.values()]
+
+    # todo: works probably bad for cancels (cancel on cancel, ahaha);
+    neworders = filter(lambda x: x[1].command == Statuses.NEW, self.pending_orders)
+    statuses += list(map(lambda x: OrderStatus.cancel(x[1].id, timestamp, x[1].volume_total), neworders))
+    statuses += [OrderStatus.cancel(x.id, timestamp, x.volume - x.volume_filled) for x in self.simulated_orders_id.values()]
     return statuses
 
   def _evaluate_statuses(self, trade: Trade) -> List[OrderStatus]:
@@ -311,6 +315,7 @@ class Backtest:
                 if self._notify_partial and consumption > 0:
                   partial = OrderStatus.partial(order_id, trade.timestamp, int(consumption * order.volume), volume_for_order)
                   statuses.append(partial)
+                  order.volume_filled += volume_for_order
 
       for price, idxs in to_remove.items():
         self.simulated_orders[(trade.symbol, order_side)][price] = [v for i, v in enumerate(orders[price]) if i not in idxs]
@@ -356,7 +361,7 @@ class Backtest:
         if idx_to_del is not None:
           price_orders.pop(idx_to_del)
 
-        return OrderStatus.cancel(action.id, self.reader.current_timestamp) # returns order status
+        return OrderStatus.cancel(action.id, self.reader.current_timestamp, order.volume - order.volume_filled)
       except:  # already deleted
         return None
 

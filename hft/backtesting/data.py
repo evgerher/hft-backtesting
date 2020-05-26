@@ -23,8 +23,9 @@ class OrderStatus:
     return OrderStatus(id, Statuses.FINISHED, timestamp, -1, -1)
 
   @staticmethod
-  def cancel(id: int, timestamp: datetime.datetime) -> 'OrderStatus':
-    return OrderStatus(id, Statuses.CANCEL, timestamp, -1, -1)
+  def cancel(id: int, timestamp: datetime.datetime, volume_left: int) -> 'OrderStatus':
+    # todo: it works badly without partial notifications
+    return OrderStatus(id, Statuses.CANCEL, timestamp, -1, volume_left) # volume means what volume is returned from exchange
 
   @staticmethod
   def partial(id: int, timestamp: datetime.datetime, volume_total: int, volume) -> 'OrderStatus':
@@ -57,8 +58,8 @@ class OrderRequest:
     return id
 
   @staticmethod
-  def cancelOrder(id: int) -> 'OrderRequest':
-    return OrderRequest(id, Statuses.CANCEL, None, None, None, None, None, 0)
+  def cancelOrder(order: 'OrderRequest', ts: datetime.datetime) -> 'OrderRequest':
+    return OrderRequest(order.id, Statuses.CANCEL, order.price, order.volume, order.symbol, order.side, ts, 0)
 
   @staticmethod
   def create(price: float, volume: int, symbol: str, side:int, timestamp: datetime.datetime, command=Statuses.NEW) -> 'OrderRequest':
