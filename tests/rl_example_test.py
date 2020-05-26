@@ -71,8 +71,13 @@ class ModelTest(unittest.TestCase):
     State = namedtuple('State', 'obs ps action next_obs next_ps meta done')
 
     class DecisionCondition:
-      def __init__(self, volume: float):
-        self.volume_condition: float = volume
+      def __init__(self, mu: float, std: float = 1.0):
+        assert mu > 0
+        assert std > 0
+
+        self.mu = mu
+        self.std = std
+        self.volume_condition: float = random.gauss(mu, std)
         self.reset()
 
       def __call__(self, is_trade: bool, event: Union[Trade, OrderBook]):
@@ -80,6 +85,7 @@ class ModelTest(unittest.TestCase):
           self.volume += event.volume
           if self.volume > self.volume_condition:
             self.volume %= self.volume_condition
+            self.volume_condition = random.gauss(self.mu, self.std)
             return True
         return False
 
@@ -318,12 +324,8 @@ class ModelTest(unittest.TestCase):
           obs, ps, prices = self.get_observation(memory, timeleft)
 
           action = self.agent.get_action(obs)
-
-          # if action == 16:  # no action
-          #   self.agent.store_no_action(row.timestamp, prices)
-
           meta = (prices, timeleft)
-
+          
           self.agent.store_episode(obs, ps, meta, False, action)
           self.agent.update()
 
@@ -336,7 +338,8 @@ class ModelTest(unittest.TestCase):
         return orders
 
     def init_simulation(agent: Agent, orderbook_file: str, trade_file: str,
-                        output_required: Union[bool, Output] = False, delay=5) -> Optional[Output]:
+                        output_required: Union[bool, Output] = False, delay=5,
+                        cancels_enaled=True) -> Optional[Output]:
 
       if isinstance(output_required, bool) and output_required:
         output = SimulatedOrdersOutput()
@@ -345,7 +348,7 @@ class ModelTest(unittest.TestCase):
       else:
         output = None
 
-      vwap = VWAP_volume([int(5e5), int(1e6)], name='vwap', z_normalize=3000)
+      vwap = VWAP_volume([int(5e5), int(1e6), int(2e6)], name='vwap', z_normalize=3000)
       liq = LiquiditySpectrum(z_normalize=3000)
 
       defaults = [
@@ -373,7 +376,7 @@ class ModelTest(unittest.TestCase):
 
       strategy = RLStrategy(agent, simulation_end=end_ts, instant_metrics=[vwap, liq], delta_metrics=[hy],
                             time_metrics_trade=[trade_metric, trade_metric2], composite_metrics=[lipton],
-                            initial_balance=0.0)
+                            initial_balance=0.0, cancels_enabled=cancels_enaled)
       backtest = BacktestOnSample(reader, strategy, output=output, delay=delay, warmup=True, stale_depth=7)
       backtest.run()
 
@@ -381,8 +384,8 @@ class ModelTest(unittest.TestCase):
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     condition = DecisionCondition(100000.0)
-    model: DuelingDQN = DuelingDQN(input_dim=41, output_dim=25)
-    target: DuelingDQN = DuelingDQN(input_dim=41, output_dim=25)
+    model: DuelingDQN = DuelingDQN(input_dim=47, output_dim=25)
+    target: DuelingDQN = DuelingDQN(input_dim=47, output_dim=25)
     # model.load_state_dict(torch.load('model-latest.pth'))
     model.train()
     target.eval()

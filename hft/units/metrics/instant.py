@@ -26,24 +26,6 @@ class InstantMetric(Metric):
   def to_numpy(self) -> np.array:
     return np.array(list(self.latest.values()), dtype=np.float)
 
-# class InstantMultiMetric(InstantMetric):
-#   def __init__(self, name, **kwargs):
-#     super().__init__(name, **kwargs)
-#
-#
-#   def evaluate(self, snapshot: OrderBook) -> List[np.array]:
-#       latest = self._evaluate(snapshot)
-#       for idx, item in enumerate(self.subitems()):
-#         self.latest[snapshot.symbol, item] = latest[idx]
-#       return latest
-#
-#   @abstractmethod
-#   def subitems(self) -> List[str]:
-#     raise NotImplementedError
-#
-#   def label(self):
-#     return [self.name] + self.subitems()
-
 
 class _VWAP(InstantMetric):
   def subitems(self) -> List[str]:
@@ -233,15 +215,6 @@ class HayashiYoshido(DeltaMetric):
             upd[p] -= value
 
     def evaluate_side(value):
-      # todo: fixme: memorize two queues (depletion & replenishment)
-      # разбить горизонт на секундные интервалы, внутри каждой секунды сумму depletion & replenishment.
-      # Взять общий горизонт k секунд; На общем горизонте посчитать мат ожидание внутри каждого из блоков (120 непересекающихся отрезков).
-      # Из каждого отрезка вычесть average (для обоих сторон) -> центрированная случайная величина
-      # Без hy вычислить covariance. Скалярное произведение между двумя векторами (описаны выше) / произведение модулей
-
-      # todo: Реализовать оба метода и сравнить результаты
-
-
       if last_diff[symbol][p] is None:
         last_diff[symbol][p] = value
         previous_t[symbol][p] = ts

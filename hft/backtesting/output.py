@@ -65,7 +65,7 @@ class OutputLabeled(Output, ABC):
     raise NotImplementedError
 
 
-class StorageOutput(Output):
+class StorageOutput(OutputLabeled):
   # todo: make it return list of accessible fields, like model.describe()
   def __init__(self, instant_metric_names, time_metric_names):
     super().__init__(instant_metric_names, time_metric_names)
@@ -99,7 +99,7 @@ class SimulatedOrdersOutput(Output):
     self.orders = defaultdict(list)
 
   def consume(self, labels, timestamp: datetime.datetime, object):
-    if 'order-request' in labels:
+    if 'order-request' in labels and labels[-1] is not None: # todo: bad fix for cancel removals
       self.orders[tuple(labels)].append(object)
 
 
@@ -109,7 +109,7 @@ def make_plot_orderbook_trade(orderbook_file: str, symbol: str,
                               orderbook_precomputed:bool=False,
                               figsize=(16,6),
                               skip_every=20,
-                              savefig=False):
+                              savefig=False) -> Tuple[plt.Figure, plt.Axes]:
   '''
   Util function, reads file and plots price of orderbook
   If simulated orders are provided, scatter them on a plot with orderbook prices
@@ -163,6 +163,7 @@ def make_plot_orderbook_trade(orderbook_file: str, symbol: str,
   plt.legend()
   plt.xticks(rotation=90)
   if savefig:
-    plt.savefig(orderbook_file.rsplit('/')[-1])
-  plt.show()
+    plt.savefig(f'{orderbook_file.rsplit("/")[-1]}.png')
+  return fig, axs
+  # plt.show()
 
