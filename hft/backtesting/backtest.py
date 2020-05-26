@@ -73,6 +73,7 @@ class Backtest:
     self._generate_initial_position = policy
     self.__initialize_time_metrics()
     self.delay = delay
+    self.__nextstatuses: List[OrderStatus] = [] # temp list for order status between iterations
 
     if warmup: # define amount of seconds for backtest to run before making decisions
       metrics = [item for sublist in self.strategy.time_metrics.values() for item in sublist]
@@ -94,8 +95,7 @@ class Backtest:
       if self.delay != 0:
         # update pending orders, if delay passed
         pend_orders = self.__update_pending_objects(event.timestamp, self.pending_orders)
-        for ord in pend_orders:
-          self.__move_order_to_active(ord)
+        self.__nextstatuses = list(filter(lambda x: x is not None, [self.__move_order_to_active(ord) for ord in pend_orders]))
       if delta.quote_side >= 4: # is critical
         statuses = self.__critical_price_change(event.symbol, delta.quote_side % 2, event.timestamp, delta.diff)
       elif delta.quote_side >= 2: # BID-ALTER or ASK-ALTER
@@ -120,13 +120,13 @@ class Backtest:
       statuses = self.__update_pending_objects(event.timestamp, self.pending_statuses)
 
     if self.warmup_ended:
-      actions = self.strategy.trigger(event, statuses, self.memory, not isorderbook)
+      actions = self.strategy.trigger(event, statuses + self.__nextstatuses, self.memory, not isorderbook)
     else:
       actions = []
 
     self._update_composite_metrics(event, delta)
     if len(actions) > 0:
-      self._process_actions(actions)
+      self.__nextstatuses = list(filter(lambda x: x is not None, self._process_actions(actions)))
       for action in actions:
         self._flush_output(['order-request', action.symbol, action.side], action.created, action)
 
@@ -190,6 +190,7 @@ class Backtest:
           order_volume_before = items[i][1]
           order_volume_after = level_volume - order_volume_before
 
+          # skip if volume-before is smaller than volume of depletion
           if order_volume_before < -depletion:
             pass
           elif order_volume_after < -depletion:
@@ -318,27 +319,46 @@ class Backtest:
 
     return statuses
 
-  def __move_order_to_active(self, action: OrderRequest):
-    symbol, side, price = action.symbol, action.side, action.price
-    orderbook = self.memory[('orderbook', symbol)]  # get most recent (datetime, orderbook) and return orderbook
-    if side == QuoteSides.BID:
-      prices = orderbook.bid_prices
-      volumes = orderbook.bid_volumes
-    elif side == QuoteSides.ASK:
-      prices = orderbook.ask_prices
-      volumes = orderbook.ask_volumes
-    else:
-      raise KeyError("wrong side")
+  def __move_order_to_active(self, action: OrderRequest) -> Optional[OrderStatus]:
 
-    idx = np.where(prices == price)[0]
-    level_volume = int(volumes[idx] or 0) # get rid of numpy
+    if action.command == Statuses.NEW:
+      symbol, side, price = action.symbol, action.side, action.price
+      orderbook = self.memory[('orderbook', symbol)]  # get most recent (datetime, orderbook) and return orderbook
+      if side == QuoteSides.BID:
+        prices = orderbook.bid_prices
+        volumes = orderbook.bid_volumes
+      elif side == QuoteSides.ASK:
+        prices = orderbook.ask_prices
+        volumes = orderbook.ask_volumes
+      else:
+        raise KeyError("wrong side")
 
-    orders = self.simulated_orders[(symbol, side)][price]
-    orders_volume = sum(map(lambda x: x[0].volume * (1.0 - x[1]),
-                            map(lambda x: (self.simulated_orders_id[x[0]], x[2]),
-                                orders))) # todo: add explanation
-    orders.append((action.id, self._generate_initial_position() * level_volume + orders_volume, 0.0))
-    self.simulated_orders_id[action.id] = action
+      idx = np.where(prices == price)[0]
+      level_volume = int(volumes[idx] or 0) # get rid of numpy
+
+      orders = self.simulated_orders[(symbol, side)][price]
+      orders_volume = sum(map(lambda x: x[0].volume * (1.0 - x[1]),
+                              map(lambda x: (self.simulated_orders_id[x[0]], x[2]),
+                                  orders))) # todo: add explanation
+      orders.append((action.id, self._generate_initial_position() * level_volume + orders_volume, 0.0))
+      self.simulated_orders_id[action.id] = action
+      return None
+    elif action.command == Statuses.CANCEL:
+      try:
+        order = self.simulated_orders_id.pop(action.id)
+        symbol, side, price = order.label()
+        price_orders = self.simulated_orders[(symbol, side)][price]
+
+        idx_to_del = None
+        for idx, (id, v_b, fill) in enumerate(price_orders):
+          if id == order.id:
+            idx_to_del = idx
+        if idx_to_del is not None:
+          price_orders.pop(idx_to_del)
+
+        return OrderStatus.cancel(action.id, self.reader.current_timestamp) # returns order status
+      except:  # already deleted
+        return None
 
   def __update_pending_objects(self, timestamp: datetime.datetime, objects_deque: Deque) -> List[Union[OrderRequest, OrderStatus]]:
     t = timestamp - datetime.timedelta(milliseconds=self.delay)
@@ -347,28 +367,16 @@ class Backtest:
       objs.append(objects_deque.popleft()[1])
     return objs
 
+  def _process_actions(self, actions: List[OrderRequest]) -> List[Optional[OrderStatus]]:
+    # statuses = []
+    if self.delay == 0:
+      statuses: List[Optional[OrderStatus]] = [self.__move_order_to_active(action) for action in actions]
+      return statuses
+    else:
+      for action in actions:
+        self.pending_orders.append((action.created, action))
+      return []
 
-  def _process_actions(self, actions: List[OrderRequest]):
-    for action in actions:
-      if action.command == Statuses.NEW:
-        if self.delay == 0:
-          self.__move_order_to_active(action)
-        else:
-          self.pending_orders.append((action.created, action))
-      elif action.command == Statuses.CANCEL:
-        try:
-          order = self.simulated_orders_id.pop(action.id)
-          symbol, side, price = order.label()
-          price_orders = self.simulated_orders[(symbol, side)][price]
-
-          idx_to_del = None
-          for idx, (id, v_b, fill) in enumerate(price_orders):
-            if id == order.id:
-              idx_to_del = idx
-          if idx_to_del is not None:
-            price_orders.pop(idx_to_del)
-        except: # already deleted
-          pass
 
   def __initialize_time_metrics(self):
     for metrics in self.strategy.time_metrics.values():

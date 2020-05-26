@@ -1,12 +1,13 @@
 import datetime
 from collections import defaultdict
 from typing import Sequence, Optional, List, Tuple
+from abc import ABC, abstractmethod
 
 from hft.backtesting.data import OrderRequest
 from hft.utils.consts import QuoteSides
 from hft.utils.data import OrderBook, Trade
 from hft.utils import helper
-from abc import ABC, abstractmethod
+
 import pandas as pd
 import matplotlib.pyplot as plt
 
@@ -111,7 +112,7 @@ def make_plot_orderbook_trade(orderbook_file: str, symbol: str,
                               skip_every=20,
                               savefig=False) -> Tuple[plt.Figure, plt.Axes]:
   '''
-  Util function, reads file and plots price of orderbook
+  Utility function, reads file and plots price of orderbook
   If simulated orders are provided, scatter them on a plot with orderbook prices
   # If trade_file is provided, scatter them on a plot with orderbook prices
 
@@ -120,8 +121,8 @@ def make_plot_orderbook_trade(orderbook_file: str, symbol: str,
   :param simulated_orders: to display among with ob prices
   :param orderbook_precomputed: flag whether millis are already evaluated
   :param figsize:
-  :param skip_every:
-  :return:
+  :param skip_every: every i-th snapshot's price will be present on a plot
+  :return: plot tuple (figure, axis)
   '''
   import matplotlib.ticker as ticker
 
@@ -146,13 +147,9 @@ def make_plot_orderbook_trade(orderbook_file: str, symbol: str,
       sides[order.side].append((order.created, order.price))
 
     tss, prices = zip(*sides[QuoteSides.BID])
-    tss, prices = map(pd.Series, [tss, prices])
-    # ts = [t.to_pydatetime() for t in ts]
     axs.scatter(tss, prices, c='y', label='Simulated bid orders')
 
     tss, prices = zip(*sides[QuoteSides.ASK])
-    tss, prices = map(pd.Series, [tss, prices])
-    # ts = [t.to_pydatetime() for t in ts]
     axs.scatter(tss, prices, c='g', label='Simulated ask orders')
 
   if no_action_ts is not None and len(no_action_ts) > 0:
@@ -163,7 +160,6 @@ def make_plot_orderbook_trade(orderbook_file: str, symbol: str,
   plt.legend()
   plt.xticks(rotation=90)
   if savefig:
-    plt.savefig(f'{orderbook_file.rsplit("/")[-1]}.png')
+    fname = orderbook_file.rsplit("/")[-1]
+    plt.savefig(f'{fname}.png')
   return fig, axs
-  # plt.show()
-

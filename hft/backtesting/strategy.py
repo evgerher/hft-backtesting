@@ -94,7 +94,7 @@ class Strategy(ABC):
 
     self.metrics_map = self.__bind_metrics()
 
-  def __bind_metrics(self):
+  def __bind_metrics(self): # todo: refactor binding into one line
     metrics_map = {}
     for item in self.instant_metrics:
       metrics_map[item.name] = item
@@ -125,50 +125,50 @@ class Strategy(ABC):
     # }
 
     for status in statuses:
-      if status.status != Statuses.CANCEL: # finished and partial
-        logger.debug(f'Received status: {status}')
-        order = self.active_orders[status.id]
+      # if status.status != Statuses.CANCEL: # finished and partial
+      logger.debug(f'Received status: {status}')
+      order = self.active_orders[status.id]
 
-        if status.status != Statuses.PARTIAL: # finished and cancel
-          volume = order.volume - order.volume_filled
-        else: # todo: reminder - partial else always
-          volume = status.volume_total
-          order.volume_filled += status.volume
+      if status.status != Statuses.PARTIAL: # finished and cancel
+        volume = order.volume - order.volume_filled
+      else: # reminder - here are only partial
+        volume = status.volume_total
+        order.volume_filled += status.volume
 
-        converted_volume = volume / order.price
-        avg_price, vol = self.position[order.symbol]
+      converted_volume = volume / order.price
+      avg_price, vol = self.position[order.symbol]
 
-        if order.side == QuoteSides.ASK:
-          self.balance['USD'] += volume
-          self.balance[order.symbol] -= converted_volume
-          # Contracts * Multiplier * (1/Entry Price - 1/Exit Price)
+      if order.side == QuoteSides.ASK:
+        self.balance['USD'] += volume
+        self.balance[order.symbol] -= converted_volume
+        # Contracts * Multiplier * (1/Entry Price - 1/Exit Price)
 
-          if vol <= 0:
-            total_volume = vol - converted_volume
-            ratio = converted_volume / total_volume
-            self.position[order.symbol] = ((avg_price * (1.0 - ratio) + order.price * ratio), total_volume)
+        if vol <= 0:
+          total_volume = vol - converted_volume
+          ratio = converted_volume / total_volume
+          self.position[order.symbol] = ((avg_price * (1.0 - ratio) + order.price * ratio), total_volume)
+        else:
+          total_volume = vol - converted_volume
+          if total_volume <= 0:
+            self.position[order.symbol] = (order.price, total_volume)
           else:
-            total_volume = vol - converted_volume
-            if total_volume <= 0:
-              self.position[order.symbol] = (order.price, total_volume)
-            else:
-              self.position[order.symbol] = (avg_price, total_volume)
+            self.position[order.symbol] = (avg_price, total_volume)
 
 
-        else: # bid
-          self.balance[order.symbol] += converted_volume
-          self.balance['USD'] -= volume
+      else: # bid
+        self.balance[order.symbol] += converted_volume
+        self.balance['USD'] -= volume
 
-          if vol >= 0:
-            total_volume = vol + converted_volume
-            ratio = converted_volume / total_volume
-            self.position[order.symbol] = ((avg_price * (1.0 - ratio) + order.price * ratio), total_volume)
+        if vol >= 0:
+          total_volume = vol + converted_volume
+          ratio = converted_volume / total_volume
+          self.position[order.symbol] = ((avg_price * (1.0 - ratio) + order.price * ratio), total_volume)
+        else:
+          total_volume = vol + converted_volume
+          if total_volume >= 0:
+            self.position[order.symbol] = (order.price, total_volume)
           else:
-            total_volume = vol + converted_volume
-            if total_volume >= 0:
-              self.position[order.symbol] = (order.price, total_volume)
-            else:
-              self.position[order.symbol] = (avg_price, total_volume)
+            self.position[order.symbol] = (avg_price, total_volume)
 
   def _balance_update_new_order(self, orders: List[OrderRequest]):
     for order in orders:

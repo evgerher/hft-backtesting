@@ -25,11 +25,7 @@ tick_counter = 0
 class ModelTest(unittest.TestCase):
   # @unittest.skip('')
   def test_run(self):
-    # matrices: [2,3,2], [2,3,2], [2, 2], [2]
-    names = ['vwap', 'liquidity-spectrum', 'hayashi-yoshido', 'lipton']
-    # [2, 2], [2, 2]
-    time_names = ['trade-metric-45', 'trade-metric-80']
-
+    ################    DDQN    ################
     class DuelingDQN(nn.Module):
       def __init__(self, input_dim: int, output_dim: int):
         super().__init__()
@@ -68,8 +64,6 @@ class ModelTest(unittest.TestCase):
 
     State = namedtuple('State', 'prev_obs prev_ps action obs ps meta done')
 
-    State = namedtuple('State', 'obs ps action next_obs next_ps meta done')
-
     class DecisionCondition:
       def __init__(self, mu: float, std: float = 1.0):
         assert mu > 0
@@ -92,6 +86,7 @@ class ModelTest(unittest.TestCase):
       def reset(self):
         self.volume = 0.0
 
+    ################    RL agent operations wrapper    ################
     class Agent:
       def __init__(self, model: DuelingDQN, target: DuelingDQN,
                    condition: DecisionCondition,
@@ -222,6 +217,7 @@ class ModelTest(unittest.TestCase):
             param.grad.data.clamp_(-1., 1.)  # gradient clipping
           self.optimizer.step()
 
+    ################    Strategy wrapper    ################
     class RLStrategy(Strategy):
       def __init__(self, agent: Agent, simulation_end: datetime.datetime, cancels_enabled=False, **kwags):
         super().__init__(**kwags)
@@ -320,8 +316,12 @@ class ModelTest(unittest.TestCase):
                         memory: Dict[str, Union[Trade, OrderBook]],
                         is_trade: bool) -> List[OrderRequest]:
         if self.agent.condition(is_trade, row):
+          orders = []
           timeleft = self.get_timeleft(row.timestamp)
           obs, ps, prices = self.get_observation(memory, timeleft)
+          if self.cancels_enabled:
+            cancels = self.cancel_orders(statuses)
+            orders += cancels
 
           action = self.agent.get_action(obs)
           meta = (prices, timeleft)
@@ -329,14 +329,13 @@ class ModelTest(unittest.TestCase):
           self.agent.store_episode(obs, ps, meta, False, action)
           self.agent.update()
 
-          orders = self.action_to_order(action, memory, row.timestamp, 1000)
-          if self.cancels_enabled:
-            cancels = self.cancel_orders(statuses)
-            orders += cancels
+          orders += self.action_to_order(action, memory, row.timestamp, 1000)
+
         else:
           orders = []
         return orders
 
+    ################    Simulation wrapper    ################
     def init_simulation(agent: Agent, orderbook_file: str, trade_file: str,
                         output_required: Union[bool, Output] = False, delay=5,
                         cancels_enaled=True) -> Optional[Output]:
@@ -377,11 +376,17 @@ class ModelTest(unittest.TestCase):
       strategy = RLStrategy(agent, simulation_end=end_ts, instant_metrics=[vwap, liq], delta_metrics=[hy],
                             time_metrics_trade=[trade_metric, trade_metric2], composite_metrics=[lipton],
                             initial_balance=0.0, cancels_enabled=cancels_enaled)
-      backtest = BacktestOnSample(reader, strategy, output=output, delay=delay, warmup=True, stale_depth=7)
+      backtest = BacktestOnSample(reader, strategy, output=output, delay=delay, warmup=True, stale_depth=8)
       backtest.run()
 
       return backtest.output
 
+    # matrices: [3,3,2], [2,3,2], [2, 2], [2]
+    names = ['vwap', 'liquidity-spectrum', 'hayashi-yoshido', 'lipton']
+    # [2, 2], [2, 2]
+    time_names = ['trade-metric-45', 'trade-metric-80']
+
+    ### Initialize agent, model, target network, decision unit
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     condition = DecisionCondition(100000.0)
     model: DuelingDQN = DuelingDQN(input_dim=47, output_dim=25)
@@ -392,28 +397,25 @@ class ModelTest(unittest.TestCase):
     target.load_state_dict(model.state_dict())
 
     # target.load_state_dict(torch.load('notebooks/model.pth'))
-
     model.to(device)
     target.to(device)
-
     agent = Agent(model, target, condition, batch_size=8)
+
+    ### Initialize simulation
     pairs = list(zip(glob.glob('../notebooks/time-sampled/orderbook_*'), glob.glob('../notebooks/time-sampled/trade_*')))
-    # for idx in range(3):
     ob_file, tr_file = random.choice(pairs)
-    # ob_file, tr_file = '../notebooks/time-sampled-10min/orderbook_1715.csv.gz', '../notebooks/time-sampled-10min/trade_1715.csv.gz'
-    result_output = init_simulation(agent, ob_file, tr_file, output_required=True)
+    result_output = init_simulation(agent, ob_file, tr_file, output_required=True, cancels_enaled=True)
     agent.episode_files.append((ob_file, tr_file))
 
+    ### Visualize results
     orders_side1, orders_side2 = list(result_output.orders.values())
-    no_action_event = agent.no_action_event[1]
     make_plot_orderbook_trade(ob_file, 'XBTUSD',
                               orders_side1 + orders_side2,
-                              no_action_event,
                               orderbook_precomputed=True)
 
     res = agent.episode_results()
     res['pnl'] = res['usd'] + res['xbt'] * res['xbt_price']
-    print('ok')
+    print(res)
 
 
 
