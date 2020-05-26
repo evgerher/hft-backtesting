@@ -1,6 +1,6 @@
 from collections import defaultdict
 from dataclasses import dataclass
-from typing import List, Dict, Tuple, Union, Callable
+from typing import List, Dict, Tuple, Union, Callable, Optional
 
 from hft.backtesting.data import OrderStatus, OrderRequest
 from hft.units.metrics.composite import CompositeMetric
@@ -53,25 +53,26 @@ class TraditionalFee:
 
 
 class Strategy(ABC):
-  delay = 400e-6  # 400 microsec from intranet computer to exchange terminal
-  # delay = 1e-3  # 1 msec delay from my laptop
 
   def __init__(self, instant_metrics: List[InstantMetric] = [],
                delta_metrics: List[DeltaMetric] = [],
                time_metrics_trade: List[TradeMetric] = [],
                time_metrics_snapshot: List[TimeMetric] = [],
                composite_metrics: List[CompositeMetric] = [],
-               initial_balance: int = int(1e6),
+               initial_balance: float = 1e6,
                balance_listener: Callable[[Tuple], None] = None,
-               filter_depth: int = 4,
-               warmup=False):
+               filter: Optional[Union[int, Filters.Filter]] = 4):
     """
 
     :param instant_metrics:
     :param depth_filter:
     """
-    filter_depth = filter_depth or 4
-    self.filter = Filters.DepthFilter(filter_depth)
+    if isinstance(filter, int):
+      self.filter = Filters.DepthFilter(filter)
+    elif isinstance(filter, Filters.Filter):
+      self.filter = filter
+    else:
+      self.filter = Filters.DepthFilter(4)
 
     self.instant_metrics: List[InstantMetric] = instant_metrics
     self.time_metrics: Dict[str, List[TimeMetric]] = {
@@ -83,8 +84,7 @@ class Strategy(ABC):
 
     self.active_orders: Dict[int, OrderRequest] = {}
 
-    self.balance: Dict[str, float] = defaultdict(lambda: 0)
-    self.balance['USD'] = initial_balance
+    self.balance: Dict[str, float] = {'USD': initial_balance, 'XBTUSD': 0.0, 'ETHUSD': 0.0}
     self.position: Dict[str, Tuple[float, float]] = {'XBTUSD': (0.0, 0.0), 'ETHUSD': (0.0, 0.0)}  # (average_price, volume)
 
     self.balance_listener = balance_listener
@@ -172,13 +172,14 @@ class Strategy(ABC):
 
   def _balance_update_new_order(self, orders: List[OrderRequest]):
     for order in orders:
-      logger.info(f'New order: {order}')
-      ### action negative update balance
-      self.active_orders[order.id] = order
-      if order.side == QuoteSides.ASK:
-        self.balance[order.symbol] += order.volume / order.price * (self.fee[order.symbol].settlement  + self.fee[order.symbol].maker)
-      elif order.side == QuoteSides.BID:
-        self.balance['USD'] += order.volume * (self.fee[order.symbol].settlement + self.fee[order.symbol].maker)
+      if order.command != Statuses.CANCEL:
+        logger.info(f'New order: {order}')
+        ### action negative update balance
+        self.active_orders[order.id] = order
+        if order.side == QuoteSides.ASK:
+          self.balance[order.symbol] += order.volume / order.price * (self.fee[order.symbol].settlement  + self.fee[order.symbol].maker)
+        elif order.side == QuoteSides.BID:
+          self.balance['USD'] += order.volume * (self.fee[order.symbol].settlement + self.fee[order.symbol].maker)
 
   def _get_allowed_volume(self, symbol, memory, side):
     latest: OrderBook = memory[('orderbook', symbol)]
@@ -187,10 +188,11 @@ class Strategy(ABC):
 
   def __validate_orders(self, orders, memory):
     for order in orders:
-      latest: OrderBook = memory[('orderbook', order.symbol)]
-      side_level = latest.bid_volumes[0] if order.side == QuoteSides.BID else latest.ask_volumes[0]
-      assert order.volume > 0 and ((side_level * 0.15 >= order.volume) or order.volume <= 10000), \
-        f"order size must be max 15% of the level or 10000 units: {order.volume}, {side_level}"
+      if order.command != Statuses.CANCEL:
+        latest: OrderBook = memory[('orderbook', order.symbol)]
+        side_level = latest.bid_volumes[0] if order.side == QuoteSides.BID else latest.ask_volumes[0]
+        assert order.volume > 0 and ((side_level * 0.15 >= order.volume) or order.volume <= 10000), \
+          f"order size must be max 15% of the level or 10000 units: {order.volume}, {side_level}"
 
   def __remove_finished_orders(self, statuses):
     for status in statuses:
@@ -200,14 +202,16 @@ class Strategy(ABC):
   @abstractmethod
   def define_orders(self, row: Union[Trade, OrderBook],
                     statuses: List[OrderStatus],
-                    memory: Dict[str, Union[Trade, OrderBook]]) -> List[OrderRequest]:
+                    memory: Dict[str, Union[Trade, OrderBook]],
+                    is_trade: bool) -> List[OrderRequest]:
     raise NotImplementedError
 
   def trigger(self, row: Union[Trade, OrderBook],
                statuses: List[OrderStatus],
-               memory: Dict[str, Union[Trade, OrderBook]]):
+               memory: Dict[str, Union[Trade, OrderBook]],
+               is_trade: bool):
     self._balance_update_by_status(statuses)
-    orders = self.define_orders(row, statuses, memory)
+    orders = self.define_orders(row, statuses, memory, is_trade)
     self.__validate_orders(orders, memory)
     self._balance_update_new_order(orders)
     self.__remove_finished_orders(statuses)
@@ -241,7 +245,8 @@ class Strategy(ABC):
 class CalmStrategy(Strategy):
   def define_orders(self, row: Union[Trade, OrderBook],
                     statuses: List[OrderStatus],
-                    memory: Dict[str, Union[Trade, OrderBook]]):
+                    memory: Dict[str, Union[Trade, OrderBook]],
+                    is_trade: bool):
     return []
 
   def trigger(self, *args):

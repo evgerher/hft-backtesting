@@ -11,8 +11,8 @@ from hft.utils.types import DepleshionReplenishmentSide
 
 
 class CompositeMetric(InstantMetric):
-  def __init__(self, name: str, **kwargs):
-    super().__init__(name, **kwargs)
+  def __init__(self, name: str, defaults, **kwargs):
+    super().__init__(name, defaults, **kwargs)
     self._metric_map = None
 
   def set_metric_map(self, metric_map: Dict[str, Metric]):
@@ -28,7 +28,11 @@ class Lipton(CompositeMetric):
     :param volume_levels: to consider when taking `x` & `y`
     If levels = 1, metric becomes very unstable, maybe more levels will give stability
     '''
-    super().__init__('lipton', **kwargs)
+    defaults = [
+      ('XBTUSD', 0.5),
+      ('ETHUSD', 0.5)
+    ]
+    super().__init__('lipton', defaults, **kwargs)
     self.vol_metric = vol_name
     self._first_time = True
     self.volume_levels = volume_levels
@@ -43,18 +47,14 @@ class Lipton(CompositeMetric):
       return False
     else:
       return True
-  #
-  # def filter(self, arg):
-  #   return hasattr(arg, 'bid_volumes')
 
   def _evaluate(self, snapshot: OrderBook):
     assert self._metric_map is not None
     vol_latest = self._metric_map[self.vol_metric].latest
 
-    p_xy = vol_latest[snapshot.symbol, DepleshionReplenishmentSide.BID_ASK.name], \
-           vol_latest[snapshot.symbol, DepleshionReplenishmentSide.ASK_BID.name]
-    if not p_xy[0] is None and not p_xy[1] is None:
-      p_xy = np.array(p_xy)
+    p_xy = vol_latest[snapshot.symbol, DepleshionReplenishmentSide.BID_ASK.name]
+    if not p_xy is None:
+      # p_xy = np.array(p_xy)
       p_xy = np.clip(p_xy, self.__n_clip, self.__p_clip)
       x = np.sum(snapshot.bid_volumes[:self.volume_levels])
       y = np.sum(snapshot.ask_volumes[:self.volume_levels])
@@ -74,6 +74,7 @@ class Lipton(CompositeMetric):
     return [self.name]
 
 
+# todo: very old code
 class QuickestDetection(CompositeMetric): # todo: does not work properly
   # todo: what if h1 and h2 are functions?
   def __init__(self, h1, h2, name: str, time_horizon=600, **kwargs):

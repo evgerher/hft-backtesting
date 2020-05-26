@@ -25,25 +25,24 @@ class Backtest:
                strategy: Strategy,
                output: Optional[Output] = None,
                order_position_policy: str = 'tail',  # 'random' or 'head'
-               time_horizon:int=120,
                seed=1337,
                notify_partial: bool = True,
                delay: int=0,
-               warmup: bool=False):
+               warmup: bool=False,
+               stale_depth: int = 2):
     """
 
     :param reader:
     :param strategy:
     :param output:
     :param order_position_policy:
-    :param time_horizon:
     :param seed:
     :param delay: delay in microseconds !
     :param warmup: whether to run backtest without strategy decisions until all time metrics are initialized or not.
+    :param stale_depth: defines number of levels deep in orderbook for simulated orders to be considered stale and cancelled automatically
     """
     self.reader: OrderbookReader = reader
     self.strategy: Strategy = strategy
-    self.time_horizon: int = time_horizon
 
     self.memory: Dict[str, Union[Trade, OrderBook]] = {}
     self.output: Output = output
@@ -58,6 +57,7 @@ class Backtest:
     self.price_step: Dict[str, float] = {'XBTUSD': 0.5, 'ETHUSD': 0.05, 'test': 5}
     self.__last_is_trade = defaultdict(lambda: False)
 
+    self.stale_depth = stale_depth
     self.random = random.Random()
     self.random.seed(seed)
 
@@ -76,7 +76,7 @@ class Backtest:
 
     if warmup: # define amount of seconds for backtest to run before making decisions
       metrics = [item for sublist in self.strategy.time_metrics.values() for item in sublist]
-      w = max(map(lambda metric: metric.seconds, metrics))
+      w = max(map(lambda metric: metric.seconds, metrics)) + 3
       self.warmup = self.reader.initial_moment + datetime.timedelta(seconds=w)
       self.warmup_ended = False
     else:
@@ -99,9 +99,9 @@ class Backtest:
       if delta.quote_side >= 4: # is critical
         statuses = self.__critical_price_change(event.symbol, delta.quote_side % 2, event.timestamp, delta.diff)
       elif delta.quote_side >= 2: # BID-ALTER or ASK-ALTER
-        statuses = self._price_step_cancel_order(event, delta)
+        statuses = self._price_step_cancel_order(event, delta, self.stale_depth)
 
-      if delta.diff.size > 0 and delta.diff[1, 0] < 0 and not self.__last_is_trade[event.symbol]:
+      if delta.diff.size > 0 and delta.diff[1, 0] < 0 and not self.__last_is_trade[event.symbol]: # todo: make it disablable
         self.__cancel_quote_levels_update((event.symbol, delta.quote_side % 2), delta.diff)
       self.__last_is_trade[event.symbol] = False
       self._update_snapshots(event, delta)
@@ -120,7 +120,7 @@ class Backtest:
       statuses = self.__update_pending_objects(event.timestamp, self.pending_statuses)
 
     if self.warmup_ended:
-      actions = self.strategy.trigger(event, statuses, self.memory)
+      actions = self.strategy.trigger(event, statuses, self.memory, not isorderbook)
     else:
       actions = []
 
@@ -156,7 +156,21 @@ class Backtest:
     return statuses
 
   def __cancel_quote_levels_update(self, symbol_side: SymbolSide,  price_volume: np.array):
-    snapshot: OrderBook = self.memory[(('orderbook', symbol_side[0]))]
+    '''
+    Method implements level's consumption below simulated quotes
+    For example we have a quote on 1000 units standing on 50000 units level.
+    (50k must be realized before simulated quote)
+    - If delta comes with volume > level before quote, thus it is consumed from above quotes (not below).
+    - Because quotes below have smaller volume.
+
+    - It cannot be treated as trade, because trades appear before new delta orderbook, and their impact is evaluated before this delta
+    - Additionaly, if it is a trade-before orderbook, no `cancel quote` will be evaluated here.
+
+    :param symbol_side:
+    :param price_volume:
+    :return:
+    '''
+    snapshot: OrderBook = self.memory[('orderbook', symbol_side[0])]
     target_price = snapshot.bid_prices if symbol_side[1] == QuoteSides.BID else snapshot.ask_prices
     target_volume = snapshot.bid_volumes if symbol_side[1] == QuoteSides.BID else snapshot.ask_volumes
 
@@ -180,22 +194,31 @@ class Backtest:
             pass
           elif order_volume_after < -depletion:
             items[i] = (items[i][0], max(0, order_volume_before + depletion), items[i][2])
-          else: # randomly delete this item
+          else:  # randomly delete this item
             if self.random.uniform(0.0, 1.0) <= order_volume_before / level_volume:
               items[i] = (items[i][0], max(0, order_volume_before + depletion), items[i][2])
 
 
-  def _price_step_cancel_order(self, event: OrderBook, delta: Delta) -> List[OrderStatus]:
+  def _price_step_cancel_order(self, event: OrderBook, delta: Delta, level_depth=2) -> List[OrderStatus]:
+    '''
+    Method allows automatic cancelling of nonexecuted simulated quotes, which are far inside in orderbook from best levels.
+    Thus removes stale orders and returns them to strategy.
+
+    :param event:
+    :param delta:
+    :param level_depth:
+    :return:
+    '''
     statuses = []
 
-    side = delta.quote_side % 2 # % 2 is to transform BID-ALTER -> BID and ASK-ALTER -> ASK
+    side = delta.quote_side % 2  # % 2 is to transform BID-ALTER -> BID and ASK-ALTER -> ASK
     orders = self.simulated_orders[(event.symbol, side)]
     altered_side_price = event.bid_prices[0] if side == QuoteSides.BID else event.ask_prices[0]
     price_to_del = []
 
     for price, suborders in orders.items():
-      if (side == QuoteSides.BID and altered_side_price - 2 * self.price_step[event.symbol] >= price) or \
-          (side == QuoteSides.ASK and altered_side_price + 2 * self.price_step[event.symbol] <= price):
+      if (side == QuoteSides.BID and altered_side_price - level_depth * self.price_step[event.symbol] >= price) or \
+          (side == QuoteSides.ASK and altered_side_price + level_depth * self.price_step[event.symbol] <= price):
         for sub in suborders:
           statuses.append(OrderStatus.cancel(sub[0], event.timestamp))
           del self.simulated_orders_id[sub[0]]
@@ -333,9 +356,19 @@ class Backtest:
         else:
           self.pending_orders.append((action.created, action))
       elif action.command == Statuses.CANCEL:
-        order = self.simulated_orders_id.pop(action.id)
-        symbol, side, price = order.label()
-        self.simulated_orders[(symbol, side)][price].remove(order)
+        try:
+          order = self.simulated_orders_id.pop(action.id)
+          symbol, side, price = order.label()
+          price_orders = self.simulated_orders[(symbol, side)][price]
+
+          idx_to_del = None
+          for idx, (id, v_b, fill) in enumerate(price_orders):
+            if id == order.id:
+              idx_to_del = idx
+          if idx_to_del is not None:
+            price_orders.pop(idx_to_del)
+        except: # already deleted
+          pass
 
   def __initialize_time_metrics(self):
     for metrics in self.strategy.time_metrics.values():

@@ -172,7 +172,7 @@ class VolumeSampler(Sampler):
     idx = self._traded_cusum >= self.volume + self._traded_volume
 
     if idx.any():
-      idx = np.argmax(idx)
+      idx = self._traded_cusum.index[np.argmax(idx)]
     else:
       idx = self._traded_cusum.index[-1]
 

@@ -195,6 +195,9 @@ class OrderbookReader(Reader):
       return self.stop_after
     return None
 
+  def get_ending_moment(self) -> datetime.datetime:
+    return min(self._trades_df.iloc[-1].timestamp, self._snapshots_df.iloc[-1][0]).to_pydatetime()
+
 
 class TimeLimitedReader(OrderbookReader):
   def __init__(self, snapshot_file: str, limit_time: str, skip_time: str = None, **kwargs): # todo: add warm-up run

@@ -42,7 +42,7 @@ def convert_to_datetime(moment: Union[datetime.datetime, str]):
     return moment
 
 
-def fix_timestamp(df, timestamp_index, millis_index, precomputed=False):
+def fix_timestamp(df, timestamp_index, millis_index, precomputed=False) -> pd.DataFrame:
   df.iloc[:, timestamp_index] = pd.to_datetime(df.iloc[:, timestamp_index])
   if not precomputed:
     df.iloc[:, millis_index] = df.iloc[:, millis_index].apply(lambda x: datetime.timedelta(milliseconds=x))
