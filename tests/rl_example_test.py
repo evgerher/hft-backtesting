@@ -9,7 +9,7 @@ from hft.backtesting.backtest import BacktestOnSample
 from hft.backtesting.data import OrderStatus, OrderRequest
 from hft.backtesting.output import make_plot_orderbook_trade, Output, SimulatedOrdersOutput
 from hft.backtesting.readers import OrderbookReader
-from hft.backtesting.strategy import Strategy
+from hft.backtesting.strategy import Strategy, CancelsApplied
 from hft.units.metrics.composite import Lipton
 from hft.units.metrics.instant import VWAP_volume, LiquiditySpectrum, HayashiYoshido
 from hft.units.metrics.time import TradeMetric
@@ -299,9 +299,9 @@ class ModelTest(unittest.TestCase):
         ob: OrderBook = memory[('orderbook', 'XBTUSD')]
         orders = []
 
-        if offset_bid > 0:
+        if offset_bid >= 0:
           orders.append(OrderRequest.create_bid(ob.bid_prices[0] - offset_bid, quantity, 'XBTUSD', ts))
-        if offset_ask > 0:
+        if offset_ask >= 0:
           orders.append(OrderRequest.create_ask(ob.ask_prices[0] + offset_ask, quantity, 'XBTUSD', ts))
 
         return orders
@@ -318,19 +318,22 @@ class ModelTest(unittest.TestCase):
                         is_trade: bool) -> List[OrderRequest]:
         if self.agent.condition(is_trade, row):
           orders = []
-          timeleft = self.get_timeleft(row.timestamp)
-          obs, ps, prices = self.get_observation(memory, timeleft)
+          cancels = []
           if self.cancels_enabled:
             cancels = self.cancel_orders(statuses, row.timestamp)
             orders += cancels
 
-          action = self.agent.get_action(obs)
-          meta = (prices, timeleft)
-          
-          self.agent.store_episode(obs, ps, meta, False, action)
+          timeleft = self.get_timeleft(row.timestamp)
+
+          with CancelsApplied(self, cancels):
+            obs, ps, prices = self.get_observation(memory, timeleft)
+            action = self.agent.get_action(obs)
+            meta = (prices, timeleft)
+            self.agent.store_episode(obs, ps, meta, False, action)
+
           self.agent.update()
 
-          orders += self.action_to_order(action, memory, row.timestamp, quantity=1000)
+          orders += self.action_to_order(action, memory, row.timestamp, 1000)
 
         else:
           orders = []

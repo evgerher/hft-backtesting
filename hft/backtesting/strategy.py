@@ -133,7 +133,8 @@ class Strategy(ABC):
         if status.status != Statuses.PARTIAL: # finished and cancel
           volume = order.volume - order.volume_filled
         else: # reminder - here are only partial
-          volume = status.volume_total
+          # volume = status.volume_total
+          volume = status.volume
           order.volume_filled += status.volume
 
         converted_volume = volume / order.price
@@ -255,3 +256,17 @@ class CalmStrategy(Strategy):
 
   def trigger(self, *args):
     return []
+
+class CancelsApplied:
+  def __init__(self, strategy: Strategy, cancels: List[OrderRequest]):
+    # assert all([t.command == Statuses.CANCEL for t in cancels])
+    self.strategy: Strategy = strategy
+    orders = [strategy.active_orders[x.id] for x in cancels]
+    self.cancel_statuses = [OrderStatus.partial(x.id, x.created, y.volume_filled, y.volume - y.volume_filled) for x, y in zip(cancels, orders)]
+    self.revert_statuses = [OrderStatus.partial(x.id, x.created, y.volume_filled, y.volume_filled - y.volume) for x, y in zip(cancels, orders)]
+
+  def __enter__(self):
+    self.strategy._balance_update_by_status(self.cancel_statuses)
+
+  def __exit__(self, type, value, traceback):
+    self.strategy._balance_update_by_status(self.revert_statuses)
