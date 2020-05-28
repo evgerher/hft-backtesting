@@ -163,7 +163,7 @@ class HayashiYoshido(DeltaMetric):
 
   This Time metric does not provide `storage` field
   '''
-  def __init__(self, seconds=300, normalization=False, **kwargs):
+  def __init__(self, seconds=140, normalization=False, **kwargs):
 
     defaults = []
 

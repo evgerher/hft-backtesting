@@ -145,12 +145,11 @@ class Strategy(ABC):
           self.balance[order.symbol] -= converted_volume
           # Contracts * Multiplier * (1/Entry Price - 1/Exit Price)
 
+          total_volume = vol - converted_volume
           if vol <= 0:
-            total_volume = vol - converted_volume
             ratio = converted_volume / total_volume
             self.position[order.symbol] = ((avg_price * (1.0 - ratio) + order.price * ratio), total_volume)
           else:
-            total_volume = vol - converted_volume
             if total_volume <= 0:
               self.position[order.symbol] = (order.price, total_volume)
             else:
@@ -161,12 +160,11 @@ class Strategy(ABC):
           self.balance[order.symbol] += converted_volume
           self.balance['USD'] -= volume
 
+          total_volume = vol + converted_volume
           if vol >= 0:
-            total_volume = vol + converted_volume
             ratio = converted_volume / total_volume
             self.position[order.symbol] = ((avg_price * (1.0 - ratio) + order.price * ratio), total_volume)
           else:
-            total_volume = vol + converted_volume
             if total_volume >= 0:
               self.position[order.symbol] = (order.price, total_volume)
             else:

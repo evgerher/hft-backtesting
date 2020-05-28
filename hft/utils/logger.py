@@ -24,6 +24,4 @@ def setup_logger(name:str = None, level='INFO'):
   # add formatter to ch
   ch.setFormatter(formatter)
   logger.addHandler(ch)
-  t = logging.config.listen(13000)
-  t.start()
   return logger

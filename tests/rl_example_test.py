@@ -426,9 +426,3 @@ class ModelTest(unittest.TestCase):
     res['pnl'] = res['usd'] + res['xbt'] * res['xbt_price']
     print(res)
 
-
-
-
-  def test_plot(self):
-    make_plot_orderbook_trade('../notebooks/time-sampled-10min/orderbook_1715.csv.gz', 'XBTUSD', orderbook_precomputed=True)
-    print('ok')

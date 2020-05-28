@@ -234,7 +234,7 @@ class Backtest:
   def run(self, tqdm_enabled=False, notify_each=3000):
 
     def reader_iterate():
-      print('reader iterate')
+      logger.debug('reader iterate')
       for row, isorderbook in self.reader:
         self._process_event(row, isorderbook)
       else:
@@ -271,7 +271,7 @@ class Backtest:
 
     # todo: works probably bad for cancels (cancel on cancel, ahaha);
     neworders = filter(lambda x: x[1].command == Statuses.NEW, self.pending_orders)
-    statuses += list(map(lambda x: OrderStatus.cancel(x[1].id, timestamp, x[1].volume_total), neworders))
+    statuses += list(map(lambda x: OrderStatus.cancel(x[1].id, timestamp, x[1].volume), neworders))
     statuses += [OrderStatus.cancel(x.id, timestamp, x.volume - x.volume_filled) for x in self.simulated_orders_id.values()]
     return statuses
 

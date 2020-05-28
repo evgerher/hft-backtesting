@@ -210,12 +210,50 @@ class MetricTest(unittest.TestCase):
     mu, sigma = np.mean(vwap_values, axis=0), np.std(vwap_values, axis=0)
 
     v = vwap.latest['XBTUSD']
-    # sh = v.shape
-    # v2 = v.reshape(-1)
     v = (v - mu) / (sigma + 1e-4)
-    # v2 = v2.reshape(sh)
 
     self.assertTrue((v == normalized).all()) # todo: does not work, wtf ??? Due to floating error, random 7.6 e-5 mistakes
+
+  @unittest.skip('Manual plot for demo')
+  def test_plot_znormalization(self):
+    import matplotlib.pyplot as plt
+    import pandas as pd
+    period = 1500
+
+    reader = OrderbookReader(snapshot_file='resources/orderbook/orderbooks.csv.gz', nrows=15000, stop_after=14000)
+    vwap_normalized = VWAP_volume([int(2.5e5), int(1e6)], name='vwap_normalized', z_normalize=period)
+    vwap = VWAP_volume([int(2.5e5), int(1e6)], name='vwap')
+    strategy = CalmStrategy(instant_metrics=[vwap, vwap_normalized])
+    backtest = Backtest(reader, strategy)
+
+    vwap_values_normalized = []
+    vwap_values = []
+    ts = []
+    for idx, (item, flag) in enumerate(reader):
+      backtest._process_event(item, flag)
+      if flag and item.symbol == 'XBTUSD':
+        vwap_values.append(vwap.latest[item.symbol])
+        vwap_values_normalized.append(vwap_normalized.latest[item.symbol])
+        ts.append(item.timestamp)
+
+    vwap_values = np.array(vwap_values)
+    vwap_values_normalized = np.array(vwap_values_normalized)
+    v1 = vwap_values[:, 1, 0]
+    v2 = vwap_values_normalized[:, 1, 0]
+
+    f = plt.figure(figsize=(20, 12))
+    # plt.plot(balances_df['timestamp'], balances_df['balance'])
+    v1_plot = f.add_subplot(211)
+    v2_plot = f.add_subplot(212)
+
+    ts = pd.to_datetime(ts)
+    v1_plot.plot(ts, v1, label='VWAP common')
+    v2_plot.plot(ts, v2, label='VWAP z-normalized (1500)')
+
+    v2_plot.set(xlabel='Time', ylabel='Price')
+    v1_plot.set(ylabel='Price', title=f'XBTUSD VWAP (bid): common vs z-normalized')
+    plt.show()
+
 
   def test_crafty_correlation(self):
     crafty = CraftyCorrelation(40, 5, 'crafty')

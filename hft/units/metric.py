@@ -25,7 +25,7 @@ class ZNormalized(defaultdict):
     :param default_factory: factory for `defaultdict`
     '''
     super().__init__(default_factory, **kwargs)
-    self.__storage = defaultdict(lambda: deque(maxlen=period))
+    self._storage = defaultdict(lambda: deque(maxlen=period))
 
   def __setitem__(self, item, value):
     '''
@@ -33,7 +33,7 @@ class ZNormalized(defaultdict):
     :return:
     '''
     super().__setitem__(item, value)
-    self.__storage[item].append(value)
+    self._storage[item].append(value)
 
   def __getitem__(self, item) -> np.array:
     '''
@@ -42,7 +42,7 @@ class ZNormalized(defaultdict):
 
     :return: normalized value
     '''
-    values = np.array(self.__storage[item], dtype=np.float)
+    values = np.array(self._storage[item], dtype=np.float)
     value = super().__getitem__(item)
 
     mu, std = np.mean(values, axis=0), np.std(values, axis=0)
