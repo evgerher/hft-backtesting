@@ -116,12 +116,12 @@ class Strategy(ABC):
 
   def _balance_update_by_status(self, statuses: List[OrderStatus]):
     # direction_mappings = {
-    #   ('ask', 'partial') : 'USD',
-    #   ('bid', 'partial') : order.symbol,
-    #   ('ask', 'finished'): 'USD',
-    #   ('bid', 'finished'): order.symbol,
-    #   ('ask', 'cancel')  : order.symbol,
-    #   ('bid', 'cancel')  : 'USD',
+    #   ('ask', 'partial') : +'USD', -symbol,
+    #   ('bid', 'partial') : +order.symbol, -USD,
+    #   ('ask', 'finished'): +'USD', -symbol,
+    #   ('bid', 'finished'): +order.symbol, -USD,
+    #   ('ask', 'cancel')  : +order.symbol, -USD
+    #   ('bid', 'cancel')  : +'USD', -symbol
     # }
 
     for status in statuses:
@@ -138,6 +138,10 @@ class Strategy(ABC):
           order.volume_filled += status.volume
 
         converted_volume = volume / order.price
+        if status.status == Statuses.CANCEL:
+          converted_volume  = -converted_volume
+          volume            = -volume
+
         avg_price, vol = self.position[order.symbol]
 
         if order.side == QuoteSides.ASK:

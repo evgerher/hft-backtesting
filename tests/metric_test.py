@@ -218,7 +218,7 @@ class MetricTest(unittest.TestCase):
   def test_plot_znormalization(self):
     import matplotlib.pyplot as plt
     import pandas as pd
-    period = 1500
+    period = 96
 
     reader = OrderbookReader(snapshot_file='resources/orderbook/orderbooks.csv.gz', nrows=15000, stop_after=14000)
     vwap_normalized = VWAP_volume([int(2.5e5), int(1e6)], name='vwap_normalized', z_normalize=period)

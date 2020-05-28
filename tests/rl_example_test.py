@@ -115,6 +115,13 @@ class ModelTest(unittest.TestCase):
 
         self.no_action_event = deque(maxlen=20)
         self.reset_state()
+        self._is_training: bool = False
+
+      def train(self):
+        self._is_training = True
+
+      def eval(self):
+        self._is_training = False
 
       def store_no_action(self, ts, price):
         self.no_action_event[0].append((ts, price))
@@ -161,47 +168,45 @@ class ModelTest(unittest.TestCase):
         return torch.exp(torch.abs(inbalance) * scale) * torch.sign(inbalance) / shift  # 0: usd, 1: xbtusd, 2: ethusd
 
       def store_episode(self, new_obs, new_ps, meta, done, action):
-        nans = [np.isnan(t).any() for t in [new_obs, new_ps, meta, done, action]]
-        if not any(nans):
-          if self.is_initialized():
-            self._replay_buffer.append((self.obs, self.ps, self.action, new_obs, new_ps, meta, done))
-          self.obs = new_obs
-          self.ps = new_ps
-          self.action = action
+        if self._is_training:
+          nans = [np.isnan(t).any() for t in [new_obs, new_ps, meta, done, action]]
+          if not any(nans):
+            if self.is_initialized():
+              self._replay_buffer.append((self.obs, self.ps, self.action, new_obs, new_ps, meta, done))
+            self.obs = new_obs
+            self.ps = new_ps
+            self.action = action
 
       def is_initialized(self):
         return self.obs is not None  # happens after reset, first obs is missing
 
       def get_action(self, obs):
-        eps = self.EPS_END + (self.EPS_START - self.EPS_END) * np.exp(-1. * self.episode_counter / self.EPS_DECAY)
-        if np.random.uniform(0.0, 1.0) < eps:
-          return random.randint(0, self._model.output_dim - 1)
+        if self._is_training:
+          eps = self.EPS_END + (self.EPS_START - self.EPS_END) * np.exp(-1. * self.episode_counter / self.EPS_DECAY)
+          if np.random.uniform(0.0, 1.0) < eps :
+            return random.randint(0, self._model.output_dim - 1)
         with torch.no_grad():
           _, _, qvals = self._target(torch.tensor(obs, dtype=torch.float, device=device).unsqueeze(0))
           action = torch.argmax(qvals).cpu().detach().item()
           return action
 
       def update(self):
-        if len(self._replay_buffer) > self._batch_size:
+        if len(self._replay_buffer) > self._batch_size and self._is_training:
           items = random.sample(self._replay_buffer, self._batch_size)
-          prev_obs, prev_ps, action, obs, ps, meta, done = zip(*items)
-          prev_obs, prev_ps, obs, ps, meta = map(lambda x: torch.tensor(x, dtype=torch.float).to(device),
-                                                 [prev_obs, prev_ps, obs, ps, meta])
+          obs, ps, action, next_obs, next_ps, meta, done = zip(*items)
+          obs, ps, next_obs, next_ps, meta = map(lambda x: torch.tensor(x, dtype=torch.float).to(device),
+                                                 [obs, ps, next_obs, next_ps, meta])
           done = torch.tensor(done, dtype=torch.bool).to(device)
           action = torch.tensor(action, dtype=torch.long).unsqueeze(1).to(device)
 
-          v, _, qvalues = self._model(prev_obs)
+          v, _, qvalues = self._model(obs)
           with torch.no_grad():
-            next_v, _, next_qvalues = self._target(obs[~done])
-
-            #           next_v.detach()
-            #           next_qvalues.detach()
-            #           _.detach()
+            next_v, _, next_qvalues = self._target(next_obs[~done])
             next_qvalues = next_qvalues.max(1)[0]
 
           rewards = torch.empty_like(done, dtype=torch.float, device=device)
-          rewards[done] = self.get_terminal_reward(ps[done], meta[done][:, 0])
-          rewards[~done] = self.get_reward(v[~done], next_v, prev_ps[~done][:, 1], ps[~done][:, 1], meta[~done][:, 1])
+          rewards[done] = self.get_terminal_reward(next_ps[done], meta[done][:, 0])
+          rewards[~done] = self.get_reward(v[~done], next_v, ps[~done][:, 1], next_ps[~done][:, 1], meta[~done][:, 1])
           rewards = rewards.clamp(-1., 1.)  # reward clipping
 
           qvalues = qvalues.gather(1, action).squeeze(1)
@@ -220,10 +225,10 @@ class ModelTest(unittest.TestCase):
 
     ################    Strategy wrapper    ################
     class RLStrategy(Strategy):
-      def __init__(self, agent: Agent, simulation_end: datetime.datetime, cancels_enabled=False, **kwags):
+      def __init__(self, agent: Agent, simulation_end: datetime.datetime, episode_length: int, cancels_enabled=False, **kwags):
         super().__init__(**kwags)
         self.agent: Agent = agent
-        self._simulation_end = simulation_end
+        self._simulation_end: datetime.datetime = simulation_end
         self.action_space: Dict[int, Tuple[int, int]] = {
           0: (0, 0),
           1: (1, 0),
@@ -253,6 +258,7 @@ class ModelTest(unittest.TestCase):
         }
         self.cancels_enabled = cancels_enabled
         self.no_action_event = []
+        self._episode_length = episode_length
 
       def return_unfinished(self, statuses: List[OrderStatus], memory: Dict[str, Union[Trade, OrderBook]]):
         obs, ps, prices = self.get_observation(memory, 0.0)
@@ -288,7 +294,7 @@ class ModelTest(unittest.TestCase):
         return np.array(list(self.balance.values()))
 
       def get_timeleft(self, ts: datetime.datetime) -> float:
-        return (self._simulation_end - ts).total_seconds()
+        return (self._simulation_end - ts).total_seconds() % self._episode_length # 10 minute episodes
 
       def action_to_order(self, action: int, memory, ts, quantity: int) -> List[OrderRequest]:
         offset_bid, offset_ask = self.action_space[action]
@@ -377,7 +383,7 @@ class ModelTest(unittest.TestCase):
       reader = OrderbookReader(orderbook_file, trade_file, nrows=None, is_precomputed=True)
       end_ts = reader.get_ending_moment()
 
-      strategy = RLStrategy(agent, simulation_end=end_ts, instant_metrics=[vwap, liq], delta_metrics=[hy],
+      strategy = RLStrategy(agent, simulation_end=end_ts, episode_length=600, instant_metrics=[vwap, liq], delta_metrics=[hy],
                             time_metrics_trade=[trade_metric, trade_metric2], composite_metrics=[lipton],
                             initial_balance=0.0, cancels_enabled=cancels_enaled)
       backtest = BacktestOnSample(reader, strategy, output=output, delay=delay, warmup=True, stale_depth=8)

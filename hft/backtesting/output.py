@@ -4,7 +4,7 @@ from typing import Sequence, Optional, List, Tuple
 from abc import ABC, abstractmethod
 
 from hft.backtesting.data import OrderRequest
-from hft.utils.consts import QuoteSides
+from hft.utils.consts import QuoteSides, Statuses
 from hft.utils.data import OrderBook, Trade
 from hft.utils import helper
 
@@ -100,7 +100,7 @@ class SimulatedOrdersOutput(Output):
     self.orders = defaultdict(list)
 
   def consume(self, labels, timestamp: datetime.datetime, object):
-    if 'order-request' in labels and labels[-1] is not None: # todo: bad fix for cancel removals
+    if 'order-request' in labels and labels[-1] is not None and object.command != Statuses.CANCEL: # todo: bad fix for cancel removals
       self.orders[tuple(labels)].append(object)
 
 
