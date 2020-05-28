@@ -20,6 +20,7 @@ class PerpetualFee:
   taker: float
   long: float
   short: float
+  __slots__ = ['maker', 'taker', 'long', 'short', '__weakref__']
 
   @staticmethod
   def Bitmex_XBT():
@@ -38,6 +39,7 @@ class TraditionalFee:
   maker: float
   taker: float
   settlement: float
+  __slots__ = ['maker', 'taker', 'settlement', '__weakref__']
 
   @staticmethod
   def Bitmex_XBT():

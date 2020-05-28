@@ -11,6 +11,7 @@ class MetricData:
   name: str
   symbol: str
   value: float
+  __slots__ = ['name', 'symbol', 'value', '__weakref__']
 
 
 class ZNormalized(defaultdict):
@@ -97,5 +98,3 @@ class Metric(ABC):
   @abstractmethod
   def to_numpy(self):
     raise NotImplementedError
-
-
