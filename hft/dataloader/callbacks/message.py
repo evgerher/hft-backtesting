@@ -5,21 +5,21 @@ from typing import List
 
 @dataclass
 class MetaMessage:
+  __slots__ = ['table', 'action', 'symbol', '__weakref__']
   table: str
   action: str
   symbol: str
-  __slots__ = ['table', 'action', 'symbol', '__weakref__']
 
 
 @dataclass
 class TradeMessage:
+  __slots__ = ['symbol', 'timestamp', 'price', 'size', 'action', 'side', '__weakref__']
   symbol: str
   timestamp: datetime.datetime
   price: float
   size: int
   action: str
   side: str
-  __slots__ = ['symbol', 'timestamp', 'price', 'size', 'action', 'side', '__weakref__']
 
   # {"table": "trade", "action": "insert", "data": [
   #   {"timestamp": "2020-02-04T22:08:32.518Z", "symbol": "XBTUSD", "side": "Buy", "size": 100, "price": 9135.5,

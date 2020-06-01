@@ -8,12 +8,12 @@ initial_id = 0
 
 @dataclass
 class OrderStatus:
+  __slots__ = ['id', 'status', 'at', 'volume_total', 'volume', '__weakref__']
   id: int
   status: int
   at: datetime.datetime
   volume_total: int
   volume: int
-  __slots__ = ['id', 'status', 'at', 'volume_total', 'volume', '__weakref__']
 
 
   def __str__(self):
@@ -35,6 +35,7 @@ class OrderStatus:
 
 @dataclass
 class OrderRequest:
+  __slots__ = ['id', 'command', 'price', 'volume', 'symbol', 'side', 'created', 'volume_filled', '__weakref__']
   id: int
   command: int
   price: float
@@ -43,7 +44,6 @@ class OrderRequest:
   side: int
   created: datetime.datetime
   volume_filled: int
-  __slots__ = ['id', 'command', 'price', 'volume', 'symbol', 'side', 'created', 'volume_filled', '__weakref__']
 
   def label(self) -> Tuple[str, int, float]:
     return (self.symbol, self.side, self.price)

@@ -16,11 +16,11 @@ logger = setup_logger('<Strategy>')
 
 @dataclass
 class PerpetualFee:
+  __slots__ = ['maker', 'taker', 'long', 'short', '__weakref__']
   maker: float
   taker: float
   long: float
   short: float
-  __slots__ = ['maker', 'taker', 'long', 'short', '__weakref__']
 
   @staticmethod
   def Bitmex_XBT():
@@ -36,10 +36,10 @@ class PerpetualFee:
 
 @dataclass
 class TraditionalFee:
+  __slots__ = ['maker', 'taker', 'settlement', '__weakref__']
   maker: float
   taker: float
   settlement: float
-  __slots__ = ['maker', 'taker', 'settlement', '__weakref__']
 
   @staticmethod
   def Bitmex_XBT():
@@ -135,7 +135,6 @@ class Strategy(ABC):
         if status.status != Statuses.PARTIAL: # finished and cancel
           volume = order.volume - order.volume_filled
         else: # reminder - here are only partial
-          # volume = status.volume_total
           volume = status.volume
           order.volume_filled += status.volume
 

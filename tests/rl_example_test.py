@@ -36,23 +36,23 @@ class ModelTest(unittest.TestCase):
 
         self.feature_layer = nn.Sequential(
           nn.Linear(input_dim, 256),
-          nn.LayerNorm(256),
+          # nn.LayerNorm(256),
           nn.ReLU(),
           nn.Linear(256, 256),
-          nn.LayerNorm(256),
+          # nn.LayerNorm(256),
           nn.ReLU()
         )
 
         self.value_stream = nn.Sequential(
           nn.Linear(256, 128),
-          nn.LayerNorm(128),
+          # nn.LayerNorm(128),
           nn.ReLU(),
           nn.Linear(128, 1)
         )
 
         self.advantage_stream = nn.Sequential(
           nn.Linear(256, 256),
-          nn.LayerNorm(256),
+          # nn.LayerNorm(256),
           nn.ReLU(),
           nn.Linear(256, self.output_dim)
         )
@@ -105,10 +105,11 @@ class ModelTest(unittest.TestCase):
 
         self.EPS_START = 0.9
         self.EPS_END = 0.1
-        self.EPS_DECAY = 500
+        self.EPS_DECAY = 250
 
         self.gamma = gamma
         self.loss = torch.nn.SmoothL1Loss()
+        self.losses = []
         self.optimizer = torch.optim.Adam(self._model.parameters(), lr=lr, amsgrad=True)
 
         self._update_each = update_each
@@ -120,9 +121,13 @@ class ModelTest(unittest.TestCase):
 
       def train(self):
         self._is_training = True
+        self._model.eval()
+        self._target.eval()
 
       def eval(self):
         self._is_training = False
+        self._model.train()
+        self._target.eval()
 
       def store_no_action(self, ts, price):
         self.no_action_event[0].append((ts, price))
@@ -132,6 +137,7 @@ class ModelTest(unittest.TestCase):
         states = [t[0].tolist() + [t[1]] for t in states]
         episodes = [list(t[0]) + t[1] for t in zip(fnames, states)]
         res = pd.DataFrame(episodes, columns=['ob_file', 'tr_file', 'usd', 'xbt', 'eth', 'xbt_price'])
+        res['nav'] = res.usd + res.xbt_price * res.xbt
         return res
 
       def reset_state(self):
@@ -163,16 +169,16 @@ class ModelTest(unittest.TestCase):
         # a(V_t - V_{t-1}) + e^{b*tau} * sgn(|i_t| - |i_{t-1}|)
         return vv + pos + accumulation_penalty
 
-      def get_new_reward(self, ps, ps_new, price, sigma, scale_rav=10.0, offset=1.1, scale=0.1, a=100.0, b=0.7):
-        accumulation_penalty = -torch.exp(torch.abs(ps_new[:, 1]) * scale) + offset
-        g1 = self.get_risk_adjusted_state_value(ps_new, price, sigma, scale=scale_rav)
-        g2 = self.get_risk_adjusted_state_value(ps, price, sigma, scale=scale_rav)
-        return a * (g1 - g2) + b * accumulation_penalty
+      def get_new_reward(self, ps, ps_new, price, sigma, scale_rav=1.0, offset=1.1, scale=0.1, a=1.0, b=0.7):
+        # accumulation_penalty = -torch.exp(torch.abs(ps_new[:, 1]) * scale) + offset
+        g1 = self.get_risk_adjusted_state_value(ps, price, sigma, scale=scale_rav)
+        g2 = self.get_risk_adjusted_state_value(ps_new, price, sigma, scale=scale_rav)
+        return a * (g2 - g1)
 
       def get_risk_adjusted_state_value(self, ps: torch.FloatTensor, price: torch.FloatTensor, sigma: torch.FloatTensor,
-                         tau=1.0, lambd = 0.02, scale = 100.0):
-        nav = ps[:, 0] / price + ps[:, 1]
-        risk = torch.abs(ps[:, 1]) * tau * sigma
+                                        tau=1.0, lambd=0.2, scale=1.0 / 40):
+        nav = ps[:, 0] + ps[:, 1] * price  # updated to dollar NAV
+        risk = torch.abs(ps[:, 1] * price) * tau * sigma  # updated here: sqrt of tau ; N(1, 1) * tau, sigma \in 1e-5
 
         return (nav - lambd * risk) * scale
 
@@ -204,8 +210,10 @@ class ModelTest(unittest.TestCase):
           return action
 
       def update(self):
-        if len(self._replay_buffer) > self._batch_size and self._is_training:
-          items = random.sample(self._replay_buffer, self._batch_size)
+        # if len(self._replay_buffer) > self._batch_size and self._is_training:
+        #   items = random.sample(self._replay_buffer, self._batch_size)
+        if self._is_training and len(self._replay_buffer) > 800:
+          items = list(self._replay_buffer)[-800:]
           obs, ps, action, next_obs, next_ps, meta, rs, done = zip(*items)
           obs, ps, next_obs, next_ps, meta, rs = map(lambda x: torch.tensor(x, dtype=torch.float).to(device),
                                                  [obs, ps, next_obs, next_ps, meta, rs])
@@ -218,25 +226,29 @@ class ModelTest(unittest.TestCase):
             next_qvalues = next_qvalues.max(1)[0]
 
           rs = rs[:, 2, 0] # all observations, midprice, smallest volume - here is always XBTUSD
-          rewards = torch.empty_like(done, dtype=torch.float, device=device)
+          rewards = torch.zeros(size=done.shape, dtype=torch.float, device=device)
           # rewards[done] = self.get_terminal_reward(next_ps[done], meta[done][:, 0])
           # rewards[~done] = self.get_reward(v[~done], next_v, ps[~done][:, 1], next_ps[~done][:, 1], meta[~done][:, 1])
           rewards[~done] = self.get_new_reward(ps[~done], next_ps[~done], meta[~done][:, 0], rs[~done])
-          rewards[done]  = self.get_risk_adjusted_state_value(next_ps[done], meta[done][:, 0], rs[done], scale=5.0)
+          rewards[done]  = self.get_risk_adjusted_state_value(next_ps[done], meta[done][:, 0], rs[done], scale=1.0)
 
-          rewards = rewards.clamp(-1., 1.)  # reward clipping
+          rewards = rewards.clamp(-3., 3.)  # reward clipping
 
           qvalues = qvalues.gather(1, action).squeeze(1)
 
-          expected_q = torch.empty_like(rewards, dtype=torch.float, device=device)
+          expected_q = torch.zeros(size=done.shape, dtype=torch.float, device=device)
           expected_q[~done] = self.gamma * next_qvalues
           expected_q += rewards
 
           loss = self.loss(qvalues, expected_q)  # or hubert loss
-
+          self.losses.append(loss.detach().cpu().sum().item())
+          if torch.isinf(loss).any() or torch.isnan(self._model.feature_layer[0].weight).any() or np.isnan(self.losses[-1]).any():
+            print('nan is here')
           self.optimizer.zero_grad()
           loss.backward()
           for param in self._model.parameters():
+            if torch.isinf(param.grad.data).any() or torch.isnan(param.grad.data).any():
+              print('nan in grads')
             param.grad.data.clamp_(-1., 1.)  # gradient clipping
           self.optimizer.step()
 
@@ -290,24 +302,23 @@ class ModelTest(unittest.TestCase):
 
       def return_unfinished(self, statuses: List[OrderStatus], memory: Dict[str, Union[Trade, OrderBook]]):
         super().return_unfinished(statuses, memory)
-        obs, ps, prices = self.get_observation(memory, 0.0)
         rs = self.rs.reset('XBTUSD')
+        obs, ps, prices = self.get_observation(memory, 0.0, rs[2, 0])
         meta = (prices, 0.0)
         self.agent.store_episode(obs, ps, meta, rs, True, 0)
         self.agent.end_episode_states.append((ps, meta[0]))  # end state and prices
         self.agent.reset_state()
 
 
-      def get_observation(self, memory, timeleft):
+      def get_observation(self, memory, timeleft, rs):
         items = list(map(lambda name: self.metrics_map[name].to_numpy(), names + time_names))
-        items = [t.flatten() for t in items]
+        items = np.concatenate([t.flatten() for t in items]).clip(-3.0, 3.0)
 
         prices = self.get_prices(memory)
         ps = self.get_state()
-        state = np.array([ps[0] / prices, ps[1]])
 
-        items += [state, timeleft]
-        items = np.concatenate(items, axis=None)
+        state = np.array([ps[0] / prices, ps[1], timeleft, rs])
+        items = np.concatenate([items, state], axis=None)
         return items, ps, prices
 
       def get_prices(self, memory) -> float:  # todo: refactor and use vwap
@@ -323,7 +334,8 @@ class ModelTest(unittest.TestCase):
         return np.array(list(self.balance.values()))
 
       def get_timeleft(self, ts: datetime.datetime) -> float:
-        return (self._simulation_end - ts).total_seconds() % self._episode_length # 10 minute episodes
+        return ((self._simulation_end - ts).total_seconds() % self._episode_length) / self._episode_length
+        # 10 minute episodes
 
       def action_to_order(self, action: int, memory, ts, quantity: int) -> List[OrderRequest]:
         offset_bid, offset_ask = self.action_space[action]
@@ -362,7 +374,7 @@ class ModelTest(unittest.TestCase):
           rs = self.rs.reset('XBTUSD')
 
           with CancelsApplied(self, cancels):
-            obs, ps, prices = self.get_observation(memory, timeleft)
+            obs, ps, prices = self.get_observation(memory, timeleft, rs[2, 0])
             action = self.agent.get_action(obs)
             meta = (prices, timeleft)
             self.agent.store_episode(obs, ps, meta, rs, False, action)
@@ -430,7 +442,7 @@ class ModelTest(unittest.TestCase):
       else:
         output = None
 
-      vwap = RS(volumes=[int(5e5), int(1e6), int(2e6)], name='vwap', z_normalize=4000)
+      vwap = RS(T=50, volumes=[int(5e5), int(1e6), int(2e6)], name='vwap', z_normalize=4500)
       # vwap = RS(vwap, T=10)
       liq = LiquiditySpectrum(z_normalize=4000)
 
@@ -472,9 +484,9 @@ class ModelTest(unittest.TestCase):
 
     ### Initialize agent, model, target network, decision unit
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    condition = DecisionCondition(100000.0)
-    model: DuelingDQN = DuelingDQN(input_dim=47, output_dim=35)
-    target: DuelingDQN = DuelingDQN(input_dim=47, output_dim=35)
+    condition = DecisionCondition(120000.0)
+    model: DuelingDQN = DuelingDQN(input_dim=48, output_dim=35)
+    target: DuelingDQN = DuelingDQN(input_dim=48, output_dim=35)
     # model.load_state_dict(torch.load('model-latest.pth'))
     model.train()
     target.eval()
@@ -483,17 +495,21 @@ class ModelTest(unittest.TestCase):
     # target.load_state_dict(torch.load('notebooks/model.pth'))
     model.to(device)
     target.to(device)
-    agent = Agent(model, target, condition, batch_size=8)
+    agent = Agent(model, target, condition, batch_size=64)
 
     ### Initialize simulation
     pairs = list(zip(glob.glob('../notebooks/time-sampled-10min/orderbook_*'), glob.glob('../notebooks/time-sampled-10min/trade_*')))
-    ob_file, tr_file = random.choice(pairs)
+    # ob_file, tr_file = '../notebooks/time-sampled-10min/orderbook_1124.csv.gz', '../notebooks/time-sampled-10min/trade_1124.csv.gz'
+    for i in range(10):
+      ob_file, tr_file = random.choice(pairs)
 
-    # ob_file, tr_file = '../notebooks/time-sampled/orderbook_4020.csv.gz', '../notebooks/time-sampled/trade_4020.csv.gz'
+    #   ob_file, tr_file = '../notebooks/time-sampled-10min/orderbook_1376.csv.gz', '../notebooks/time-sampled-10min/trade_1376.csv.gz'
 
-    # trade_4020
-    result_output = init_simulation(agent, ob_file, tr_file, output_required=True, cancels_enaled=True)
-    agent.episode_files.append((ob_file, tr_file))
+      # trade_4020
+      result_output = init_simulation(agent, ob_file, tr_file, output_required=True, cancels_enaled=True)
+      agent.episode_files.append((ob_file, tr_file))
+      if i == 8:
+        print('8')
 
     ### Visualize results
     orders_side1, orders_side2 = list(result_output.orders.values())
@@ -504,5 +520,5 @@ class ModelTest(unittest.TestCase):
 
     res = agent.episode_results()
     res['pnl'] = res['usd'] + res['xbt'] * res['xbt_price']
-    print(res.pnl, res.xbt, res.usd)
+    print(res[['pnl', 'usd', 'xbt', 'xbt_price']])
 

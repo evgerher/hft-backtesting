@@ -11,12 +11,12 @@ logger = setup_logger('<data>', 'INFO')
 
 @dataclass
 class Trade:
+  __slots__ = ['symbol', 'timestamp', 'price', 'volume', 'side', '__weakref__']
   symbol: str
   timestamp: datetime.datetime
   price: float
   volume: int
   side: int
-  __slots__ = ['symbol', 'timestamp', 'price', 'volume', 'side', '__weakref__']
 
   def __str__(self):
     return f'<trade, symbol={self.symbol}, timestamp:{self.timestamp}, side={self.side}, price={self.price}, volume={self.volume}>'
@@ -32,13 +32,13 @@ class Trade:
 
 @dataclass
 class OrderBook:
+  __slots__ = ['symbol', 'timestamp', 'bid_prices', 'bid_volumes', 'ask_prices', 'ask_volumes', '__weakref__']
   symbol: str
   timestamp: datetime.datetime
   bid_prices: np.array
   bid_volumes: np.array
   ask_prices: np.array
   ask_volumes: np.array
-  __slots__ = ['symbol', 'timestamp', 'bid_prices', 'bid_volumes', 'ask_prices', 'ask_volumes', '__weakref__']
 
   @staticmethod
   def from_bitmex_orderbook(msg: dict) -> List['OrderBook']:
@@ -88,14 +88,14 @@ class OrderBook:
 
 @dataclass
 class DeltaValue:
+  __slots__ = ['timestamp', 'value', '__weakref__']
   timestamp: datetime.datetime
   value: int
-  __slots__ = ['timestamp', 'value', '__weakref__']
 
 @dataclass
 class Delta:
+  __slots__ = ['timestamp', 'symbol', 'quote_side', 'diff', '__weakref__']
   timestamp: datetime.datetime
   symbol: str
   quote_side: int
   diff: np.array
-  __slots__ = ['timestamp', 'symbol', 'quote_side', 'diff', '__weakref__']

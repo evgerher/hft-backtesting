@@ -8,10 +8,10 @@ import numpy as np
 
 @dataclass
 class MetricData:
+  __slots__ = ['name', 'symbol', 'value', '__weakref__']
   name: str
   symbol: str
   value: float
-  __slots__ = ['name', 'symbol', 'value', '__weakref__']
 
 
 class ZNormalized(defaultdict):
