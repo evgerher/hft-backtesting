@@ -14,9 +14,9 @@ class GatlingMM(Strategy):
 
   def define_orders(self, row: Union[Trade, OrderBook],
                     statuses: List[OrderStatus],
-                    memory: Dict[str, Union[Trade, OrderBook]]) -> List[OrderRequest]:
+                    memory: Dict[str, Union[Trade, OrderBook]], is_trade: bool) -> List[OrderRequest]:
     if self.balance.get(row.symbol, None) is None:
-      if type(row) == OrderBook and self.balance.get(row.symbol, None) is None:
+      if not is_trade and self.balance.get(row.symbol, None) is None:
         # Initialize first orders
         ask_volume = min(self._get_allowed_volume(row.symbol, memory, QuoteSides.ASK), self.side_volume)
         self.volumes_left[(row.symbol, QuoteSides.ASK)] = self.side_volume - ask_volume

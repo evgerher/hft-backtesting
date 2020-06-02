@@ -36,23 +36,23 @@ class ModelTest(unittest.TestCase):
 
         self.feature_layer = nn.Sequential(
           nn.Linear(input_dim, 256),
-          # nn.LayerNorm(256),
+          nn.LayerNorm(256),
           nn.ReLU(),
           nn.Linear(256, 256),
-          # nn.LayerNorm(256),
+          nn.LayerNorm(256),
           nn.ReLU()
         )
 
         self.value_stream = nn.Sequential(
           nn.Linear(256, 128),
-          # nn.LayerNorm(128),
+          nn.LayerNorm(128),
           nn.ReLU(),
           nn.Linear(128, 1)
         )
 
         self.advantage_stream = nn.Sequential(
           nn.Linear(256, 256),
-          # nn.LayerNorm(256),
+          nn.LayerNorm(256),
           nn.ReLU(),
           nn.Linear(256, self.output_dim)
         )
@@ -210,10 +210,10 @@ class ModelTest(unittest.TestCase):
           return action
 
       def update(self):
-        # if len(self._replay_buffer) > self._batch_size and self._is_training:
-        #   items = random.sample(self._replay_buffer, self._batch_size)
-        if self._is_training and len(self._replay_buffer) > 800:
-          items = list(self._replay_buffer)[-800:]
+        if len(self._replay_buffer) > self._batch_size and self._is_training:
+          items = random.sample(self._replay_buffer, self._batch_size)
+        # if self._is_training and len(self._replay_buffer) > 800:
+        #   items = list(self._replay_buffer)[-800:]
           obs, ps, action, next_obs, next_ps, meta, rs, done = zip(*items)
           obs, ps, next_obs, next_ps, meta, rs = map(lambda x: torch.tensor(x, dtype=torch.float).to(device),
                                                  [obs, ps, next_obs, next_ps, meta, rs])
@@ -225,14 +225,14 @@ class ModelTest(unittest.TestCase):
             next_v, _, next_qvalues = self._target(next_obs[~done])
             next_qvalues = next_qvalues.max(1)[0]
 
-          rs = rs[:, 2, 0] # all observations, midprice, smallest volume - here is always XBTUSD
+          # rs = rs[:, 2, 0] # all observations, midprice, smallest volume - here is always XBTUSD
           rewards = torch.zeros(size=done.shape, dtype=torch.float, device=device)
           # rewards[done] = self.get_terminal_reward(next_ps[done], meta[done][:, 0])
           # rewards[~done] = self.get_reward(v[~done], next_v, ps[~done][:, 1], next_ps[~done][:, 1], meta[~done][:, 1])
           rewards[~done] = self.get_new_reward(ps[~done], next_ps[~done], meta[~done][:, 0], rs[~done])
-          rewards[done]  = self.get_risk_adjusted_state_value(next_ps[done], meta[done][:, 0], rs[done], scale=1.0)
+          rewards[done]  = self.get_risk_adjusted_state_value(next_ps[done], meta[done][:, 0], rs[done])
 
-          rewards = rewards.clamp(-3., 3.)  # reward clipping
+          rewards = rewards.clamp(-1., 1.)  # reward clipping
 
           qvalues = qvalues.gather(1, action).squeeze(1)
 
@@ -302,8 +302,8 @@ class ModelTest(unittest.TestCase):
 
       def return_unfinished(self, statuses: List[OrderStatus], memory: Dict[str, Union[Trade, OrderBook]]):
         super().return_unfinished(statuses, memory)
-        rs = self.rs.reset('XBTUSD')
-        obs, ps, prices = self.get_observation(memory, 0.0, rs[2, 0])
+        rs = self.rs.reset('XBTUSD')[0, 2]
+        obs, ps, prices = self.get_observation(memory, 0.0, rs)
         meta = (prices, 0.0)
         self.agent.store_episode(obs, ps, meta, rs, True, 0)
         self.agent.end_episode_states.append((ps, meta[0]))  # end state and prices
@@ -312,7 +312,8 @@ class ModelTest(unittest.TestCase):
 
       def get_observation(self, memory, timeleft, rs):
         items = list(map(lambda name: self.metrics_map[name].to_numpy(), names + time_names))
-        items = np.concatenate([t.flatten() for t in items]).clip(-3.0, 3.0)
+        # items = np.concatenate([t.flatten() for t in items]).clip(-3.0, 3.0)
+        items = np.concatenate([t.flatten() for t in items])
 
         prices = self.get_prices(memory)
         ps = self.get_state()
@@ -334,7 +335,8 @@ class ModelTest(unittest.TestCase):
         return np.array(list(self.balance.values()))
 
       def get_timeleft(self, ts: datetime.datetime) -> float:
-        return ((self._simulation_end - ts).total_seconds() % self._episode_length) / self._episode_length
+        t = ((self._simulation_end - ts).total_seconds() % self._episode_length) / self._episode_length
+        return (t - 0.5) * 2
         # 10 minute episodes
 
       def action_to_order(self, action: int, memory, ts, quantity: int) -> List[OrderRequest]:
@@ -371,10 +373,10 @@ class ModelTest(unittest.TestCase):
             orders += cancels
 
           timeleft = self.get_timeleft(row.timestamp)
-          rs = self.rs.reset('XBTUSD')
+          rs = self.rs.reset('XBTUSD')[0, 2]
 
           with CancelsApplied(self, cancels):
-            obs, ps, prices = self.get_observation(memory, timeleft, rs[2, 0])
+            obs, ps, prices = self.get_observation(memory, timeleft, rs)
             action = self.agent.get_action(obs)
             meta = (prices, timeleft)
             self.agent.store_episode(obs, ps, meta, rs, False, action)
@@ -427,7 +429,7 @@ class ModelTest(unittest.TestCase):
         self.high[symbol] = self.last[symbol]
         self.open[symbol] = self.last[symbol]
 
-        return np.sqrt(np.sum(self.storage[symbol], axis=0) / len(self.storage[symbol]))
+        return np.sqrt(np.sum(self.storage[symbol], axis=0) / len(self.storage[symbol]) + 1e-8) + 1e-4
 
 
     ################    Simulation wrapper    ################
@@ -442,9 +444,9 @@ class ModelTest(unittest.TestCase):
       else:
         output = None
 
-      vwap = RS(T=50, volumes=[int(5e5), int(1e6), int(2e6)], name='vwap', z_normalize=4500)
-      # vwap = RS(vwap, T=10)
-      liq = LiquiditySpectrum(z_normalize=4000)
+      vwap = RS(T=20, volumes=[int(5e5), int(1e6), int(2e6)], name='vwap', z_normalize=3000)
+      vwap_long = VWAP_volume(volumes=[int(5e5), int(1e6), int(2e6)], name='vwap-long', z_normalize=8000)
+      liq = LiquiditySpectrum(z_normalize=3000)
 
       defaults = [
         (('XBTUSD', 0), [0.0]),
@@ -455,21 +457,23 @@ class ModelTest(unittest.TestCase):
 
       trade_metric = TradeMetric(defaults, [
         # ('quantity', lambda x: len(x)),
-        ('total', lambda trades: sum(map(lambda x: x.volume, trades)))
-      ], seconds=45, z_normalize=2500)
+        ('total', lambda trades: np.log(sum(map(lambda x: x.volume, trades))))
+      ], seconds=60, z_normalize=2500)
       trade_metric2 = TradeMetric(defaults, [
         # ('quantity', lambda x: len(x)),
-        ('total', lambda trades: sum(map(lambda x: x.volume, trades)))
-      ], seconds=80, z_normalize=2500)
+        ('total', lambda trades: np.log(sum(map(lambda x: x.volume, trades))))
+      ], seconds=120, z_normalize=2500)
 
-      lipton_levels = 8
+      lipton_levels = 6
       hy = HayashiYoshido(140, True)
       lipton = Lipton(hy.name, lipton_levels)
 
       reader = OrderbookReader(orderbook_file, trade_file, nrows=None, is_precomputed=True)
       end_ts = reader.get_ending_moment()
 
-      strategy = RLStrategy(agent, vwap, simulation_end=end_ts, episode_length=600, instant_metrics=[vwap, liq], delta_metrics=[hy],
+      strategy = RLStrategy(agent, vwap, simulation_end=end_ts, episode_length=600,
+                            instant_metrics=[vwap, vwap_long, liq],
+                            delta_metrics=[hy],
                             time_metrics_trade=[trade_metric, trade_metric2], composite_metrics=[lipton],
                             initial_balance=0.0, cancels_enabled=cancels_enaled)
       backtest = BacktestOnSample(reader, strategy, output=output, delay=delay, warmup=True, stale_depth=8)
@@ -477,16 +481,16 @@ class ModelTest(unittest.TestCase):
 
       return backtest.output
 
-    # matrices: [3,3,2], [2,3,2], [2, 2], [2]
-    names = ['vwap', 'liquidity-spectrum', 'hayashi-yoshido', 'lipton']
+    # matrices: [3,3,2], [3, 3, 2], [2,3,2], [2, 2], [2]
+    names = ['vwap', 'vwap-long', 'liquidity-spectrum', 'hayashi-yoshido', 'lipton']
     # [2, 2], [2, 2]
-    time_names = ['trade-metric-45', 'trade-metric-80']
+    time_names = ['trade-metric-60', 'trade-metric-120']
 
     ### Initialize agent, model, target network, decision unit
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    condition = DecisionCondition(120000.0)
-    model: DuelingDQN = DuelingDQN(input_dim=48, output_dim=35)
-    target: DuelingDQN = DuelingDQN(input_dim=48, output_dim=35)
+    condition = DecisionCondition(200000.0)
+    model: DuelingDQN = DuelingDQN(input_dim=66, output_dim=35)
+    target: DuelingDQN = DuelingDQN(input_dim=66, output_dim=35)
     # model.load_state_dict(torch.load('model-latest.pth'))
     model.train()
     target.eval()
@@ -495,7 +499,7 @@ class ModelTest(unittest.TestCase):
     # target.load_state_dict(torch.load('notebooks/model.pth'))
     model.to(device)
     target.to(device)
-    agent = Agent(model, target, condition, batch_size=64)
+    agent = Agent(model, target, condition, batch_size=8)
 
     ### Initialize simulation
     pairs = list(zip(glob.glob('../notebooks/time-sampled-10min/orderbook_*'), glob.glob('../notebooks/time-sampled-10min/trade_*')))

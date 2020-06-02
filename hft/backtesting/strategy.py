@@ -151,14 +151,15 @@ class Strategy(ABC):
           # Contracts * Multiplier * (1/Entry Price - 1/Exit Price)
 
           total_volume = vol - converted_volume
-          if vol <= 0:
-            ratio = converted_volume / total_volume
-            self.position[order.symbol] = ((avg_price * (1.0 - ratio) + order.price * ratio), total_volume)
-          else:
-            if total_volume <= 0:
-              self.position[order.symbol] = (order.price, total_volume)
+          if total_volume != 0:
+            if vol <= 0:
+              ratio = converted_volume / total_volume
+              self.position[order.symbol] = ((avg_price * (1.0 - ratio) + order.price * ratio), total_volume)
             else:
-              self.position[order.symbol] = (avg_price, total_volume)
+              if total_volume <= 0:
+                self.position[order.symbol] = (order.price, total_volume)
+              else:
+                self.position[order.symbol] = (avg_price, total_volume)
 
 
         else: # bid
@@ -166,14 +167,15 @@ class Strategy(ABC):
           self.balance['USD'] -= volume
 
           total_volume = vol + converted_volume
-          if vol >= 0:
-            ratio = converted_volume / total_volume
-            self.position[order.symbol] = ((avg_price * (1.0 - ratio) + order.price * ratio), total_volume)
-          else:
-            if total_volume >= 0:
-              self.position[order.symbol] = (order.price, total_volume)
+          if total_volume != 0:
+            if vol >= 0:
+              ratio = converted_volume / total_volume
+              self.position[order.symbol] = ((avg_price * (1.0 - ratio) + order.price * ratio), total_volume)
             else:
-              self.position[order.symbol] = (avg_price, total_volume)
+              if total_volume >= 0:
+                self.position[order.symbol] = (order.price, total_volume)
+              else:
+                self.position[order.symbol] = (avg_price, total_volume)
 
   def _balance_update_new_order(self, orders: List[OrderRequest]):
     for order in orders:
