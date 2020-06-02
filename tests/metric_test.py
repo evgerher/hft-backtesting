@@ -218,7 +218,7 @@ class MetricTest(unittest.TestCase):
   def test_plot_znormalization(self):
     import matplotlib.pyplot as plt
     import pandas as pd
-    period = 96
+    period = 1000
 
     reader = OrderbookReader(snapshot_file='resources/orderbook/orderbooks.csv.gz', nrows=15000, stop_after=14000)
     vwap_normalized = VWAP_volume([int(2.5e5), int(1e6)], name='vwap_normalized', z_normalize=period)
@@ -239,7 +239,7 @@ class MetricTest(unittest.TestCase):
     vwap_values = np.array(vwap_values)
     vwap_values_normalized = np.array(vwap_values_normalized)
     v1 = vwap_values[:, 1, 0]
-    v2 = vwap_values_normalized[:, 1, 0]
+    v2 = vwap_values_normalized[:, 1, 0].clip(-10, 10)
 
     f = plt.figure(figsize=(20, 12))
     # plt.plot(balances_df['timestamp'], balances_df['balance'])
@@ -251,7 +251,7 @@ class MetricTest(unittest.TestCase):
     v2_plot.plot(ts, v2, label='VWAP z-normalized (1500)')
 
     v2_plot.set(xlabel='Time', ylabel='Price')
-    v1_plot.set(ylabel='Price', title=f'XBTUSD VWAP (bid): common vs z-normalized')
+    v1_plot.set(ylabel='Price', title=f'XBTUSD VWAP (bid): common vs z-normalized ({period})')
     plt.show()
 
 

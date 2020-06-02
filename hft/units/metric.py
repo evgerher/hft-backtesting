@@ -96,5 +96,5 @@ class Metric(ABC):
     return True
 
   @abstractmethod
-  def to_numpy(self):
+  def to_numpy(self, symbol:Optional[str]=None):
     raise NotImplementedError

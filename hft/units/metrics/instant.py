@@ -1,7 +1,7 @@
 import datetime
 from abc import abstractmethod, ABC
 from collections import defaultdict, deque
-from typing import List, Tuple, Union, Sequence
+from typing import List, Tuple, Union, Sequence, Optional
 
 import numpy as np
 
@@ -23,7 +23,9 @@ class InstantMetric(Metric):
   def label(self) -> List[str]:
     return [self.name]
 
-  def to_numpy(self) -> np.array:
+  def to_numpy(self, symbol: Optional[str]=None) -> np.array:
+    if symbol is not None:
+      return np.array(self.latest[symbol], dtype=np.float)
     return np.array(list(self.latest.values()), dtype=np.float)
 
 
@@ -87,7 +89,7 @@ class VWAP_volume(_VWAP):
   def __str__(self):
     return f'<VWAP (Volume): {self.volumes}>'
 
-  def __init__(self, volumes: List[int], symbol: str = None, name: str = 'vwap-volume', **kwargs):
+  def __init__(self, volumes: List[float], symbol: str = None, name: str = 'vwap-volume', **kwargs):
     self.volumes = sorted(volumes)
     self.symbol = symbol
     defaults = [
@@ -194,7 +196,13 @@ class HayashiYoshido(DeltaMetric):
     self._normalization = normalization
 
   def __str__(self):
-    return f'hayashi-yoshido-vol:{self.seconds}'
+    return f'hayashi-yoshido-cor:{self.seconds}'
+
+  def to_numpy(self, symbol: Optional[str]=None):
+    if symbol is not None:
+      return np.stack([np.array(self.latest[symbol, side.name], dtype=np.float) for side in DepleshionReplenishmentSide])
+    return np.array(list(self.latest.values()), dtype=np.float)
+
 
   def evaluate(self, delta: Delta) -> Tuple[float, int]: # todo: explain
     latest, queue = self._evaluate(delta)

@@ -4,6 +4,7 @@ from collections.__init__ import defaultdict, deque
 from typing import List, Dict, Tuple, Deque, Callable, Union, Optional, Sequence
 
 import numpy as np
+from hft.utils.consts import TradeSides
 
 from hft.units.metric import Metric
 from hft.units.metrics.instant import DeltaMetric
@@ -26,9 +27,10 @@ class TimeMetric(Metric):
     self._from: datetime.datetime = starting_moment
     self._skip_from = False
 
-  def to_numpy(self):
-    vals = np.array(list(self.latest.values()), dtype=np.float)
-    return vals
+  def to_numpy(self, symbol: Optional[str] = None):
+    if symbol is not None:
+      raise NotImplementedError
+    return np.array(list(self.latest.values()), dtype=np.float)
 
   def filter(self, event) -> bool:
     return True
@@ -101,6 +103,12 @@ class TradeMetric(TimeMetric):
 
   def __str__(self):
     return f'trade-time-metric:{self.seconds}'
+
+  def to_numpy(self, symbol: Optional[str] = None):
+    if symbol is not None:
+      return np.stack([np.array(self.latest[symbol, side], dtype=np.float) for side in [TradeSides.SELL, TradeSides.BUY]])
+    return np.array(list(self.latest.values()), dtype=np.float)
+
 
 
 class DeltaTimeMetric(DeltaMetric, TimeMetric): # todo: `defaults` sucks
