@@ -98,6 +98,7 @@ class StorageOutput(OutputLabeled):
 class SimulatedOrdersOutput(Output):
   def __init__(self):
     self.orders = defaultdict(list)
+    self.balances = []
 
   def consume(self, labels, timestamp: datetime.datetime, object):
     if 'order-request' in labels and labels[-1] is not None and object.command != Statuses.CANCEL: # todo: bad fix for cancel removals

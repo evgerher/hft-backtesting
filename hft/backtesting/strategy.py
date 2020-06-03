@@ -1,3 +1,4 @@
+import datetime
 from collections import defaultdict
 from dataclasses import dataclass
 from typing import List, Dict, Tuple, Union, Callable, Optional
@@ -184,9 +185,9 @@ class Strategy(ABC):
         ### action negative update balance
         self.active_orders[order.id] = order
         if order.side == QuoteSides.ASK:
-          self.balance[order.symbol] += order.volume / order.price * (self.fee[order.symbol].settlement  + self.fee[order.symbol].maker)
+          self.balance[order.symbol] -= order.volume / order.price * (self.fee[order.symbol].settlement + self.fee[order.symbol].maker)
         elif order.side == QuoteSides.BID:
-          self.balance['USD'] += order.volume * (self.fee[order.symbol].settlement + self.fee[order.symbol].maker)
+          self.balance['USD'] -= order.volume * (self.fee[order.symbol].settlement + self.fee[order.symbol].maker)
 
   def _get_allowed_volume(self, symbol, memory, side):
     latest: OrderBook = memory[('orderbook', symbol)]
@@ -227,7 +228,12 @@ class Strategy(ABC):
     self.__remove_finished_orders(statuses)
 
     # balance updated, notify listener
-    if self.balance_listener is not None and (len(orders) > 0 or len(statuses) > 0) and len(memory) >= 4:
+    self._balance_listener(memory, row.timestamp, len(orders), len(statuses))
+
+    return orders
+
+  def _balance_listener(self, memory: Dict[str, Union[Trade, OrderBook]], ts: datetime.datetime, len_orders: int, len_statuses: int):
+    if self.balance_listener is not None and (len_orders > 0 or len_statuses > 0) and len(memory) >= 4:
       # balance = memory[('orderbook', 'XBTUSD')].bid_prices[0] * self.balance['XBTUSD'] + \
       #   memory[('orderbook', 'ETHUSD')].bid_prices[0] * self.balance['ETHUSD'] + \
       #   self.balance['USD']
@@ -235,10 +241,9 @@ class Strategy(ABC):
       midpoint_eth = (memory[('orderbook', 'ETHUSD')].bid_prices[0] + memory[('orderbook', 'ETHUSD')].ask_prices[0]) / 2
       midpoint_xbt = (memory[('orderbook', 'XBTUSD')].bid_prices[0] + memory[('orderbook', 'XBTUSD')].ask_prices[0]) / 2
 
-      state = (self.balance['USD'], self.balance['XBTUSD'], self.balance['ETHUSD'], *self.position['XBTUSD'], *self.position['ETHUSD'], midpoint_xbt, midpoint_eth, row.timestamp)
+      state = (self.balance['USD'], self.balance['XBTUSD'], self.balance['ETHUSD'], *self.position['XBTUSD'], *self.position['ETHUSD'], midpoint_xbt, midpoint_eth, ts)
       # self.balance_listener(self.balance['USD'], row.timestamp)
       self.balance_listener(state)
-    return orders
 
   def return_unfinished(self, statuses: List[OrderStatus], memory: Dict[str, Union[Trade, OrderBook]]):
     logger.info('Update balance with unfinished tasks')

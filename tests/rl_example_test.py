@@ -4,11 +4,12 @@ import unittest
 from collections import deque, namedtuple, defaultdict
 from typing import Union, List, Dict, Tuple, Deque, Optional
 import pandas as pd
+from hft.strategies.gatling import GatlingMM
 
-from hft.backtesting.backtest import BacktestOnSample
+from hft.backtesting.backtest import BacktestOnSample, Backtest
 from hft.backtesting.data import OrderStatus, OrderRequest
 from hft.backtesting.output import make_plot_orderbook_trade, Output, SimulatedOrdersOutput
-from hft.backtesting.readers import OrderbookReader
+from hft.backtesting.readers import OrderbookReader, TimeLimitedReader
 from hft.backtesting.strategy import Strategy, CancelsApplied
 from hft.units.metrics.composite import Lipton
 from hft.units.metrics.instant import VWAP_volume, LiquiditySpectrum, HayashiYoshido
@@ -73,15 +74,24 @@ class ModelTest(unittest.TestCase):
 
         self.mu = mu
         self.std = std
-        self.volume_condition: float = random.gauss(mu, std)
+        self.lower = self.mu * 0.5
+        self.upper = self.mu * 1.8
+
+        self.volume_condition: float = self._generate_volume()
         self.reset()
+
+      def _generate_volume(self):
+        v = random.gauss(self.mu, self.std)
+        clipped = self.lower if v < self.lower else self.upper if v > self.upper else v
+        return clipped
+
 
       def __call__(self, is_trade: bool, event: Union[Trade, OrderBook]):
         if is_trade and event.symbol == 'XBTUSD':
           self.volume += event.volume
           if self.volume > self.volume_condition:
             self.volume %= self.volume_condition
-            self.volume_condition = random.gauss(self.mu, self.std)
+            self.volume_condition = self._generate_volume()
             return True
         return False
 
@@ -92,7 +102,7 @@ class ModelTest(unittest.TestCase):
     class Agent:
       def __init__(self, model: DuelingDQN, target: DuelingDQN,
                    condition: DecisionCondition,
-                   gamma=0.95, lr=1e-3,
+                   gamma=0.98, lr=1e-3,
                    update_each: int = 3,
                    buffer_size: int = 30000, batch_size=1024):
         self._replay_buffer: Deque[State] = deque(maxlen=buffer_size)
@@ -121,12 +131,12 @@ class ModelTest(unittest.TestCase):
 
       def train(self):
         self._is_training = True
-        self._model.eval()
+        self._model.train()
         self._target.eval()
 
       def eval(self):
         self._is_training = False
-        self._model.train()
+        self._model.eval()
         self._target.eval()
 
       def store_no_action(self, ts, price):
@@ -169,7 +179,7 @@ class ModelTest(unittest.TestCase):
         # a(V_t - V_{t-1}) + e^{b*tau} * sgn(|i_t| - |i_{t-1}|)
         return vv + pos + accumulation_penalty
 
-      def get_new_reward(self, ps, ps_new, price, sigma, scale_rav=1.0/10, a=1.0):
+      def get_new_reward(self, ps, ps_new, price, sigma, scale_rav=1.0/4, a=1.0):
         g1 = self.get_risk_adjusted_state_value(ps, price, sigma, scale=scale_rav)
         g2 = self.get_risk_adjusted_state_value(ps_new, price, sigma, scale=scale_rav)
         return a * (g2 - g1)
@@ -204,9 +214,8 @@ class ModelTest(unittest.TestCase):
           if np.random.uniform(0.0, 1.0) < eps :
             return random.randint(0, self._model.output_dim - 1)
         with torch.no_grad():
-          _, _, qvals = self._target(torch.tensor(obs, dtype=torch.float, device=device).unsqueeze(0))
-          action = torch.argmax(qvals).cpu().detach().item()
-          return action
+          qvals = self._target(torch.tensor(obs, dtype=torch.float, device=device).unsqueeze(0))[2]
+          return torch.argmax(qvals).cpu().detach().item()
 
       def update(self):
         if len(self._replay_buffer) > self._batch_size and self._is_training:
@@ -254,47 +263,21 @@ class ModelTest(unittest.TestCase):
 
     ################    Strategy wrapper    ################
     class RLStrategy(Strategy):
-      def __init__(self, agent: Agent, rs: 'VWAP_modification', simulation_end: datetime.datetime, episode_length: int, cancels_enabled=False, **kwags):
+      def __init__(self, agent: Agent, rs: 'VWAP_modification', episode_length: int, cancels_enabled=False, **kwags):
         super().__init__(**kwags)
         self.agent: Agent = agent
         self.rs: VWAP_modification = rs
-        self._simulation_end: datetime.datetime = simulation_end
+        # self._simulation_end: datetime.datetime = simulation_end
         self.action_space: Dict[int, Tuple[int, int]] = {
-          0: (0, 0),
-          1: (1, 0),
-          2: (2, 0),
-          3: (3, 0),
+          0: (-1, 0),
+          1: (0, -1),
+          2: (-1, -1),
+          3: (0, 0),
           4: (0, 1),
-          5: (1, 1),
-          6: (1, 2),
-          7: (1, 3),
-          8: (0, 3),
-          9: (2, 1),
-          10: (2, 2),
-          11: (2, 3),
-          12: (0, 2),
-          13: (3, 1),
-          14: (3, 2),
-          15: (3, 3),
-          16: (4, 0),
-          17: (4, 1),
-          18: (4, 2),
-          19: (4, 3),
-          20: (4, 4),
-          21: (0, 4),
-          22: (1, 4),
-          23: (2, 4),
-          24: (3, 4),
-          25: (-1, 0),
-          26: (-1, 1),
-          27: (-1, 2),
-          28: (-1, 3),
-          29: (-1, 4),
-          30: (0, -1),
-          31: (1, -1),
-          32: (2, -1),
-          33: (3, -1),
-          34: (4, -1)
+          5: (1, 0),
+          6: (1, 1),
+          7: (-1, 1),
+          8: (1, -1),
         }
         self.cancels_enabled = cancels_enabled
         self.no_action_event = []
@@ -309,25 +292,30 @@ class ModelTest(unittest.TestCase):
         self.agent.end_episode_states.append((ps, prices))  # end state and prices
         self.agent.reset_state()
 
+      def get_price_change(self, price) -> np.array:
+        storage1: List[Trade] = self.metrics_map['trade-metric-120'].storage[('XBTUSD', 0)]
+        storage2: List[Trade] = self.metrics_map['trade-metric-60'].storage[('XBTUSD', 0)]
 
-      def get_price_change(self, price) -> float:
-        storage: List[Trade] = self.metrics_map['trade-metric-120'].storage[('XBTUSD', 0)]
-        prices = np.array([t.price for t in storage])
-        return (price - prices.mean()) / 0.5 # xbtusd price step = 0.5 USD
+        prices1 = np.array([t.price for t in storage1])
+        prices2 = np.array([t.price for t in storage2])
 
+        pc1 = (price - prices1.mean()) / 0.5  # xbtusd price step = 0.5 USD
+        pc2 = (price - prices2.mean()) / 0.5  # xbtusd price step = 0.5 USD
+        pc = np.array([pc1, pc2], dtype=np.float)
 
+        return np.sign(pc) * np.log(np.abs(pc) + 1)
 
       def get_observation(self, memory, rs):
         items = list(map(lambda name: self.metrics_map[name].to_numpy('XBTUSD'), names + time_names))
-        items = np.concatenate([t.flatten() for t in items]).clip(-5.0, 5.0)
 
         prices = self.get_prices(memory)
-        ps = self.get_state()
         pc = self.get_price_change(prices) # price change
+        items = np.concatenate([t.flatten() for t in items + [pc]]).clip(-5.0, 5.0)
 
-        state = np.array([pc, ps[0] / prices, ps[1], rs])
+        ps = self.get_state()
+
+        state = np.array([ps[0] / prices, ps[1], rs], dtype=np.float)
         items = np.concatenate([items, state], axis=None)
-        self.prices = prices
         return items, ps, prices
 
       def get_prices(self, memory) -> float:  # todo: refactor and use vwap
@@ -384,6 +372,8 @@ class ModelTest(unittest.TestCase):
           with CancelsApplied(self, cancels):
             obs, ps, prices = self.get_observation(memory, rs)
             action = self.agent.get_action(obs)
+            if action == 2:
+              self.agent.store_no_action(row.timestamp, prices)
             self.agent.store_episode(obs, False, action, prices)
 
           self.agent.update()
@@ -393,49 +383,6 @@ class ModelTest(unittest.TestCase):
         else:
           orders = []
         return orders
-
-    # class RS(VWAP_volume):
-    #   '''
-    #   Rogers-Satchell volatility
-    #   '''
-    #   def __init__(self, T=10, **kwargs):
-    #     super().__init__(**kwargs)
-    #     self.storage = defaultdict(lambda: deque(maxlen=T))
-    #     self.low   = defaultdict(lambda: None)
-    #     self.high =  defaultdict(lambda: None)
-    #     self.close = defaultdict(lambda: None)
-    #     self.open =  defaultdict(lambda: None)
-    #     self.last =  defaultdict(lambda: None)
-    #
-    #   def evaluate(self, arg: Union[Trade, OrderBook]):
-    #     res = super().evaluate(arg)
-    #     self.process(res, arg.symbol)
-    #     return res
-    #
-    #   def process(self, result: np.array, symbol: str):
-    #     if self.open[symbol] is None:
-    #       self.open[symbol] = result
-    #       self.low[symbol] = result
-    #       self.high[symbol] = result
-    #
-    #     self.low[symbol] = np.minimum(self.low[symbol], result)
-    #     self.high[symbol] = np.maximum(self.high[symbol], result)
-    #
-    #     self.last[symbol] = result
-    #
-    #   def reset(self, symbol: str) -> np.array:
-    #     self.close[symbol] = self.last[symbol]
-    #
-    #     sigma_sq = np.log(self.high[symbol] / self.close[symbol]) * np.log(self.high[symbol] / self.open[symbol])\
-    #                + np.log(self.low[symbol] / self.close[symbol]) * np.log(self.low[symbol] / self.open[symbol])
-    #     self.storage[symbol].append(sigma_sq)
-    #
-    #     self.low[symbol] = self.last[symbol]
-    #     self.high[symbol] = self.last[symbol]
-    #     self.open[symbol] = self.last[symbol]
-    #
-    #     return np.sqrt(np.sum(self.storage[symbol], axis=0) / len(self.storage[symbol]) + 1e-8) + 1e-4
-
 
     class VWAP_modification(VWAP_volume):
       def __init__(self, T=10, **kwargs):
@@ -456,11 +403,11 @@ class ModelTest(unittest.TestCase):
         vwap: np.array = super()._evaluate(snapshot)
         vwap_spread = (vwap[1,:] - vwap[0,:]) - 0.5  # vwap_ask - vwap_bid - default_spread
         midprice = (snapshot.bid_prices[0] + snapshot.ask_prices[0]) / 2
-        vwap_offset = np.abs(vwap[[0,1], :] - midprice)
+        vwap_offset = np.abs(vwap[[0,1], :] - midprice) - 0.25
 
         self.process(vwap[2, :], snapshot.symbol) # compute RS based on vwap_midprices
 
-        return np.vstack([vwap_offset, vwap_spread]) # 3 rows
+        return np.log(np.vstack([vwap_offset, vwap_spread]) + 1) # 3 rows
 
       def process(self, result: np.array, symbol: str):
         if self.open[symbol] is None:
@@ -487,20 +434,28 @@ class ModelTest(unittest.TestCase):
         return np.sqrt(np.sum(self.storage[symbol], axis=0) / len(self.storage[symbol]) + 1e-8) + 1e-4
 
 
+    ################    Comparison btw Strategies ############
+    def compare_strategies(s1: RLStrategy, s2: GatlingMM, orderbook_file: str, trade_file: str,
+                           delay=1) -> Tuple:
 
+      r1 = TimeLimitedReader(orderbook_file, limit_time='100 min', trades_file=trade_file, nrows=500000)
+      r2 = TimeLimitedReader(orderbook_file, limit_time='100 min', trades_file=trade_file, nrows=500000)
 
-    ################    Simulation wrapper    ################
-    def init_simulation(agent: Agent, orderbook_file: str, trade_file: str,
-                        output_required: Union[bool, Output] = False, delay=5,
-                        cancels_enaled=True) -> Optional[Output]:
+      o1 = SimulatedOrdersOutput()
+      o2 = SimulatedOrdersOutput()
 
-      if isinstance(output_required, bool) and output_required:
-        output = SimulatedOrdersOutput()
-      elif isinstance(output_required, Output):
-        output = output_required
-      else:
-        output = None
+      s1.balance_listener = o1.balances.append
+      s2.balance_listener = o2.balances.append
 
+      b1 = Backtest(r1, s1, o1, delay=delay, warmup=True, stale_depth=8)
+      b2 = Backtest(r2, s2, o2, delay=delay, warmup=False, stale_depth=2)
+
+      b1.run()
+      b2.run()
+
+      return o1, o2
+
+    def prepare_rl_strategy(agent: Agent, cancels_enabled=True) -> RLStrategy:
       vwap = VWAP_modification(T=20, volumes=[5e5, 1e6], name='vwap', z_normalize=1000)
       liq = LiquiditySpectrum(z_normalize=3000)
 
@@ -523,20 +478,34 @@ class ModelTest(unittest.TestCase):
       lipton_levels = 6
       hy = HayashiYoshido(140, True)
       lipton = Lipton(hy.name, lipton_levels)
-
-      reader = OrderbookReader(orderbook_file, trade_file, nrows=None, is_precomputed=True)
-      end_ts = reader.get_ending_moment()
-
-      strategy = RLStrategy(agent, vwap, simulation_end=end_ts, episode_length=600,
+      return RLStrategy(agent, vwap, episode_length=600,
                             instant_metrics=[vwap, liq],
                             delta_metrics=[hy],
                             time_metrics_trade=[trade_metric, trade_metric2], composite_metrics=[lipton],
-                            initial_balance=0.0, cancels_enabled=cancels_enaled)
+                            initial_balance=0.0, cancels_enabled=cancels_enabled)
+
+
+    ################    Simulation wrapper    ################
+    def init_simulation(agent: Agent, orderbook_file: str, trade_file: str,
+                        output_required: Union[bool, Output] = False, delay=5,
+                        cancels_enabled=True) -> Optional[Output]:
+
+      if isinstance(output_required, bool) and output_required:
+        output = SimulatedOrdersOutput()
+      elif isinstance(output_required, Output):
+        output = output_required
+      else:
+        output = None
+
+      reader = OrderbookReader(orderbook_file, trade_file, nrows=None, is_precomputed=True)
+
+      strategy = prepare_rl_strategy(agent, cancels_enabled)
       backtest = BacktestOnSample(reader, strategy, output=output, delay=delay, warmup=True, stale_depth=8)
       backtest.run()
 
       return backtest.output
 
+    ################    Constants    ################
     # matrices: [2, 4, 2], [2,3,2], [2, 2], [2]
     names = ['vwap', 'liquidity-spectrum', 'hayashi-yoshido', 'lipton']
     # [2, 2], [2, 2]
@@ -545,8 +514,8 @@ class ModelTest(unittest.TestCase):
     ### Initialize agent, model, target network, decision unit
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     condition = DecisionCondition(120000.0)
-    model: DuelingDQN = DuelingDQN(input_dim=23, output_dim=35)
-    target: DuelingDQN = DuelingDQN(input_dim=23, output_dim=35)
+    model: DuelingDQN = DuelingDQN(input_dim=24, output_dim=7)
+    target: DuelingDQN = DuelingDQN(input_dim=24, output_dim=7)
     # model.load_state_dict(torch.load('model-latest.pth'))
     model.train()
     target.eval()
@@ -557,7 +526,7 @@ class ModelTest(unittest.TestCase):
     target.to(device)
     agent = Agent(model, target, condition, batch_size=8)
 
-    ### Initialize simulation
+    ################  Initialize simulation  ################
     pairs = list(zip(glob.glob('../notebooks/time-sampled-10min/orderbook_*'), glob.glob('../notebooks/time-sampled-10min/trade_*')))
     # ob_file, tr_file = '../notebooks/time-sampled-10min/orderbook_1124.csv.gz', '../notebooks/time-sampled-10min/trade_1124.csv.gz'
     for i in range(2):
@@ -566,19 +535,19 @@ class ModelTest(unittest.TestCase):
     #   ob_file, tr_file = '../notebooks/time-sampled-10min/orderbook_1376.csv.gz', '../notebooks/time-sampled-10min/trade_1376.csv.gz'
 
       # trade_4020
-      result_output = init_simulation(agent, ob_file, tr_file, output_required=True, cancels_enaled=True)
+      result_output = init_simulation(agent, ob_file, tr_file, output_required=True)
       agent.episode_files.append((ob_file, tr_file))
       if i == 8:
         print('8')
 
-    ### Visualize results
+    ################  Visualize results  ################
     orders_side1, orders_side2 = list(result_output.orders.values())
+    no_actions = list(agent.no_action_event[-2])
     fig, axs = make_plot_orderbook_trade(ob_file, 'XBTUSD',
                               orders_side1 + orders_side2,
+                              no_actions,
                               orderbook_precomputed=True)
     plt.show()
 
     res = agent.episode_results()
-    res['pnl'] = res['usd'] + res['xbt'] * res['xbt_price']
-    print(res[['pnl', 'usd', 'xbt', 'xbt_price']])
-
+    print(res[['nav', 'usd', 'xbt', 'xbt_price']])

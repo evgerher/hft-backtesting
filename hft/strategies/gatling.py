@@ -7,7 +7,7 @@ from hft.utils.data import Trade, OrderBook
 
 
 class GatlingMM(Strategy):
-  def __init__(self, side_volume, filter=3):
+  def __init__(self, side_volume, filter=4):
     super().__init__(filter=filter)
     self.side_volume = side_volume
     self.volumes_left = {} # add cancellation policy
