@@ -179,7 +179,7 @@ class ModelTest(unittest.TestCase):
         # a(V_t - V_{t-1}) + e^{b*tau} * sgn(|i_t| - |i_{t-1}|)
         return vv + pos + accumulation_penalty
 
-      def get_new_reward(self, ps, ps_new, price, sigma, scale_rav=1.0/4, a=1.0):
+      def get_new_reward(self, ps, ps_new, price, sigma, scale_rav=1.0/10, a=1.0):
         g1 = self.get_risk_adjusted_state_value(ps, price, sigma, scale=scale_rav)
         g2 = self.get_risk_adjusted_state_value(ps_new, price, sigma, scale=scale_rav)
         return a * (g2 - g1)
@@ -529,7 +529,7 @@ class ModelTest(unittest.TestCase):
     ################  Initialize simulation  ################
     pairs = list(zip(glob.glob('../notebooks/time-sampled-10min/orderbook_*'), glob.glob('../notebooks/time-sampled-10min/trade_*')))
     # ob_file, tr_file = '../notebooks/time-sampled-10min/orderbook_1124.csv.gz', '../notebooks/time-sampled-10min/trade_1124.csv.gz'
-    for i in range(2):
+    for i in range(10):
       ob_file, tr_file = random.choice(pairs)
 
     #   ob_file, tr_file = '../notebooks/time-sampled-10min/orderbook_1376.csv.gz', '../notebooks/time-sampled-10min/trade_1376.csv.gz'

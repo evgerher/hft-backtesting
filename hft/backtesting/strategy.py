@@ -25,11 +25,11 @@ class PerpetualFee:
 
   @staticmethod
   def Bitmex_XBT():
-    return PerpetualFee(-0.025, 0.075, -0.0385, 0.0385)
+    return PerpetualFee(-0.025 / 100, 0.075 / 100, -0.0385 / 100, 0.0385 / 100)
 
   @staticmethod
   def Bitmex_ETH():
-    return PerpetualFee(-0.025, 0.075, 0.01, -0.01)
+    return PerpetualFee(-0.025 / 100, 0.075 / 100, 0.01 / 100, -0.01 / 100)
 
   @staticmethod
   def zero():
@@ -91,9 +91,9 @@ class Strategy(ABC):
     self.position: Dict[str, Tuple[float, float]] = {'XBTUSD': (0.0, 0.0), 'ETHUSD': (0.0, 0.0)}  # (average_price, volume)
 
     self.balance_listener = balance_listener
-    self.fee: Dict[str, TraditionalFee] = defaultdict(lambda: TraditionalFee.zero())
-    self.fee['XBTUSD'] = TraditionalFee.Bitmex_XBT()
-    self.fee['ETHUSD'] = TraditionalFee.Bitmex_ETH()
+    self.fee: Dict[str, PerpetualFee] = defaultdict(lambda: PerpetualFee.zero())
+    self.fee['XBTUSD'] = PerpetualFee.Bitmex_XBT()
+    self.fee['ETHUSD'] = PerpetualFee.Bitmex_ETH()
     self.pennies = 0.0
 
     self.metrics_map = self.__bind_metrics()
@@ -144,6 +144,10 @@ class Strategy(ABC):
         if status.status == Statuses.CANCEL:
           converted_volume  = -converted_volume
           volume            = -volume
+        else:
+          maker_fee = order.volume * self.fee[order.symbol].maker  # negative
+          self.balance['USD'] -= maker_fee
+          self.pennies -= maker_fee
 
         avg_price, vol = self.position[order.symbol]
 
@@ -179,14 +183,14 @@ class Strategy(ABC):
               else:
                 self.position[order.symbol] = (avg_price, total_volume)
 
-  def _balance_update_new_order(self, orders: List[OrderRequest]):
-    for order in orders:
-      if order.command != Statuses.CANCEL:
-        logger.info(f'New order: {order}')
-        ### action negative update balance
-        self.pennies += order.volume * (self.fee[order.symbol].settlement + self.fee[order.symbol].maker)
-        self.active_orders[order.id] = order
-        self.balance['USD'] -= order.volume * (self.fee[order.symbol].settlement + self.fee[order.symbol].maker)
+  # def _balance_update_new_order(self, orders: List[OrderRequest]):
+  #   for order in orders:
+  #     if order.command != Statuses.CANCEL:
+  #       logger.info(f'New order: {order}')
+  #       ### action negative update balance
+  #       self.pennies += order.volume * (self.fee[order.symbol].settlement + self.fee[order.symbol].maker)
+  #       self.active_orders[order.id] = order
+  #       self.balance['USD'] -= order.volume * (self.fee[order.symbol].settlement + self.fee[order.symbol].maker)
 
   def _get_allowed_volume(self, symbol, memory, side):
     latest: OrderBook = memory[('orderbook', symbol)]
