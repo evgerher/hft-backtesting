@@ -183,14 +183,11 @@ class Strategy(ABC):
               else:
                 self.position[order.symbol] = (avg_price, total_volume)
 
-  # def _balance_update_new_order(self, orders: List[OrderRequest]):
-  #   for order in orders:
-  #     if order.command != Statuses.CANCEL:
-  #       logger.info(f'New order: {order}')
-  #       ### action negative update balance
-  #       self.pennies += order.volume * (self.fee[order.symbol].settlement + self.fee[order.symbol].maker)
-  #       self.active_orders[order.id] = order
-  #       self.balance['USD'] -= order.volume * (self.fee[order.symbol].settlement + self.fee[order.symbol].maker)
+  def _balance_update_new_order(self, orders: List[OrderRequest]):
+    for order in orders:
+      if order.command != Statuses.CANCEL:
+        logger.info(f'New order: {order}')
+        self.active_orders[order.id] = order
 
   def _get_allowed_volume(self, symbol, memory, side):
     latest: OrderBook = memory[('orderbook', symbol)]
@@ -227,9 +224,8 @@ class Strategy(ABC):
     self._balance_update_by_status(statuses)
     orders = self.define_orders(row, statuses, memory, is_trade)
     self.__validate_orders(orders, memory)
-    self._balance_update_new_order(orders)
     self.__remove_finished_orders(statuses)
-
+    self._balance_update_new_order(orders)
     # balance updated, notify listener
     self._balance_listener(memory, row.timestamp, len(orders), len(statuses))
 
