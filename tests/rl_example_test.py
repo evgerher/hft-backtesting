@@ -144,9 +144,9 @@ class ModelTest(unittest.TestCase):
 
       def episode_results(self) -> pd.DataFrame:
         fnames, states = agent.episode_files, agent.end_episode_states
-        states = [t[0].tolist() + [t[1]] for t in states]
+        states = [t[0].tolist() + [t[1], t[2]] for t in states]
         episodes = [list(t[0]) + t[1] for t in zip(fnames, states)]
-        res = pd.DataFrame(episodes, columns=['ob_file', 'tr_file', 'usd', 'xbt', 'eth', 'xbt_price'])
+        res = pd.DataFrame(episodes, columns=['ob_file', 'tr_file', 'usd', 'xbt', 'eth', 'xbt_price', 'pennies'])
         res['nav'] = res.usd + res.xbt_price * res.xbt
         return res
 
@@ -289,7 +289,7 @@ class ModelTest(unittest.TestCase):
         rs = self.rs.reset('XBTUSD')[0]
         obs, ps, prices = self.get_observation(memory, rs)
         self.agent.store_episode(obs, True, 0, prices)
-        self.agent.end_episode_states.append((ps, prices))  # end state and prices
+        self.agent.end_episode_states.append((ps, prices, self.pennies))  # end state and prices
         self.agent.reset_state()
 
       def get_price_change(self, price) -> np.array:
@@ -513,7 +513,7 @@ class ModelTest(unittest.TestCase):
 
     ### Initialize agent, model, target network, decision unit
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    condition = DecisionCondition(120000.0)
+    condition = DecisionCondition(250000.0)
     model: DuelingDQN = DuelingDQN(input_dim=24, output_dim=7)
     target: DuelingDQN = DuelingDQN(input_dim=24, output_dim=7)
     # model.load_state_dict(torch.load('model-latest.pth'))
@@ -550,4 +550,4 @@ class ModelTest(unittest.TestCase):
     plt.show()
 
     res = agent.episode_results()
-    print(res[['nav', 'usd', 'xbt', 'xbt_price']])
+    print(res[['nav', 'usd', 'xbt', 'xbt_price', 'pennies']])

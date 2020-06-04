@@ -94,6 +94,7 @@ class Strategy(ABC):
     self.fee: Dict[str, TraditionalFee] = defaultdict(lambda: TraditionalFee.zero())
     self.fee['XBTUSD'] = TraditionalFee.Bitmex_XBT()
     self.fee['ETHUSD'] = TraditionalFee.Bitmex_ETH()
+    self.pennies = 0.0
 
     self.metrics_map = self.__bind_metrics()
 
@@ -183,11 +184,9 @@ class Strategy(ABC):
       if order.command != Statuses.CANCEL:
         logger.info(f'New order: {order}')
         ### action negative update balance
+        self.pennies += order.volume * (self.fee[order.symbol].settlement + self.fee[order.symbol].maker)
         self.active_orders[order.id] = order
-        if order.side == QuoteSides.ASK:
-          self.balance[order.symbol] -= order.volume / order.price * (self.fee[order.symbol].settlement + self.fee[order.symbol].maker)
-        elif order.side == QuoteSides.BID:
-          self.balance['USD'] -= order.volume * (self.fee[order.symbol].settlement + self.fee[order.symbol].maker)
+        self.balance['USD'] -= order.volume * (self.fee[order.symbol].settlement + self.fee[order.symbol].maker)
 
   def _get_allowed_volume(self, symbol, memory, side):
     latest: OrderBook = memory[('orderbook', symbol)]
