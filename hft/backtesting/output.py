@@ -111,7 +111,7 @@ def make_plot_orderbook_trade(orderbook_file: str, symbol: str,
                               orderbook_precomputed:bool=False,
                               figsize=(16,6),
                               skip_every=20,
-                              savefig=False) -> Tuple[plt.Figure, plt.Axes]:
+                              savefig=False, nrows=None) -> Tuple[plt.Figure, plt.Axes]:
   '''
   Utility function, reads file and plots price of orderbook
   If simulated orders are provided, scatter them on a plot with orderbook prices
@@ -127,7 +127,7 @@ def make_plot_orderbook_trade(orderbook_file: str, symbol: str,
   '''
   import matplotlib.ticker as ticker
 
-  orderbooks = pd.read_csv(orderbook_file, header=None)
+  orderbooks = pd.read_csv(orderbook_file, header=None, nrows=nrows)
   if not orderbook_precomputed:
     orderbooks = helper.fix_timestamp(orderbooks, 0, 1, orderbook_precomputed)
 

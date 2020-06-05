@@ -2,6 +2,7 @@ import datetime
 from collections import defaultdict
 from dataclasses import dataclass
 from typing import List, Dict, Tuple, Union, Callable, Optional
+import copy
 
 from hft.backtesting.data import OrderStatus, OrderRequest
 from hft.units.metrics.composite import CompositeMetric
@@ -145,7 +146,7 @@ class Strategy(ABC):
           converted_volume  = -converted_volume
           volume            = -volume
         else:
-          maker_fee = order.volume * self.fee[order.symbol].maker  # negative
+          maker_fee = volume * self.fee[order.symbol].maker  # negative
           self.balance['USD'] -= maker_fee
           self.pennies -= maker_fee
 
@@ -227,33 +228,29 @@ class Strategy(ABC):
     self.__remove_finished_orders(statuses)
     self._balance_update_new_order(orders)
     # balance updated, notify listener
-    self._balance_listener(memory, row.timestamp, len(orders), len(statuses))
+    self._balance_listener(memory, row.timestamp, orders, statuses)
 
+    orders = [copy.deepcopy(t) for t in orders]
     return orders
 
-  def _balance_listener(self, memory: Dict[str, Union[Trade, OrderBook]], ts: datetime.datetime, len_orders: int, len_statuses: int):
-    if self.balance_listener is not None and (len_orders > 0 or len_statuses > 0) and len(memory) >= 4:
-      # balance = memory[('orderbook', 'XBTUSD')].bid_prices[0] * self.balance['XBTUSD'] + \
-      #   memory[('orderbook', 'ETHUSD')].bid_prices[0] * self.balance['ETHUSD'] + \
-      #   self.balance['USD']
-
-      midpoint_eth = (memory[('orderbook', 'ETHUSD')].bid_prices[0] + memory[('orderbook', 'ETHUSD')].ask_prices[0]) / 2
-      midpoint_xbt = (memory[('orderbook', 'XBTUSD')].bid_prices[0] + memory[('orderbook', 'XBTUSD')].ask_prices[0]) / 2
-
-      state = (self.balance['USD'], self.balance['XBTUSD'], self.balance['ETHUSD'], *self.position['XBTUSD'], *self.position['ETHUSD'], midpoint_xbt, midpoint_eth, ts)
-      # self.balance_listener(self.balance['USD'], row.timestamp)
-      self.balance_listener(state)
+  @abstractmethod
+  def _balance_listener(self, memory: Dict[str, Union[Trade, OrderBook]],
+                        ts: datetime.datetime,
+                        orders: List[OrderRequest],
+                        statuses: List[OrderStatus]):
+    raise NotImplementedError
 
   def return_unfinished(self, statuses: List[OrderStatus], memory: Dict[str, Union[Trade, OrderBook]]):
     logger.info('Update balance with unfinished tasks')
     self._balance_update_by_status(statuses)
-    if self.balance_listener is not None and len(statuses) > 0:
-      midpoint_eth = (memory[('orderbook', 'ETHUSD')].bid_prices[0] + memory[('orderbook', 'ETHUSD')].ask_prices[0]) / 2
-      midpoint_xbt = (memory[('orderbook', 'XBTUSD')].bid_prices[0] + memory[('orderbook', 'XBTUSD')].ask_prices[0]) / 2
-
-      state = (self.balance['USD'], self.balance['XBTUSD'], self.balance['ETHUSD'], *self.position['XBTUSD'], *self.position['ETHUSD'], midpoint_xbt, midpoint_eth, statuses[0].at)
-      # self.balance_listener(self.balance['USD'], row.timestamp)
-      self.balance_listener(state)
+    self._balance_listener(memory, statuses[0].at, [], statuses)
+    # if self.balance_listener is not None and len(statuses) > 0:
+    #   midpoint_eth = (memory[('orderbook', 'ETHUSD')].bid_prices[0] + memory[('orderbook', 'ETHUSD')].ask_prices[0]) / 2
+    #   midpoint_xbt = (memory[('orderbook', 'XBTUSD')].bid_prices[0] + memory[('orderbook', 'XBTUSD')].ask_prices[0]) / 2
+    #
+    #   state = (self.balance['USD'], self.balance['XBTUSD'], self.balance['ETHUSD'], *self.position['XBTUSD'], *self.position['ETHUSD'], midpoint_xbt, midpoint_eth, statuses[0].at)
+    #   # self.balance_listener(self.balance['USD'], row.timestamp)
+    #   self.balance_listener(state)
 
 
 class CalmStrategy(Strategy):

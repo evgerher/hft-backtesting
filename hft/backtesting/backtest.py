@@ -97,9 +97,9 @@ class Backtest:
         pend_orders = self.__update_pending_objects(event.timestamp, self.pending_orders)
         self.__nextstatuses = list(filter(lambda x: x is not None, [self.__move_order_to_active(ord) for ord in pend_orders]))
       if delta.quote_side >= 4: # is critical
-        statuses = self.__critical_price_change(event.symbol, delta.quote_side % 2, event.timestamp, delta.diff)
-      elif delta.quote_side >= 2: # BID-ALTER or ASK-ALTER
-        statuses = self._price_step_cancel_order(event, delta, self.stale_depth)
+        statuses += self.__critical_price_change(event.symbol, delta.quote_side % 2, event.timestamp, delta.diff)
+      if delta.quote_side >= 2: # BID-ALTER or ASK-ALTER
+        statuses += self._price_step_cancel_order(event, delta, self.stale_depth)
 
       if delta.diff.size > 0 and delta.diff[1, 0] < 0 and not self.__last_is_trade[event.symbol]: # todo: make it disablable
         self.__cancel_quote_levels_update((event.symbol, delta.quote_side % 2), delta.diff)
@@ -149,6 +149,7 @@ class Backtest:
       if suborders is not None:
         for sub in suborders:
           statuses.append(OrderStatus.finish(sub[0], timestamp))
+          logger.info(f'Finish - critical {sub[0]}')
           del self.simulated_orders_id[sub[0]]
         del self.simulated_orders[(symbol, side)][price]
 
@@ -214,15 +215,19 @@ class Backtest:
 
     side = delta.quote_side % 2  # % 2 is to transform BID-ALTER -> BID and ASK-ALTER -> ASK
     orders = self.simulated_orders[(event.symbol, side)]
-    altered_side_price = event.bid_prices[0] if side == QuoteSides.BID else event.ask_prices[0]
+    current_side_price = event.bid_prices[0] if side == QuoteSides.BID else event.ask_prices[0]
     price_to_del = []
 
     for price, suborders in orders.items():
-      if (side == QuoteSides.BID and altered_side_price - level_depth * self.price_step[event.symbol] >= price) or \
-          (side == QuoteSides.ASK and altered_side_price + level_depth * self.price_step[event.symbol] <= price):
+      if len(suborders) == 0:
+        price_to_del.append(price)
+        continue
+      if (side == QuoteSides.BID and current_side_price - level_depth * self.price_step[event.symbol] >= price) or \
+          (side == QuoteSides.ASK and current_side_price + level_depth * self.price_step[event.symbol] <= price):
         for sub in suborders:
           order = self.simulated_orders_id[sub[0]]
           statuses.append(OrderStatus.cancel(order.id, event.timestamp, order.volume - order.volume_filled)) # todo: here
+          logger.info(f'Cancel - stale {order.id}')
           del self.simulated_orders_id[sub[0]]
         price_to_del.append(price)
     for price in price_to_del:
