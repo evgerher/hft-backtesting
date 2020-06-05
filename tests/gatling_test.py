@@ -82,13 +82,29 @@ class GatlingTest(unittest.TestCase):
     plt.show()
 
     states = output.balances
-    states = pd.DataFrame(states, index=None, columns=None)[[0, 1, 2, 3]].loc[1:]
-    states.columns = ['usd', 'xbt', 'xbt_price', 'ts']
+    states = pd.DataFrame(states, index=None, columns=None).loc[1:]
+    states.columns = ['usd', 'xbt', 'xbt_price', 'ts', 'avprice', 'pos']
     states['nav'] = states.usd + states.xbt * states.xbt_price
+    states['upnl'] = (1. / states.avprice - 1. / states.xbt_price) * states.pos
 
     states.ts = pd.to_datetime(states.ts)
+
     plt.plot(states.ts, states.nav)
+    plt.title('Gatling NAV')
+    plt.xlabel('Time')
+    plt.ylabel('USD')
     plt.show()
+
+    plt.plot(states.ts, states.upnl)
+    plt.title('UPNL')
+    plt.show()
+
+    plt.plot(states.ts, states.xbt)
+    plt.title('Gatling XBT position')
+    plt.xlabel('Time')
+    plt.ylabel('Position (XBT)')
+    plt.show()
+
     print(states.nav.loc[len(states) - 3:])
 
   @unittest.skip('custom')

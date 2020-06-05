@@ -157,8 +157,8 @@ class Strategy(ABC):
           self.balance[order.symbol] -= converted_volume
           # Contracts * Multiplier * (1/Entry Price - 1/Exit Price)
 
-          total_volume = vol - converted_volume
-          if total_volume != 0:
+          if status.status != Statuses.CANCEL:
+            total_volume = vol - converted_volume
             if vol <= 0:
               ratio = converted_volume / total_volume
               self.position[order.symbol] = ((avg_price * (1.0 - ratio) + order.price * ratio), total_volume)
@@ -173,8 +173,8 @@ class Strategy(ABC):
           self.balance[order.symbol] += converted_volume
           self.balance['USD'] -= volume
 
-          total_volume = vol + converted_volume
-          if total_volume != 0:
+          if status.status != Statuses.CANCEL:
+            total_volume = vol + converted_volume
             if vol >= 0:
               ratio = converted_volume / total_volume
               self.position[order.symbol] = ((avg_price * (1.0 - ratio) + order.price * ratio), total_volume)
@@ -244,13 +244,6 @@ class Strategy(ABC):
     logger.info('Update balance with unfinished tasks')
     self._balance_update_by_status(statuses)
     self._balance_listener(memory, statuses[0].at, [], statuses)
-    # if self.balance_listener is not None and len(statuses) > 0:
-    #   midpoint_eth = (memory[('orderbook', 'ETHUSD')].bid_prices[0] + memory[('orderbook', 'ETHUSD')].ask_prices[0]) / 2
-    #   midpoint_xbt = (memory[('orderbook', 'XBTUSD')].bid_prices[0] + memory[('orderbook', 'XBTUSD')].ask_prices[0]) / 2
-    #
-    #   state = (self.balance['USD'], self.balance['XBTUSD'], self.balance['ETHUSD'], *self.position['XBTUSD'], *self.position['ETHUSD'], midpoint_xbt, midpoint_eth, statuses[0].at)
-    #   # self.balance_listener(self.balance['USD'], row.timestamp)
-    #   self.balance_listener(state)
 
 
 class CalmStrategy(Strategy):
