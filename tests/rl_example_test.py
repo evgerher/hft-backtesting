@@ -276,8 +276,24 @@ class ModelTest(unittest.TestCase):
           4: (0, 1),
           5: (1, 0),
           6: (1, 1),
-          7: (-1, 1),
-          8: (1, -1),
+          7: (1, -1),
+          8: (2, -1),
+          9: (3, -1),
+          10: (-1, 1),
+          11: (-1, 2),
+          12: (-1, 3),
+          13: (1, 2),
+          14: (1, 3),
+          15: (2, 1),
+          16: (3, 1),
+          17: (2, 2),
+          18: (2, 3),
+          19: (3, 2),
+          20: (3, 3),
+          21: (3, 0),
+          22: (0, 3),
+          23: (2, 0),
+          24: (0, 2),
         }
         self.cancels_enabled = cancels_enabled
         self.no_action_event = []
@@ -456,7 +472,7 @@ class ModelTest(unittest.TestCase):
       return o1, o2
 
     def prepare_rl_strategy(agent: Agent, cancels_enabled=True) -> RLStrategy:
-      vwap = VWAP_modification(T=20, volumes=[5e5, 1e6], name='vwap', z_normalize=1000)
+      vwap = VWAP_modification(T=20, volumes=[5e5, 1e6], name='vwap', z_normalize=2000)
       liq = LiquiditySpectrum(z_normalize=3000)
 
       defaults = [
@@ -500,7 +516,7 @@ class ModelTest(unittest.TestCase):
       reader = OrderbookReader(orderbook_file, trade_file, nrows=None, is_precomputed=True)
 
       strategy = prepare_rl_strategy(agent, cancels_enabled)
-      backtest = BacktestOnSample(reader, strategy, output=output, delay=delay, warmup=True, stale_depth=8)
+      backtest = BacktestOnSample(reader, strategy, output=output, delay=delay, warmup=True, stale_depth=5)
       backtest.run()
 
       return backtest.output
@@ -513,9 +529,9 @@ class ModelTest(unittest.TestCase):
 
     ### Initialize agent, model, target network, decision unit
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    condition = DecisionCondition(250000.0)
-    model: DuelingDQN = DuelingDQN(input_dim=24, output_dim=7)
-    target: DuelingDQN = DuelingDQN(input_dim=24, output_dim=7)
+    # condition = DecisionCondition(250000.0)
+    model: DuelingDQN = DuelingDQN(input_dim=24, output_dim=25)
+    target: DuelingDQN = DuelingDQN(input_dim=24, output_dim=25)
     # model.load_state_dict(torch.load('model-latest.pth'))
     model.train()
     target.eval()

@@ -243,7 +243,8 @@ class Strategy(ABC):
   def return_unfinished(self, statuses: List[OrderStatus], memory: Dict[str, Union[Trade, OrderBook]]):
     logger.info('Update balance with unfinished tasks')
     self._balance_update_by_status(statuses)
-    self._balance_listener(memory, statuses[0].at, [], statuses)
+
+    self._balance_listener(memory, memory['orderbook', 'XBTUSD'].timestamp, [], statuses)
 
 
 class CalmStrategy(Strategy):
