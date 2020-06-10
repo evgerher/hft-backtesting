@@ -73,7 +73,7 @@ class OrderbookReader(Reader):
     self._finished_trades = self._trades_file is None
     if self._trades_file is not None:
       self._trades_df, self._limit_trades = self._read_trades(self._trades_file, 0)
-      self._trade_generator = self.__load_trade()
+      self._trade_generator = self._load_trade()
       self._trade = next(self._trade_generator)
       initial_trade = self._trades_df.iloc[0, 1]
     else:
@@ -133,7 +133,7 @@ class OrderbookReader(Reader):
       self._reload_trades_df()
     return self._end_condition()
 
-  def __load_trade(self) -> Generator[Trade, None, None]:
+  def _load_trade(self) -> Generator[Trade, None, None]:
     for row in self._trades_df.itertuples(index=False, name=None):
       self._trades_idx += 1
       yield Trade(*row)
@@ -182,7 +182,7 @@ class OrderbookReader(Reader):
       self._trades_df, self._limit_trades = self._read_trades(self._trades_file, self._total_trades)
       self._trades_idx = 0
 
-      self._trade_generator = self.__load_trade()
+      self._trade_generator = self._load_trade()
 
   def _trade_end_condition(self):
     if self._trades_file is not None and (self._limit_trades != self._nrows and self._trades_idx == self._limit_trades):
@@ -246,7 +246,7 @@ class TimeLimitedReader(OrderbookReader):
         self._trades_idx = 0
         self.current_last_trade_ts = self._trades_df.iloc[-1].timestamp
 
-        self._trade_generator = self.__load_trade()
+        self._trade_generator = self._load_trade()
 
   def total(self):
     total = len(self._snapshots_df)
